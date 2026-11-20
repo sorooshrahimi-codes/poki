@@ -469,3 +469,30 @@ body:has(#reveal:not(.hidden)) #guide { bottom: auto; top: 92px; }
 .panel > .tabs .tab { position: relative; font-size: 22px; padding: 4px 18px; border-radius: 12px; border: 2px solid transparent; background: transparent; color: #fff; cursor: pointer; }
 .panel > .tabs .tab.on { background: linear-gradient(#ffcf5a, #ff9a1f); border-color: #0d1e45; box-shadow: 0 3px 0 #0d1e45; }
 .panel > .tabs .tab .badge { top: -6px; right: -6px; }
+/* ---------------------------------------------------------------- catch screen: compact tiles, never a scroll */
+#cards { gap: 8px; max-height: none; overflow: visible; padding: 4px; max-width: min(92vw, 420px); }
+.card { width: 84px; padding: 4px 4px 6px; border-radius: 14px; gap: 0; }
+.card canvas { width: 70px; height: 40px; }
+.card .cn { font-size: 11px; min-height: 0; line-height: 1.1; max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.card .cv { font-size: 14px; }
+.card .cx { position: absolute; bottom: 22px; right: 4px; background: #0d1e45; color: #fff; font-size: 12px; font-weight: 700; border-radius: 8px; padding: 0 5px; }
+.card .kp { position: absolute; top: 2px; left: 4px; font-size: 13px; font-weight: 700; color: #7be495; }
+.card .newb { font-size: 10px; top: -9px; right: -6px; padding: 0 5px; }
+.card .cm { top: -8px; left: -6px; font-size: 16px; }
+#keepHint { font-size: 13px; max-width: 300px; text-align: center; }
+#total b { font-size: 34px; }
+@media (max-width: 380px) { .card { width: 76px; } .card canvas { width: 64px; height: 36px; } }
+/* ---------------------------------------------------------------- compete: one short row per activity */
+#cmpList { display: flex; flex-direction: column; gap: 6px; width: min(86vw, 400px); }
+.crow3 { display: flex; align-items: center; gap: 8px; background: rgba(5,15,40,.35); border-radius: 14px; padding: 6px 8px; color: #fff; }
+.crow3 .ci { font-size: 24px; width: 30px; text-align: center; }
+.crow3 .cd { flex: 1; min-width: 0; font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.crow3 .cd small { font-size: 13px; color: #ffe066; font-weight: 600; }
+.crow3 .btn { min-width: 54px; min-height: 40px; padding: 4px 10px; font-size: 18px; border-radius: 12px; }
+#cmpTable { display: flex; flex-direction: column; gap: 4px; width: min(86vw, 400px); }
+#cmpTable .lrow { padding: 3px 8px; }
+#cmpTable #leagueBack { align-self: center; min-width: 80px; }
+#cmpProfile .ptitle { font-size: 20px; }
+.card .cx { bottom: auto; top: 30px; right: 2px; }
+/* while a panel is open, messages show at the top so they never cover its buttons */
+body:has(.panel:not(.hidden):not(#legend)) #toast { top: 54px; bottom: auto; }

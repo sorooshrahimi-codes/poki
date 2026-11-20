@@ -342,41 +342,49 @@ function showReveal(list: Catch[]) {
   $("keepN").textContent = "";
   const box = $("cards");
   box.innerHTML = "";
-  const order = [...list].sort((a, b) => RARITY_ORDER.indexOf(FISH_BY_ID[a.fish].rarity) - RARITY_ORDER.indexOf(FISH_BY_ID[b.fish].rarity));
-  let total = 0;
-  const shown = new Set<string>();
-  const bestInReveal = new Map<string, number>();
-  order.forEach((c, i) => {
-    const def = FISH_BY_ID[c.fish];
-    const isNew = !save.album[c.fish] && !shown.has(c.fish);
-    const prevKg = Math.max(save.album[c.fish]?.bestKg ?? 0, bestInReveal.get(c.fish) ?? 0);
-    const isRecord = !isNew && !!save.album[c.fish] && (c.kg ?? 0) > prevKg && !FISH_BY_ID[c.fish].junk;
-    bestInReveal.set(c.fish, Math.max(bestInReveal.get(c.fish) ?? 0, c.kg ?? 0));
-    shown.add(c.fish);
+  // compact tiles: the same fish (and mutation) shares one tile with a ×N count; best first
+  const order = [...list].sort((a, b) => RARITY_ORDER.indexOf(FISH_BY_ID[b.fish].rarity) - RARITY_ORDER.indexOf(FISH_BY_ID[a.fish].rarity) || b.value - a.value);
+  const groups = new Map<string, Catch[]>();
+  for (const c of order) { const k = `${c.fish}|${c.mut ?? ""}`; (groups.get(k) ?? groups.set(k, []).get(k)!).push(c); }
+  let total = 0, i = 0;
+  for (const g of groups.values()) {
+    const c = g[0], def = FISH_BY_ID[c.fish];
+    const isNew = !save.album[c.fish];
+    const bestKg = Math.max(...g.map((x) => x.kg ?? 0));
+    const isRecord = !isNew && !def.junk && bestKg > (save.album[c.fish]?.bestKg ?? 0);
+    const wanted = save.orders.some((o) => o.need.kind === "fish" ? o.need.fish === c.fish : def.rarity === o.need.rarity && def.zone === o.need.zone);
+    const special = RARITY_ORDER.indexOf(def.rarity) >= 2 || !!c.mut || isNew;
+    const value = g.reduce((a, x) => a + x.value, 0);
     const card = document.createElement("div");
-    const idx = list.indexOf(c);
-    const wanted = save.orders.some((o) => o.need.kind === "fish" ? o.need.fish === c.fish : FISH_BY_ID[c.fish].rarity === o.need.rarity && FISH_BY_ID[c.fish].zone === o.need.zone);
-    card.className = "card" + (RARITY_ORDER.indexOf(def.rarity) >= 2 || c.mut ? " big" : "");
+    card.className = "card" + (special ? " big" : "");
     card.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
-    card.style.animationDelay = `${i * 0.18}s`;
-    card.appendChild(fishThumb(c.fish, c.mut, 92, 50));
-    card.insertAdjacentHTML("beforeend", `<div class="cn">${fishName(def)}</div><div class="cr">${tRarity(def.rarity)}</div><div class="ck">⚖️ ${fmtKg(c.kg)}</div><div class="cv">🪙 ${c.value}</div>` +
-      (c.mut ? `<div class="cm">${MUT_ICON[c.mut]}</div>` : "") + (isNew ? `<div class="newb">${t("new")}</div>` : "") + (isRecord ? `<div class="newb rec">🏆 ${t("record")}</div>` : ""));
-    if (isRecord) setTimeout(() => sfx.newFish(), i * 180 + 120);
-    if (wanted && !def.junk) card.insertAdjacentHTML("beforeend", `<div class="wantb">📋</div>`);
+    card.style.animationDelay = `${i * 0.12}s`;
+    card.appendChild(fishThumb(c.fish, c.mut, 70, 40));
+    card.insertAdjacentHTML("beforeend", (special ? `<div class="cn">${fishName(def)}</div>` : "") + `<div class="cv">🪙${value}</div>` +
+      (g.length > 1 ? `<div class="cx">×${g.length}</div>` : "") + (c.mut ? `<div class="cm">${MUT_ICON[c.mut]}</div>` : "") +
+      (isNew ? `<div class="newb">${t("new")}</div>` : isRecord ? `<div class="newb rec">🏆</div>` : "") + (wanted && !def.junk ? `<div class="wantb">📋</div>` : "") + `<div class="kp"></div>`);
     if (!def.junk) {
+      // tap keeps one more of this fish; when all are kept, a tap releases them
+      const idxs = g.map((x) => list.indexOf(x));
       card.classList.add("keepable");
       card.onclick = () => {
-        if (keepSet.has(idx)) keepSet.delete(idx); else keepSet.add(idx);
-        card.classList.toggle("kept", keepSet.has(idx));
+        const kept = idxs.filter((n) => keepSet.has(n)).length;
+        if (kept < idxs.length) keepSet.add(idxs.find((n) => !keepSet.has(n))!); else idxs.forEach((n) => keepSet.delete(n));
+        const now = idxs.filter((n) => keepSet.has(n)).length;
+        card.classList.toggle("kept", now > 0);
+        (card.querySelector(".kp") as HTMLElement).textContent = now ? `📥${now > 1 || idxs.length > 1 ? now : ""}` : "";
         sfx.tap();
         updateRevealTotal();
       };
     }
     box.appendChild(card);
-    setTimeout(() => { sfx.reveal(def.rarity); if (isNew) sfx.newFish(); }, i * 180);
-    total += c.value;
-  });
+    const delay = i * 120;
+    setTimeout(() => { sfx.reveal(def.rarity); if (isNew || isRecord) sfx.newFish(); }, delay);
+    total += value;
+    i++;
+  }
+  // the keep tip only while it is new to you
+  $("keepHint").classList.toggle("hidden", save.dives > 4);
   $("totalN").textContent = String(total + pendingBonus);
   $("bonusN").textContent = pendingBonus ? `💰 +${pendingBonus}` : "";
   $("collectBtn").textContent = list.length ? t("collect") : "OK";
@@ -1265,44 +1273,54 @@ function renderLevelPill() {
   $("voyN").textContent = save.voyage ? `⛵${save.voyage}` : "";
 }
 
+let leagueOpen = false;
 function renderCompete() {
   rollLeague();
   const now = Date.now();
   const tier = save.league.tier as Tier;
-  // profile
-  $("cmpProfile").innerHTML = `<div class="ptitle">⭐ ${save.prog.level} · ${titleText()}</div><div class="pbar"><i style="width:${Math.round((save.prog.xp / xpNeed(save.prog.level)) * 100)}%"></i></div>`
-    + `<div class="pstat">🏆 ${save.derby.trophies} · 🔥 ${save.daily.streak} · ⛵ ${save.voyage}</div>`;
-  // league
+  // profile: level, title and the bar to the next level, nothing more
+  $("cmpProfile").innerHTML = `<div class="ptitle">⭐ ${save.prog.level} · ${titleText()}</div><div class="pbar"><i style="width:${Math.round((save.prog.xp / xpNeed(save.prog.level)) * 100)}%"></i></div>`;
   const table = leagueTable(save.league.week, tier, save.league.points, now);
   const rank = rankOf(table);
   const left = Math.max(0, weekEndsAt(save.league.week) - now);
   const d = Math.floor(left / 86_400_000), h = Math.floor((left % 86_400_000) / 3_600_000);
-  const show = table.slice(0, 6);
-  if (rank > 6) show.push(table[rank - 1]);
-  const NPCS2 = ["npc_captain", "npc_chef", "npc_scientist", "npc_granny"];
-  $("cmpLeague").innerHTML = `<div class="ch">${TIER_ICON[tier]} ${t("cmp.league")}: ${tierName(tier)} <small>⏳ ${d}d ${h}h ${t("cmp.left")}</small></div>`
-    + show.map((r) => {
-      const pos = table.indexOf(r) + 1;
-      const zone = pos <= PROMOTE && tier !== "legend" ? "lup" : pos > LEAGUE_SIZE - DEMOTE && tier !== "bronze" ? "ldown" : "";
-      return `<div class="lrow ${r.you ? "me" : ""} ${zone}"><span class="lp">${pos}</span>${r.you ? "⭐" : `<img src="${artUrl(NPCS2[r.npc])}" alt="">`}<span class="ln">${r.you ? t("cmp.you") : r.name}</span><span class="ls">${r.score.toLocaleString()}</span></div>`;
-    }).join("")
-    + `<div class="lnote">⬆️ ${t("cmp.promote")} · ⬇️ ${t("cmp.demote")}</div>`;
+  // one short line per activity; the league table opens on tap
+  $("cmpLeague").innerHTML = `<span class="ci">${TIER_ICON[tier]}</span><span class="cd">${tierName(tier)} · <b>#${rank}</b> <small>⏳${d}d ${h}h</small></span><button class="btn plain" id="leagueOpen">📊</button>`;
+  $("leagueOpen").onclick = () => { leagueOpen = true; renderCompete(); };
+  $("cmpList").classList.toggle("hidden", leagueOpen);
+  $("cmpTable").classList.toggle("hidden", !leagueOpen);
+  if (leagueOpen) {
+    const show = table.slice(0, 5);
+    if (rank > 5) show.push(table[rank - 1]);
+    const NPCS2 = ["npc_captain", "npc_chef", "npc_scientist", "npc_granny"];
+    $("cmpTable").innerHTML = `<div class="ch">${TIER_ICON[tier]} ${t("cmp.league")}: ${tierName(tier)} <small>⏳ ${d}d ${h}h</small></div>`
+      + show.map((r) => {
+        const pos = table.indexOf(r) + 1;
+        const zone = pos <= PROMOTE && tier !== "legend" ? "lup" : pos > LEAGUE_SIZE - DEMOTE && tier !== "bronze" ? "ldown" : "";
+        return `<div class="lrow ${r.you ? "me" : ""} ${zone}"><span class="lp">${pos}</span>${r.you ? "⭐" : `<img src="${artUrl(NPCS2[r.npc])}" alt="">`}<span class="ln">${r.you ? t("cmp.you") : r.name}</span><span class="ls">${r.score.toLocaleString()}</span></div>`;
+      }).join("")
+      + `<div class="lnote">⬆️ 1-${PROMOTE} · ⬇️ ${LEAGUE_SIZE - DEMOTE + 1}-${LEAGUE_SIZE}</div><button class="btn plain" id="leagueBack">↩</button>`;
+    $("leagueBack").onclick = () => { leagueOpen = false; renderCompete(); };
+  }
   // derby
   const cd = Math.max(0, save.derby.lastAt + DERBY_COOLDOWN_MS - now);
   const rule = DERBY_RULES[Math.floor(now / 60_000) % DERBY_RULES.length];
   const db = $("derbyBtn") as HTMLButtonElement;
-  $("cmpDerby").querySelector(".cd")!.innerHTML = `${RULE_ICON[rule]} ${t(`rule.${rule}` as Parameters<typeof t>[0])}<br><small>🥇 🪙1500 · 🥈 800 · 🥉 400</small>`;
+  $("cmpDerby").querySelector(".cd")!.innerHTML = `${t("cmp.derby")} <small>${RULE_ICON[rule]} 3:00</small>`;
   db.disabled = cd > 0 || play.kind !== "normal";
-  db.textContent = cd > 0 ? `⏳ ${Math.ceil(cd / 60000)}m` : t("cmp.start");
+  db.textContent = cd > 0 ? `⏳${Math.ceil(cd / 60000)}m` : "▶";
   $("derbySkip").classList.toggle("hidden", cd <= 0);
   // daily
   const doneToday = save.daily.lastDay === dayOf(now);
-  $("cmpDaily").querySelector(".cd")!.innerHTML = `🔥 ${t("daily.streak")}: ${save.daily.streak} · ${t("daily.best")}: 🪙${save.daily.best.toLocaleString()}${doneToday ? `<br><small>${t("daily.done")}</small>` : ""}`;
-  ($("dailyBtn") as HTMLButtonElement).disabled = doneToday || play.kind !== "normal";
+  $("cmpDaily").querySelector(".cd")!.innerHTML = `${t("cmp.daily")} <small>🔥${save.daily.streak}</small>`;
+  const dl = $("dailyBtn") as HTMLButtonElement;
+  dl.disabled = doneToday || play.kind !== "normal";
+  dl.textContent = doneToday ? "✓" : "▶";
   ($("chBtn") as HTMLButtonElement).disabled = play.kind !== "normal";
-  $("chDesc").innerHTML = `${t("ch.title")}<br><small>${t("ch.desc")}</small>`;
-  // voyage
-  $("cmpVoyage").querySelector(".cd")!.textContent = canVoyage() ? t("voy.desc") : `🔒 ${t("voy.need")}`;
+  $("chDesc").innerHTML = t("ch.title");
+  // voyage: only shown once it is possible, so it is never a long locked promise
+  $("cmpVoyage").classList.toggle("hidden", !canVoyage());
+  $("cmpVoyage").querySelector(".cd")!.innerHTML = `${t("voy.go")} <small>🪙×${voyageCoinMult(save.voyage + 1).toFixed(2)}</small>`;
   ($("voyBtn") as HTMLButtonElement).disabled = !canVoyage();
 }
 
@@ -1706,7 +1724,7 @@ $("aquaDouble").onclick = () => void collectAquarium(true);
 $("baitPill").onclick = () => { const b = save.bait ? BAIT_BY_ID[save.bait.id] : null; if (b) toast(`${baitName(b)}: ${baitEffect(b).replace(/<br>/g, " · ")}`, 2600); };
 $("guide").onclick = () => { clearTimeout(tipTimer); nextTip(); };
 $("lvlPill").onclick = () => { if (scene.mode === "dock") { renderCompete(); $("compete").classList.remove("hidden"); } };
-$("competeBtn").onclick = () => { if (scene.mode === "dock") { renderCompete(); $("compete").classList.remove("hidden"); } };
+$("competeBtn").onclick = () => { if (scene.mode === "dock") { leagueOpen = false; renderCompete(); $("compete").classList.remove("hidden"); } };
 $("competeClose").onclick = () => $("compete").classList.add("hidden");
 $("derbyBtn").onclick = () => startDerby();
 $("derbySkip").onclick = async () => { busy = true; const ok = await rewardedBreak(); busy = false; if (ok) { save.derby.lastAt = 0; renderCompete(); } };
