@@ -16,40 +16,45 @@ export interface CritterDef {
   income: number;
   /** fallback colour if the sprite is missing */
   color: string;
+  /** how it behaves in the field: each asks for a different move from the player */
+  behave: Behave;
 }
+/** hop: wanders · fly: floats up high, aim up · burrow: pops in and out of the ground · shy: dashes away from the cone ·
+ *  split: becomes two when first hit · shell: hides in a shell when hit, wait for it to peek */
+export type Behave = "hop" | "fly" | "burrow" | "shy" | "split" | "shell";
 
 let curBiome: BiomeId = "meadow";
-const c = (id: string, name: string, rarity: Rarity, size: number, hop: number, resist: number, income: number, color: string): CritterDef =>
-  ({ id, name, biome: curBiome, rarity, art: id, size, hop, resist, income, color });
+const c = (id: string, name: string, rarity: Rarity, size: number, hop: number, resist: number, income: number, color: string, behave: Behave = "hop"): CritterDef =>
+  ({ id, name, biome: curBiome, rarity, art: id, size, hop, resist, income, color, behave });
 const biome = (b: BiomeId) => { curBiome = b; return [] as CritterDef[]; };
 
 export const CRITTERS: CritterDef[] = [
   ...biome("meadow"),
-  c("puffbun", "Puffbun", "common", 56, 26, 1, 1, "#ffd6e6"),
+  c("puffbun", "Puffbun", "common", 56, 26, 1, 1, "#ffd6e6", "shy"),
   c("sprig", "Sprig", "common", 48, 18, 1, 1, "#8fe07a"),
-  c("mushi", "Mushi", "common", 53, 10, 1, 1.5, "#ff6b6b"),
-  c("bumbo", "Bumbo", "common", 48, 34, 1, 1.5, "#ffd23f"),
+  c("mushi", "Mushi", "common", 53, 10, 1, 1.5, "#ff6b6b", "burrow"),
+  c("bumbo", "Bumbo", "common", 48, 34, 1, 1.5, "#ffd23f", "fly"),
   c("pebblo", "Pebblo", "common", 53, 6, 1.4, 2, "#9aa5b1"),
-  c("dewdrop", "Dewdrop", "rare", 50, 22, 1.6, 5, "#7fd3ff"),
-  c("snailo", "Snailo", "rare", 53, 4, 2, 6, "#c9a7ff"),
-  c("hootle", "Hootle", "rare", 59, 14, 2, 7, "#b07a4a"),
+  c("dewdrop", "Dewdrop", "rare", 50, 22, 1.6, 5, "#7fd3ff", "split"),
+  c("snailo", "Snailo", "rare", 53, 4, 2, 6, "#c9a7ff", "shell"),
+  c("hootle", "Hootle", "rare", 59, 14, 2, 7, "#b07a4a", "fly"),
   c("clovy", "Clovy", "epic", 56, 20, 3.2, 20, "#3ccf6a"),
   c("honeyblob", "Honeyblob", "epic", 62, 12, 3.6, 24, "#ffb13a"),
-  c("sunpup", "Sunpup", "legendary", 70, 24, 5.5, 80, "#ff9a3a"),
-  c("prismane", "Prismane", "legendary", 73, 20, 6.5, 120, "#e6b3ff"),
+  c("sunpup", "Sunpup", "legendary", 70, 24, 5.5, 80, "#ff9a3a", "shy"),
+  c("prismane", "Prismane", "legendary", 73, 20, 6.5, 120, "#e6b3ff", "fly"),
   ...biome("forest"),
-  c("spora", "Spora", "common", 56, 16, 1, 6, "#b48cff"),
-  c("acornel", "Acornel", "common", 50, 20, 1, 6, "#b06a3a"),
+  c("spora", "Spora", "common", 56, 16, 1, 6, "#b48cff", "split"),
+  c("acornel", "Acornel", "common", 50, 20, 1, 6, "#b06a3a", "burrow"),
   c("mossling", "Mossling", "common", 54, 12, 1.2, 8, "#7bc94a"),
-  c("glowbug", "Glowbug", "common", 50, 36, 1.2, 8, "#ffe066"),
+  c("glowbug", "Glowbug", "common", 50, 36, 1.2, 8, "#ffe066", "fly"),
   c("toadstoo", "Toadstoo", "common", 58, 30, 1.4, 10, "#ff5a5a"),
-  c("fernfox", "Fernfox", "rare", 56, 26, 1.8, 30, "#ff8a3a"),
+  c("fernfox", "Fernfox", "rare", 56, 26, 1.8, 30, "#ff8a3a", "shy"),
   c("barkbear", "Barkbear", "rare", 62, 8, 2.2, 36, "#8a5a32"),
-  c("pinecub", "Pinecub", "rare", 54, 14, 2, 34, "#c98a52"),
-  c("lumoth", "Lumoth", "epic", 56, 30, 3.4, 110, "#8fd3ff"),
-  c("crystalcap", "Crystalcap", "epic", 60, 10, 3.8, 130, "#c9b8ff"),
+  c("pinecub", "Pinecub", "rare", 54, 14, 2, 34, "#c98a52", "shell"),
+  c("lumoth", "Lumoth", "epic", 56, 30, 3.4, 110, "#8fd3ff", "fly"),
+  c("crystalcap", "Crystalcap", "epic", 60, 10, 3.8, 130, "#c9b8ff", "burrow"),
   c("elderoak", "Elderoak", "legendary", 70, 10, 6, 420, "#5f9b4a"),
-  c("moonfawn", "Moonfawn", "legendary", 70, 28, 7, 600, "#fff4d6"),
+  c("moonfawn", "Moonfawn", "legendary", 70, 28, 7, 600, "#fff4d6", "shy"),
 ];
 export const BIOMES: { id: BiomeId; name: string; icon: string; bg: string; price: number }[] = [
   { id: "meadow", name: "Sunny Meadow", icon: "🌼", bg: "bg_meadow", price: 0 },

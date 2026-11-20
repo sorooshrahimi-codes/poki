@@ -95,15 +95,22 @@ export class View {
   }
 
   private shadow(f: Field, cr: Critter) {
-    const k = depthK(f, cr.y), s = cr.def.size * k * (cr.mut === "giant" ? 1.6 : 1);
+    const k = depthK(f, cr.y), s = cr.def.size * k * cr.scale;
     const fade = Math.max(0.25, 1 - cr.lift / 80);
     this.c.fillStyle = `rgba(0,40,20,${0.22 * fade})`;
     this.c.beginPath(); this.c.ellipse(cr.x, cr.y, s * 0.45 * fade, s * 0.12 * fade, 0, 0, Math.PI * 2); this.c.fill();
   }
 
   private critter(f: Field, cr: Critter, t: number) {
-    const c = this.c, k = depthK(f, cr.y), giant = cr.mut === "giant" ? 1.6 : 1;
-    let s = cr.def.size * k * giant * Math.min(1, (f.t - cr.born) / 0.25 + 0.2);
+    const c = this.c, k = depthK(f, cr.y);
+    let s = cr.def.size * k * cr.scale * Math.min(1, (f.t - cr.born) / 0.25 + 0.2);
+    // burrowed: only a little mound of earth, wiggling
+    if (cr.hidden && cr.def.behave === "burrow") {
+      c.fillStyle = "#8a5a32"; c.strokeStyle = "#0d1e45"; c.lineWidth = 2.5;
+      c.beginPath(); c.ellipse(cr.x + Math.sin(t * 14 + cr.uid) * 1.5, cr.y - 4, s * 0.38, s * 0.16, 0, Math.PI, 0); c.fill(); c.stroke();
+      c.fillStyle = "#a8774a"; for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(cr.x - s * 0.2 + i * s * 0.2, cr.y - 6 - (i % 2) * 3, 2.5, 0, Math.PI * 2); c.fill(); }
+      return;
+    }
     const sp = tinted(cr.def.art, cr.mut);
     const bx = cr.x, by = cr.y - cr.lift - s * 0.5;
     c.save();
@@ -131,6 +138,8 @@ export class View {
       const air = ph < 0.45 ? Math.sin((ph / 0.45) * Math.PI) : 0;
       sx = 1 + land * 0.18 - air * 0.06; sy = 1 - land * 0.16 + air * 0.08;
     }
+    // tucked in its shell: squashed small and still, a shiny shell bubble around it
+    if (cr.hidden) { sx *= 0.75; sy *= 0.6; }
     c.rotate(rot);
     c.scale(sx, sy);
     c.rotate(-rot);
@@ -143,6 +152,19 @@ export class View {
       else if (cr.state === "tug") blink(c, cr.def.art, -w / 2, -h / 2, w, h, t, cr.uid, 0.55); // squinting with effort
     } else { c.fillStyle = cr.def.color; c.beginPath(); c.arc(0, 0, s / 2, 0, Math.PI * 2); c.fill(); }
     c.restore();
+    if (cr.hidden && cr.def.behave === "shell") {
+      const g = c.createRadialGradient(bx - s * 0.2, by - s * 0.25, 2, bx, by, s * 0.55);
+      g.addColorStop(0, "rgba(255,255,255,0.7)"); g.addColorStop(0.6, "rgba(200,180,255,0.35)"); g.addColorStop(1, "rgba(150,120,220,0.55)");
+      c.fillStyle = g; c.strokeStyle = "#0d1e45"; c.lineWidth = 2.5;
+      c.beginPath(); c.arc(bx, by + s * 0.05, s * 0.5, 0, Math.PI * 2); c.fill(); c.stroke();
+      c.font = "14px system-ui"; c.textAlign = "center"; c.fillText("💤", bx + s * 0.4, by - s * 0.45);
+    }
+    if (cr.fleeT > 0) { c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText("❗", bx, by - s * 0.7 - Math.abs(Math.sin(t * 14)) * 4); }
+    if (cr.boss > 0) {
+      // the boss: a crown and its remaining phases
+      c.font = `${Math.round(s * 0.38)}px system-ui`; c.textAlign = "center"; c.fillText("👑", bx, by - s * 0.62 + Math.sin(t * 3) * 2);
+      for (let i = 0; i < 3; i++) { c.fillStyle = i < cr.boss ? "#ff4d6d" : "rgba(13,30,69,0.5)"; c.strokeStyle = "#0d1e45"; c.lineWidth = 2; c.beginPath(); c.arc(bx - 16 + i * 16, by + s * 0.55, 6, 0, Math.PI * 2); c.fill(); c.stroke(); }
+    }
     // tug: a ring above it fills while the cone holds it
     if (cr.state === "tug") {
       const ry = by - s * 0.75;

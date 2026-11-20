@@ -22,7 +22,7 @@ let parkBiome: BiomeId = save.biome;
 let mode: "field" | "park" = "field";
 /** what is in the jar right now (species and mutation of each critter) */
 let jar: { id: string; mut: string | null }[] = [];
-let busy = false, t = 0;
+let busy = false, t = 0, combo = 0, lastCatch = -9;
 
 // ------------------------------------------------------------------ input: hold anywhere to suck, aim with the finger
 const input = { on: false, x: view.W * 0.6, y: view.H * 0.7 };
@@ -60,8 +60,14 @@ function handleEvents() {
     if (e.kind === "caught") {
       const c = e.c, mult = MUTATIONS.find((m) => m.id === c.mut)?.mult ?? 1;
       jar.push({ id: c.def.id, mut: c.mut });
-      const coins = catchCoins(c.def.income, mult);
+      // quick catches in a row build a chain: each link adds a quarter more coins
+      combo = t - lastCatch < 1.7 ? combo + 1 : 1;
+      lastCatch = t;
+      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25));
+      if (c.boss > 0) coins += Math.round(c.def.income * 60);
       save.coins += coins; save.catches++;
+      if (combo >= 3) { view.text(field.nozzle.x + 70, field.nozzle.y - 70, `COMBO ×${combo}!`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo)); sfx.coin(combo); }
+      if (c.boss > 0) { toast(`👑 You caught the giant ${c.def.name}! +🪙${coins.toLocaleString()}`, 3200); view.shake = 14; sfx.reveal("legendary"); }
       const isNew = !save.index[c.def.id] && !jar.slice(0, -1).some((j) => j.id === c.def.id);
       sfx.hook(c.def.rarity === "legendary" ? "legendary" : c.def.rarity);
       view.burst(field.nozzle.x, field.nozzle.y, c.mut === "gold" ? "#ffd84a" : RARITY_COLOR[c.def.rarity], c.def.rarity === "common" && !c.mut ? 10 : 24);
@@ -79,8 +85,19 @@ function handleEvents() {
     } else if (e.kind === "surprise") {
       sfx.event(); view.shake = 4;
       if (e.s === "visitor" && e.c) toast(`✨ A wild ${e.c.def.name} appeared!`, 2600);
+      else if (e.s === "boss" && e.c) { toast(`👑 A GIANT ${e.c.def.name} appeared! Catch it 3 times!`, 3200); view.shake = 10; sfx.snap(); }
       else if (e.s === "golden_rain") toast("🌟 Golden critters! Quick!", 2400);
       else toast("🏃 Stampede! Suck them all up!", 2400);
+    } else if (e.kind === "split") {
+      view.burst(e.c.x, e.c.y - 30, "#7fd3ff", 14, 140); view.text(e.c.x, e.c.y - 70, "Split!", "#9be7ff", 15); sfx.boing();
+    } else if (e.kind === "hide") {
+      sfx.bonk();
+      if (!save.tips.includes(e.c.def.behave)) { save.tips.push(e.c.def.behave); toast(e.c.def.behave === "shell" ? "🐚 It hid in its shell! Let go, wait for it to peek, then suck!" : "🕳️ It went underground! Catch it when it pops up.", 3000); }
+    } else if (e.kind === "flee") {
+      if (!save.tips.includes("shy")) { save.tips.push("shy"); toast("💨 Shy ones run from the wind! Sweep the cone onto them fast.", 3000); }
+    } else if (e.kind === "bossPhase") {
+      view.shake = 12; sfx.snap(); view.burst(e.c.x, e.c.y - 60, "#ffd84a", 30, 220);
+      view.text(e.c.x, e.c.y - 110, `It broke free! ${e.c.boss} more!`, "#ffe066", 17);
     } else if (e.kind === "spawn" && e.c.mut) {
       // a mutated one arrives: make sure the player notices it
       view.burst(e.c.x, e.c.y - 30, e.c.mut === "gold" ? "#ffd84a" : "#c9a7ff", 16, 120);
@@ -260,4 +277,12 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
   updateUi();
   requestAnimationFrame((n) => { last = n; requestAnimationFrame(frame); });
 });
-void CRITTER_BY_ID;
+// test handle for automated checks (harmless in production)
+(window as unknown as { __cv: unknown }).__cv = {
+  field: () => field, save,
+  spawn: (id: string, opt: { mut?: "gold" | "rainbow" | "giant" | null; boss?: boolean; x?: number } = {}) => {
+    const c = spawn(field, rng, { def: CRITTER_BY_ID[id], mut: opt.mut ?? null, x: opt.x });
+    if (opt.boss) { c.boss = 3; c.scale = 2.1; }
+    return c.uid;
+  },
+};
