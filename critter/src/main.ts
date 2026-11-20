@@ -8,7 +8,7 @@ import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, MUTATIONS, RARITY_COLOR, STAR_MULT, starOf } from "./data/critters.ts";
 import type { BiomeId } from "./core/types.ts";
-import { commercialBreak, gameplayStart, gameplayStop, initPoki, loadingFinished, rewardedBreak } from "./platform/poki.ts";
+import { commercialBreak, gameplayStart, gameplayStop, initPoki, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
 import { setDucked, setMuted, setRain, sfx, unlockAudio } from "./platform/audio.ts";
 import { View, img, loadArt } from "./render/view.ts";
 import { EGG_ART, EGG_MINUTES, NEST_SLOTS, eggDrop, hatch } from "./core/eggs.ts";
@@ -20,7 +20,11 @@ const rng = makeRng((Date.now() & 0xffff) + 1);
 let field: Field = newField(view.W, view.H, save.up, save.biome);
 /** which place's page of the park is showing */
 let parkBiome: BiomeId = save.biome;
-let mode: "field" | "park" = "field";
+let mode: "field" | "park" | "rush" = "field";
+/** the 60-second race: a seeded field, a fixed vacuum, a score to beat */
+const RUSH_UP = { power: 6, range: 5, tank: 999 };
+let rush: { seed: number; left: number; score: number; goal: number | null } | null = null;
+let rushRng = makeRng(1);
 /** what is in the jar right now (species and mutation of each critter) */
 let jar: { id: string; mut: string | null }[] = [];
 let busy = false, t = 0, combo = 0, lastCatch = -9;
@@ -29,7 +33,7 @@ let busy = false, t = 0, combo = 0, lastCatch = -9;
 const input = { on: false, x: view.W * 0.6, y: view.H * 0.7 };
 const canvas = $("game");
 const aimAt = (e: PointerEvent) => { const p = view.toWorld(e.clientX, e.clientY); input.x = p.x; input.y = p.y; };
-canvas.addEventListener("pointerdown", (e) => { unlockAudio(); aimAt(e); if (mode === "field") { input.on = true; firstTouch(); } });
+canvas.addEventListener("pointerdown", (e) => { unlockAudio(); aimAt(e); if (mode === "field" || mode === "rush") { input.on = true; firstTouch(); } });
 window.addEventListener("pointermove", (e) => { if (input.on || e.pointerType === "mouse") aimAt(e); });
 window.addEventListener("pointerup", () => { input.on = false; });
 window.addEventListener("pointercancel", () => { input.on = false; });
@@ -74,25 +78,25 @@ function handleEvents() {
       lastCatch = t;
       let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25));
       if (c.boss > 0) coins += Math.round(c.def.income * 60);
-      save.coins += coins; save.catches++;
+      if (rush) rush.score += coins; else { save.coins += coins; save.catches++; }
       if (combo >= 3) { view.text(field.nozzle.x + 70, field.nozzle.y - 70, `COMBO ×${combo}!`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo)); sfx.coin(combo); }
       if (c.boss > 0) { toast(`👑 You caught the giant ${c.def.name}! +🪙${coins.toLocaleString()}`, 3200); view.shake = 14; sfx.reveal("legendary"); }
       if (c.boss > 0 || c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") view.cheer = 1.2;
       // special catches sometimes leave an egg in the nest
       const egg = c.boss > 0 ? "golden" : eggDrop(c.def.rarity, c.mut, rng);
-      if (egg && save.nest.length < NEST_SLOTS) {
+      if (egg && !rush && save.nest.length < NEST_SLOTS) {
         save.nest.push({ tier: egg, biome: field.biome, readyAt: Date.now() + EGG_MINUTES[egg] * 60_000 });
         view.text(field.nozzle.x + 60, field.nozzle.y - 90, "🥚 An egg!", "#fff4c0", 18);
         sfx.newFish();
         if (!save.tips.includes("egg")) { save.tips.push("egg"); setTimeout(() => toast(`🥚 It left an egg! It hatches in the park in ${EGG_MINUTES[egg]} min.`, 3200), 900); }
       }
-      const isNew = !save.index[c.def.id] && !jar.slice(0, -1).some((j) => j.id === c.def.id);
+      const isNew = !rush && !save.index[c.def.id] && !jar.slice(0, -1).some((j) => j.id === c.def.id);
       sfx.hook(c.def.rarity === "legendary" ? "legendary" : c.def.rarity);
       view.burst(field.nozzle.x, field.nozzle.y, c.mut === "gold" ? "#ffd84a" : RARITY_COLOR[c.def.rarity], c.def.rarity === "common" && !c.mut ? 10 : 24);
       view.text(field.nozzle.x + 40, field.nozzle.y - 34 - (field.jar % 2) * 22, isNew ? `NEW! ${c.def.name}` : `+🪙${coins}`, isNew ? "#ff9ad1" : "#ffe066", isNew ? 20 : 17);
       if (c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") { view.shake = 8; sfx.reveal(c.def.rarity === "legendary" ? "legendary" : "epic"); }
       if (isNew) sfx.newFish();
-      if (field.jar >= field.cap) { toast("🫙 Jar full! Bring them to the park", 2400); sfx.event(); }
+      if (!rush && field.jar >= field.cap) { toast("🫙 Jar full! Bring them to the park", 2400); sfx.event(); }
     } else if (e.kind === "tug") {
       if (!fresh(e.c.uid, "tug")) continue;
       sfx.turn();
@@ -124,6 +128,62 @@ function handleEvents() {
     }
   }
   field.ev.length = 0;
+}
+
+// ------------------------------------------------------------------ rush: the 60-second race you can send to a friend
+let lastRush: { seed: number; score: number } | null = null;
+async function startRush(seed: number, goal: number | null) {
+  if (busy) return;
+  busy = true;
+  if (save.catches > 0) await commercialBreak();
+  busy = false;
+  rush = { seed, left: 60, score: 0, goal };
+  rushRng = makeRng(seed);
+  mode = "rush";
+  field = newField(view.W, view.H, RUSH_UP, save.biome);
+  field.script = 2;
+  for (let i = 0; i < 7; i++) spawn(field, rushRng);
+  $("result").classList.add("hidden");
+  toast(goal ? `🏁 Beat ${goal.toLocaleString()} in 60 seconds!` : "🏁 Catch as many as you can in 60 seconds!", 2600);
+  gameplayStart();
+  updateUi();
+}
+function endRush() {
+  if (!rush) return;
+  const r = rush;
+  rush = null;
+  input.on = false;
+  gameplayStop();
+  const best = Math.max(save.rushBest ?? 0, r.score);
+  save.rushBest = best;
+  const won = r.goal !== null && r.score > r.goal;
+  const prize = Math.round(incomePerSec() * 30 + 200) * (won ? 3 : 1);
+  save.coins += prize;
+  lastRush = { seed: r.seed, score: r.score };
+  writeSave(save);
+  $("resTitle").textContent = r.goal === null ? "🏁 Rush over!" : won ? "🏆 You won!" : "😅 So close!";
+  $("resBody").innerHTML = `<div>🎯 <b>${r.score.toLocaleString()}</b></div>` + (r.goal !== null ? `<div>🤝 ${r.goal.toLocaleString()}</div>` : "") + `<div><small>⭐ Best ${best.toLocaleString()} · 🪙+${prize.toLocaleString()}</small></div>`;
+  $("result").classList.remove("hidden");
+  sfx.reveal(won || r.goal === null ? "epic" : "rare");
+  mode = "park";
+  updateUi();
+}
+async function shareRush() {
+  if (!lastRush) return;
+  const url = await shareURL({ cvr: String(lastRush.seed), cvs: String(lastRush.score) });
+  const text = `🫙 Critter Vac: can you beat ${lastRush.score.toLocaleString()} in a 60-second Rush?`;
+  try { if (navigator.share) { await navigator.share({ text, url }); return; } } catch { /* cancelled */ }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); toast("📋 Link copied! Send it to a friend.", 2400); } catch { toast(url, 6000); }
+}
+/** arriving from a friend's link: offer their race */
+function offerRush() {
+  const seed = parseInt(urlParam("cvr"), 10), score = parseInt(urlParam("cvs"), 10);
+  if (!(seed > 0) || !(score >= 0)) return;
+  $("resTitle").textContent = "🤝 A friend challenges you!";
+  $("resBody").innerHTML = `<div>🎯 <b>${score.toLocaleString()}</b> in 60 seconds</div><div><small>Same critters, same vacuum. Can you beat it?</small></div>`;
+  $("resShare").textContent = "🏁 Play!";
+  $("resShare").onclick = () => { $("resShare").textContent = "📤 Challenge a friend"; $("resShare").onclick = () => void shareRush(); void startRush(seed, score); };
+  $("result").classList.remove("hidden");
 }
 
 // ------------------------------------------------------------------ the park
@@ -275,6 +335,8 @@ function updateUi() {
   $("jarN").textContent = `${field.jar}/${field.cap}`;
   ($("jarFill") as HTMLElement).style.width = `${Math.round((field.jar / field.cap) * 100)}%`;
   $("fieldUi").classList.toggle("hidden", mode !== "field");
+  $("rushHud").classList.toggle("hidden", mode !== "rush");
+  if (rush) { $("rushT").textContent = String(Math.ceil(rush.left)); $("rushS").textContent = `🎯 ${rush.score.toLocaleString()}`; $("rushGoal").textContent = rush.goal !== null ? `/ ${rush.goal.toLocaleString()}` : ""; }
   $("parkUi").classList.toggle("hidden", mode !== "park");
   $("incomeN").textContent = `🪙 ${short(incomePerSec())}/s`;
   renderBiomes();
@@ -296,6 +358,9 @@ function updateUi() {
 }
 
 $("parkBtn").onclick = () => void goPark();
+$("rushBtn").onclick = () => void startRush(1 + Math.floor(Math.random() * 999_983), null);
+$("resOk").onclick = () => { $("result").classList.add("hidden"); };
+$("resShare").onclick = () => void shareRush();
 $("goBtn").onclick = () => void goField();
 $("lureBtn").onclick = () => void lure();
 $("muteBtn").onclick = () => { save.muted = !save.muted; setMuted(save.muted); $("muteBtn").textContent = save.muted ? "🔇" : "🔊"; writeSave(save); };
@@ -307,7 +372,14 @@ function frame(now: number) {
   // the park pays every second, wherever you are
   coinAcc += incomePerSec() * dt;
   if (coinAcc >= 1) { const n = Math.floor(coinAcc); coinAcc -= n; save.coins += n; save.lastSeen = Date.now(); }
-  if (mode === "field") {
+  if (mode === "rush" && rush) {
+    rush.left -= dt;
+    stepField(field, dt, input, RUSH_UP, rushRng);
+    handleEvents();
+    setRain(field.beam ? 0.9 : 0);
+    view.drawField(field, RUSH_UP, t, dt);
+    if (rush.left <= 0) endRush();
+  } else if (mode === "field") {
     stepField(field, dt, input, save.up, rng);
     handleEvents();
     setRain(field.beam ? 0.9 : 0); // the vacuum's whoosh
@@ -335,6 +407,7 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
   loadingFinished();
   $("loading").classList.add("gone");
   payOffline();
+  setTimeout(offerRush, 700);
   if (save.catches > 0) $("hint").classList.add("hidden");
   const coin = img("coin"), jarImg = img("jar");
   if (coin) $("coinIco").innerHTML = `<img src="./art/coin.webp" alt="">`;

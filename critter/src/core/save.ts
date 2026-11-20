@@ -17,6 +17,8 @@ export interface SaveData {
   biomes: BiomeId[];
   /** eggs waiting in the nest */
   nest: Egg[];
+  /** best 60-second rush score */
+  rushBest?: number;
 }
 
 export const newSave = (): SaveData => ({ v: 1, coins: 0, up: { power: 0, range: 0, tank: 0 }, index: {}, catches: 0, lastSeen: Date.now(), muted: false, tips: [], biome: "meadow", biomes: ["meadow"], nest: [] });
