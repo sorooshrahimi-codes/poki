@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Deep Luck</title>
+    <!-- Poki SDK: the only script from another host, as Poki requires. Missing offline is fine. -->
+    <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="ui">
+      <div id="top">
+        <div class="pill" id="coins"><span class="ico">🪙</span><b id="coinsN">0</b></div>
+        <button class="pill btn" id="albumBtn"><span class="ico">📖</span><b id="albumN">0/0</b></button>
+        <div class="pill hidden" id="eventPill"></div>
+        <div class="spacer"></div>
+        <button class="pill btn round" id="langBtn"></button>
+        <button class="pill btn round" id="muteBtn">🔊</button>
+        <button class="pill btn round" id="pauseBtn">⏸</button>
+      </div>
+      <div id="diveHud" class="hidden">
+        <div class="pill" id="depthN">0m</div>
+        <div class="pill" id="slots"></div>
+      </div>
+      <div id="dock">
+        <div id="zones"></div>
+        <div id="upgrades"></div>
+      </div>
+      <div id="reveal" class="panel hidden">
+        <div id="cards"></div>
+        <div id="total"><span class="ico">🪙</span><b id="totalN">0</b></div>
+        <div class="row">
+          <button class="btn big ad" id="doubleBtn">🎬 <span id="doubleLbl">x2</span></button>
+          <button class="btn big ok" id="collectBtn"></button>
+        </div>
+      </div>
+      <div id="snap" class="panel hidden">
+        <div class="title" id="snapTitle"></div>
+        <canvas id="snapFish" width="200" height="110"></canvas>
+        <div class="row">
+          <button class="btn big ad" id="retryBtn">🎬 <span id="retryLbl"></span></button>
+          <button class="btn big plain" id="letgoBtn"></button>
+        </div>
+      </div>
+      <div id="album" class="panel hidden">
+        <div class="title"><span id="albumTitle"></span> <span id="albumCount"></span></div>
+        <div id="albumGrid"></div>
+        <button class="btn big ok" id="albumClose">✕</button>
+      </div>
+      <div id="pause" class="hidden">
+        <button class="btn big ok" id="resumeBtn"></button>
+      </div>
+      <div id="toast" class="hidden"></div>
+      <div id="reelHint" class="hidden"></div>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,126 @@
+// Economy simulator: plays the real dive rules (src/core) with a bot, many times, and prints the
+// pacing targets from the design (first upgrade ~40 s, ocean ~6 min). It is also the judge for
+// AI-made content: run it after adding fish and it fails (exit 1) when pacing leaves the targets.
+//   node tools/sim.ts [sessions=200] [minutes=15]
+import { catchValue, COLUMN, resolveSnap, startDive, stepDive, type Dive, type DiveContext, type DiveInput } from "../src/core/dive.ts";
+import { UPGRADE_ORDER, upgradeCost } from "../src/core/economy.ts";
+import { makeRng } from "../src/core/rng.ts";
+import { newSave } from "../src/core/save.ts";
+import type { Rarity } from "../src/core/types.ts";
+import { FISH } from "../src/data/fish.ts";
+import { RARITY_ORDER, ZONES } from "../src/data/world.ts";
+
+const SESSIONS = Number(process.argv[2] ?? 200);
+const MINUTES = Number(process.argv[3] ?? 15);
+const DT = 1 / 30;
+/** cast, reveal and dock time per dive (seconds) */
+const OVERHEAD = 4;
+
+const bad = (f: { def: { rarity: Rarity; junk?: boolean } }) => f.def.junk || f.def.rarity === "common";
+
+function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; next: number; hold: boolean }): DiveInput {
+  if (d.phase === "fight" && d.fight) {
+    // a human sees the zone late and over-corrects: decide every 0.12-0.35 s, aim with noise
+    const fg = d.fight;
+    if (d.t >= memo.next) {
+      memo.next = d.t + 0.12 + (1 - skill) * 0.23;
+      const aim = fg.zone + (rng() - 0.5) * (1 - skill) * 0.6;
+      memo.hold = fg.marker + fg.vel * 0.1 * skill < aim;
+    }
+    return { targetX: null, axis: 0, hold: memo.hold };
+  }
+  // reaction time: the bot re-decides every 0.15-0.4 s
+  if (d.t < memo.next) return { targetX: memo.x, axis: 0, hold: false };
+  memo.next = d.t + 0.15 + (1 - skill) * 0.25;
+  const down = d.phase === "descend";
+  let best = d.hookX, bestScore = -Infinity;
+  for (let x = 15; x <= COLUMN - 15; x += 15) {
+    let s = -Math.abs(x - d.hookX) * 0.002;
+    for (const f of d.fish) {
+      if (f.hooked) continue;
+      const dy = down ? f.y - d.hookY : d.hookY - f.y;
+      if (dy < 0 || dy > 140) continue;
+      const near = Math.abs(f.x + f.dir * f.speed * (dy / 200) - x) < f.size * 0.5 + 18;
+      if (!near) continue;
+      if (down) s += bad(f) ? -1 : catchValue(f) / 100;
+      else s += catchValue(f) / 50;
+    }
+    if (s > bestScore) { bestScore = s; best = x; }
+  }
+  if (rng() > skill) best = d.hookX + (rng() - 0.5) * 120;
+  memo.x = best;
+  return { targetX: best, axis: 0, hold: false };
+}
+
+interface Result { firstUpgrade: number; ocean: number; coins: number[]; rarities: Record<Rarity, number>; fights: number; won: number; dives: number; legFights: number; firstLegendary: number }
+
+function session(seed: number): Result {
+  const rng = makeRng(seed);
+  const skill = 0.45 + rng() * 0.45; // from distracted kid to focused player
+  const s = newSave();
+  let t = 0, firstUpgrade = -1, ocean = -1;
+  const coins: number[] = [];
+  const rarities = Object.fromEntries(RARITY_ORDER.map((r) => [r, 0])) as Record<Rarity, number>;
+  let fights = 0, won = 0, dives = 0, earned = 0, legFights = 0, firstLegendary = -1;
+  while (t < MINUTES * 60) {
+    const ctx: DiveContext = { upgrades: s.upgrades, event: null, night: false, rng };
+    const d = startDive(s.zone, ctx);
+    const memo = { x: d.hookX, next: 0, hold: false };
+    let fighting = false;
+    while (d.phase !== "done" && d.t < 120) {
+      if (d.phase === "snapped") resolveSnap(d, false);
+      if (d.phase === "fight" && !fighting) {
+        fighting = true; fights++;
+        if (d.fight && d.fight.fish.def.rarity !== "epic") { legFights++; if (firstLegendary < 0) firstLegendary = t + d.t; }
+      }
+      if (d.phase !== "fight") fighting = false;
+      stepDive(d, DT, botInput(d, rng, skill, memo), ctx);
+      for (const fx of d.fx) if (fx.kind === "fightWon") won++;
+      d.fx.length = 0;
+    }
+    dives++;
+    t += d.t + OVERHEAD;
+    for (const f of d.hooked) { const v = catchValue(f); s.coins += v; earned += v; rarities[f.def.rarity]++; }
+    // spending: unlock the ocean as soon as it is affordable, otherwise the cheapest upgrade,
+    // but stop buying small upgrades once the ticket is close
+    const oceanLocked = !s.zones.includes("ocean");
+    if (oceanLocked && s.coins >= ZONES.ocean.price) { s.coins -= ZONES.ocean.price; s.zones.push("ocean"); s.zone = "ocean"; ocean = t; }
+    for (;;) {
+      const options = UPGRADE_ORDER.map((id) => ({ id, cost: upgradeCost(s.upgrades, id) })).filter((o) => o.cost !== null) as { id: typeof UPGRADE_ORDER[number]; cost: number }[];
+      options.sort((a, b) => a.cost - b.cost);
+      const o = options[0];
+      if (!o || o.cost > s.coins) break;
+      if (!s.zones.includes("ocean") && s.coins - o.cost < ZONES.ocean.price * 0.5 && o.cost > ZONES.ocean.price * 0.3) break;
+      s.coins -= o.cost; s.upgrades[o.id]++;
+      if (firstUpgrade < 0) firstUpgrade = t;
+    }
+    while (coins.length < Math.floor(t / 60)) coins.push(earned);
+  }
+  return { firstUpgrade, ocean, coins, rarities, fights, won, dives, legFights, firstLegendary };
+}
+
+const median = (a: number[]) => { const b = a.filter((x) => x >= 0).sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : NaN; };
+const results = Array.from({ length: SESSIONS }, (_, i) => session(1000 + i));
+const fmt = (s: number) => (isNaN(s) ? "never" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`);
+
+const first = median(results.map((r) => r.firstUpgrade));
+const ocean = median(results.map((r) => r.ocean));
+const reachedOcean = results.filter((r) => r.ocean >= 0).length / SESSIONS;
+console.log(`Deep Luck economy sim: ${SESSIONS} sessions x ${MINUTES} min, ${FISH.length} fish`);
+console.log(`first upgrade   median ${fmt(first)}   (target 0:30-1:00)`);
+console.log(`ocean unlocked  median ${fmt(ocean)}   (target 4:30-8:00), ${(reachedOcean * 100).toFixed(0)}% of sessions`);
+console.log(`dives per minute ${(median(results.map((r) => r.dives)) / MINUTES).toFixed(1)}`);
+for (const m of [1, 3, 5, 10, 15].filter((m) => m <= MINUTES)) console.log(`coins earned by minute ${String(m).padStart(2)}: ${median(results.map((r) => r.coins[m - 1] ?? 0))}`);
+const tot = Object.fromEntries(RARITY_ORDER.map((r) => [r, results.reduce((a, x) => a + x.rarities[r], 0) / SESSIONS]));
+console.log("catches per session:", Object.entries(tot).map(([k, v]) => `${k} ${(v as number).toFixed(1)}`).join(", "));
+const fights = results.reduce((a, r) => a + r.fights, 0), won = results.reduce((a, r) => a + r.won, 0);
+console.log(`fights per session ${(fights / SESSIONS).toFixed(1)}, won ${(fights ? (won / fights) * 100 : 0).toFixed(0)}% (target 45-75%)`);
+
+console.log(`legendary fights per session ${(results.reduce((a, r) => a + r.legFights, 0) / SESSIONS).toFixed(1)}, first one median ${fmt(median(results.map((r) => r.firstLegendary)))}, ${(results.filter((r) => r.firstLegendary >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions (target: most players meet one in the first session)`);
+
+const fails: string[] = [];
+if (!(first >= 25 && first <= 75)) fails.push("first upgrade out of range");
+if (!(ocean >= 270 && ocean <= 480)) fails.push("ocean unlock out of range");
+if (fights && !(won / fights >= 0.4 && won / fights <= 0.8)) fails.push("fight win rate out of range");
+if (fails.length) { console.log("FAIL: " + fails.join("; ")); process.exit(1); }
+console.log("PASS");
