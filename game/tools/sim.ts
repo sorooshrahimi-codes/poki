@@ -33,7 +33,8 @@ function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; 
       return { targetX: null, axis: 0, hold: false, tap };
     }
     if (fg.kind === "follow") {
-      if (d.t >= memo.next) { memo.next = d.t + 0.12 + (1 - skill) * 0.25; memo.x = (fg.fishPos + (rng() - 0.5) * (1 - skill) * 0.4) * COLUMN; }
+      // a human looks, then moves the finger: a quarter to half a second late, and never exactly on the fish
+      if (d.t >= memo.next) { memo.next = d.t + 0.25 + (1 - skill) * 0.3; memo.x = (fg.fishPos + (rng() - 0.5) * (0.12 + (1 - skill) * 0.3)) * COLUMN; }
       return { targetX: memo.x, axis: 0, hold: false };
     }
     if (d.t >= memo.next) {

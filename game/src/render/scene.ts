@@ -1,5 +1,5 @@
 import { EYES } from "../data/eyes.ts";
-import { COLUMN, CRAB_TAPS, CRAB_TIME, FIGHT_GRACE, ICE_HOLE, pufferInflated, VENT_ERUPT, VENT_WARN, ventCycle, type Dive, type LiveFish } from "../core/dive.ts";
+import { COLUMN, CRAB_TAPS, CRAB_TIME, FIGHT_GRACE, FOLLOW_WIN, ICE_HOLE, pufferInflated, VENT_ERUPT, VENT_WARN, ventCycle, type Dive, type LiveFish } from "../core/dive.ts";
 import type { ActiveEvent } from "../core/events.ts";
 import type { WeatherId } from "../core/weather.ts";
 import { sfx } from "../platform/audio.ts";
@@ -1386,10 +1386,10 @@ export class Renderer {
     } else if (fg.kind === "follow") {
       // a horizontal track under the fish: keep the net under the darting fish
       const W = Math.min(v.w * 0.8, 420), H = 34, x = (v.w - W) / 2, y = cy + R + 34;
-      good = Math.abs(fg.marker - fg.fishPos) <= fg.zoneHalf * 0.65;
+      good = Math.abs(fg.marker - fg.fishPos) <= fg.zoneHalf * FOLLOW_WIN;
       c.fillStyle = "#1b2b4a"; c.strokeStyle = "#0d1630"; c.lineWidth = 4;
       roundRect(c, x - 5, y - 5, W + 10, H + 10, 18); c.fill(); c.stroke();
-      const zx = x + (fg.fishPos - fg.zoneHalf * 0.65) * W, zw = fg.zoneHalf * 1.3 * W;
+      const zx = x + (fg.fishPos - fg.zoneHalf * FOLLOW_WIN) * W, zw = fg.zoneHalf * 2 * FOLLOW_WIN * W;
       c.fillStyle = good ? "#7dffa8" : "#4cd17a"; roundRect(c, zx, y, zw, H, 12); c.fill();
       c.font = "22px system-ui"; c.textAlign = "center"; c.fillText("🐟", x + fg.fishPos * W, y + 25);
       const mx = x + fg.marker * W;
