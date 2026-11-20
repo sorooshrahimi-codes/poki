@@ -11,15 +11,17 @@ const PROPS: Record<ZoneId, string[]> = {
   lake: ["p_reeds", "p_boulder", "p_post", "p_grass"],
   ocean: ["p_kelp", "p_coral", "p_anemone", "p_glow"],
   ice: ["p_crystal", "p_iceberg", "p_arctickelp", "p_icicles"],
+  reef: ["p_seafan", "p_brain", "p_anemone2", "p_tube"],
 };
 export const propNames = (z: ZoneId) => PROPS[z];
 
 /** where the water surface sits in each background image (fraction of its height) */
-export const BG_WATERLINE: Record<ZoneId, number> = { lake: 0.245, ocean: 0.228, ice: 0.305 };
+export const BG_WATERLINE: Record<ZoneId, number> = { lake: 0.245, ocean: 0.228, ice: 0.305, reef: 0.245 };
 
 const NAMES = [
-  ...FISH.map((f) => f.id), "boat", "boat_cast", "boat_reel", "boat_cheer", "floor_lake", "floor_ocean", "floor_ice", "bg_lake", "bg_ocean", "bg_ice",
-  ...PROPS.lake, ...PROPS.ocean, ...PROPS.ice, "i_coin", "i_line", "i_hooks", "i_luck", "s_shark", "s_bottle", "s_chest", "s_gull", "b_worm", "b_shrimp", "b_firefly", "b_golden", "b_moon", "b_ice", "b_rainbow", "g_lantern", "g_sonar", "g_shop", "g_map",
+  ...FISH.map((f) => f.id), "boat", "boat_cast", "boat_reel", "boat_cheer", "floor_lake", "floor_ocean", "floor_ice", "floor_reef", "bg_lake", "bg_ocean", "bg_ice", "bg_reef", "bg_aquarium",
+  "pet_cat", "pet_dog", "pet_parrot", "pet_penguin", "hat_pirate", "hat_crown", "hat_beanie", "hat_straw",
+  ...PROPS.lake, ...PROPS.ocean, ...PROPS.ice, ...PROPS.reef, "i_coin", "i_line", "i_hooks", "i_luck", "s_shark", "s_bottle", "s_chest", "s_gull", "b_worm", "b_shrimp", "b_firefly", "b_golden", "b_moon", "b_ice", "b_rainbow", "g_lantern", "g_sonar", "g_shop", "g_map",
 ];
 
 const raw = new Map<string, HTMLImageElement>();
@@ -39,7 +41,7 @@ export function loadAssets(onProgress: (k: number) => void): Promise<void> {
     im.onerror = () => { onProgress(++done / NAMES.length); resolve(); }; // missing art falls back to drawn shapes
     im.src = artUrl(n);
   }))).then(() => {
-    for (const z of ["lake", "ocean", "ice"] as const) {
+    for (const z of ["lake", "ocean", "ice", "reef"] as const) {
       const im = raw.get(`bg_${z}`);
       if (im) { bgBottom.set(z, sampleRow(im, im.height - 8)); bgTop.set(z, sampleRow(im, 0)); }
     }

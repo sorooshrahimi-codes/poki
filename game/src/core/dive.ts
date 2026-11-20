@@ -46,6 +46,7 @@ export interface Fight {
 }
 
 export interface Slab { x: number; y: number; w: number; h: number }
+export interface Current { y: number; h: number; v: number }
 export const ICE_HOLE: [number, number] = [COLUMN / 2 - 62, COLUMN / 2 + 62];
 
 /** an unexpected event inside a dive (picked by the director, played out by these rules) */
@@ -87,6 +88,8 @@ export interface Dive {
   hole: [number, number] | null;
   /** a treasure-map dive: the chest is guaranteed and huge */
   treasure: boolean;
+  /** reef zone: horizontal water currents (y = top, h = height, v = push speed) */
+  currents: Current[];
   /** coins found during the dive (chests) and map pieces (bottles) */
   bonusCoins: number;
   mapPieces: number;
@@ -168,8 +171,18 @@ export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind
   const d: Dive = {
     zone, phase: "descend", resume: "descend", hookX: COLUMN / 2, hookY: 0, bottom,
     capacity: capacity(ctx.upgrades), fish, hooked: [], fight: null, t: 0, escaped: null, fx: [],
-    surprise: null, bonusCoins: 0, mapPieces: 0, slabs: [], hole: null, treasure: false,
+    surprise: null, bonusCoins: 0, mapPieces: 0, slabs: [], hole: null, treasure: false, currents: [],
   };
+  if (z.currents) {
+    for (let y = 220; y < bottom - 40; y += 230 + ctx.rng() * 160) {
+      d.currents.push({ y, h: 70 + ctx.rng() * 50, v: (ctx.rng() < 0.5 ? -1 : 1) * (120 + ctx.rng() * 70) });
+    }
+    // fish caught in a current ride it
+    for (const f of d.fish) {
+      const c = d.currents.find((q) => f.y >= q.y && f.y <= q.y + q.h);
+      if (c) { f.dir = c.v > 0 ? 1 : -1; f.speed = Math.abs(c.v) * 0.9 + f.speed * 0.3; }
+    }
+  }
   if (z.ice) {
     d.hole = ICE_HOLE;
     for (let y = 170; y < bottom - 60; y += 150 + ctx.rng() * 90) {
@@ -345,8 +358,12 @@ export function stepDive(d: Dive, dt: number, input: DiveInput, ctx: DiveContext
     if (f.hooked || f === d.fight?.fish) continue;
     f.x += f.dir * f.speed * dt;
     f.bob += dt * 2;
-    if (f.x < -40) { f.x = -40; f.dir = 1; }
-    if (f.x > COLUMN + 40) { f.x = COLUMN + 40; f.dir = -1; }
+    const inCur = d.currents.length > 0 && d.currents.some((q) => f.y >= q.y && f.y <= q.y + q.h);
+    if (inCur) { if (f.x < -60) f.x = COLUMN + 60; else if (f.x > COLUMN + 60) f.x = -60; }
+    else {
+      if (f.x < -40) { f.x = -40; f.dir = 1; }
+      if (f.x > COLUMN + 40) { f.x = COLUMN + 40; f.dir = -1; }
+    }
   }
   if (d.phase === "fight") { stepFight(d, dt, input); return; }
 
@@ -357,6 +374,9 @@ export function stepDive(d: Dive, dt: number, input: DiveInput, ctx: DiveContext
     vx = Math.sign(dx) * Math.min(Math.abs(dx) * 9, HOOK_SPEED);
   }
   if (input.axis) vx = input.axis * HOOK_SPEED * 0.75;
+  // inside a current the hook is heavy to steer and gets carried along
+  const cur = d.currents.find((q) => d.hookY >= q.y && d.hookY <= q.y + q.h);
+  if (cur) vx = Math.max(-260, Math.min(260, vx)) * 0.55 + cur.v;
   d.hookX = Math.max(12, Math.min(COLUMN - 12, d.hookX + vx * dt));
 
   const prevY = d.hookY;

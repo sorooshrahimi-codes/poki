@@ -26,7 +26,7 @@
         <div class="pill" id="slots"></div>
       </div>
       <div id="dock">
-        <div id="dockRow"><div id="zones"></div><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
+        <div id="dockRow"><div id="zones"></div><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb round2" id="aquaBtn">🐠</button><button class="btn zone shopb round2" id="wardBtn">🎩</button><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
         <div id="upgrades"></div>
       </div>
       <div id="reveal" class="panel hidden">
@@ -45,6 +45,23 @@
           <button class="btn big ad" id="retryBtn">🎬 <span id="retryLbl"></span></button>
           <button class="btn big plain" id="letgoBtn"></button>
         </div>
+      </div>
+      <div id="wardrobe" class="panel hidden">
+        <div class="title">🎩 🐾</div>
+        <div id="wardGrid"></div>
+        <button class="btn big ok" id="wardClose">✕</button>
+      </div>
+      <div id="aquarium" class="panel hidden">
+        <div class="title" id="aquaTitle">🐠</div>
+        <canvas id="aquaCanvas" width="360" height="240"></canvas>
+        <div id="aquaEarn"></div>
+        <div class="row"><button class="btn big ad" id="aquaDouble">🎬 x2</button><button class="btn big ok" id="aquaCollect"></button></div>
+        <button class="btn big plain" id="aquaClose">✕</button>
+      </div>
+      <div id="map" class="panel hidden">
+        <div class="title" id="mapTitle">🗺️</div>
+        <div id="mapNodes"></div>
+        <button class="btn big ok" id="mapClose">✕</button>
       </div>
       <div id="shop" class="panel hidden">
         <div class="title"><img class="ti" src="./art/g_shop.webp" alt=""> <span id="restock"></span></div>

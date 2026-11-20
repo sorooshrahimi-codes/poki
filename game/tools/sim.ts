@@ -105,7 +105,11 @@ function session(seed: number): Result {
     // but stop buying small upgrades once the ticket is close
     const oceanLocked = !s.zones.includes("ocean");
     if (oceanLocked && s.coins >= ZONES.ocean.price) { s.coins -= ZONES.ocean.price; s.zones.push("ocean"); s.zone = "ocean"; ocean = t; }
-    else if (!oceanLocked && !s.zones.includes("ice") && s.coins >= ZONES.ice.price && s.upgrades.line >= 12) { s.coins -= ZONES.ice.price; s.zones.push("ice"); s.zone = "ice"; ice = t; }
+    else if (!oceanLocked && s.upgrades.line >= 12) {
+      // the map forks after the ocean: half the bots go north, half to the reef
+      const pick = seed % 2 ? "ice" : "reef";
+      if (!s.zones.includes(pick) && s.coins >= ZONES[pick].price) { s.coins -= ZONES[pick].price; s.zones.push(pick); s.zone = pick; ice = t; }
+    }
     for (;;) {
       const options = UPGRADE_ORDER.map((id) => ({ id, cost: upgradeCost(s.upgrades, id) })).filter((o) => o.cost !== null) as { id: typeof UPGRADE_ORDER[number]; cost: number }[];
       options.sort((a, b) => a.cost - b.cost);
@@ -130,7 +134,7 @@ const reachedOcean = results.filter((r) => r.ocean >= 0).length / SESSIONS;
 console.log(`Deep Luck economy sim: ${SESSIONS} sessions x ${MINUTES} min, ${FISH.length} fish`);
 console.log(`first upgrade   median ${fmt(first)}   (target 0:30-1:00)`);
 console.log(`ocean unlocked  median ${fmt(ocean)}   (target 4:30-8:00), ${(reachedOcean * 100).toFixed(0)}% of sessions`);
-console.log(`frozen north     median ${fmt(median(results.map((r) => r.ice)))}, ${(results.filter((r) => r.ice >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions`);
+console.log(`third zone       median ${fmt(median(results.map((r) => r.ice)))}, ${(results.filter((r) => r.ice >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions`);
 console.log(`dives per minute ${(median(results.map((r) => r.dives)) / MINUTES).toFixed(1)}`);
 for (const m of [1, 3, 5, 10, 15].filter((m) => m <= MINUTES)) console.log(`coins earned by minute ${String(m).padStart(2)}: ${median(results.map((r) => r.coins[m - 1] ?? 0))}`);
 const tot = Object.fromEntries(RARITY_ORDER.map((r) => [r, results.reduce((a, x) => a + x.rarities[r], 0) / SESSIONS]));

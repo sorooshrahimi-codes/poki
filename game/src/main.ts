@@ -4,6 +4,7 @@ import { UPGRADES, UPGRADE_ORDER, capacity, maxDepth, upgradeCost } from "./core
 import { currentEvent, isNight, nextWorldEvent, personalEventDue, type ActiveEvent } from "./core/events.ts";
 import type { Catch, UpgradeId, ZoneId } from "./core/types.ts";
 import { FISH, FISH_BY_ID } from "./data/fish.ts";
+import { COSMETICS, TRY_DIVES, aquariumEarned, aquariumFish, milestoneMet, type CosmeticDef } from "./data/cosmetics.ts";
 import { BAIT_BY_ID, GEAR, lanternRadius, shopOffers, sonarRange, type BaitDef } from "./data/gear.ts";
 import { RARITY_COLOR, RARITY_ORDER, ZONES, ZONE_ORDER } from "./data/world.ts";
 import { LANGS, LANG_LABEL, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tWeather, tZone } from "./i18n.ts";
@@ -26,7 +27,7 @@ setMuted(save.muted);
 
 const canvas = $<HTMLCanvasElement>("game");
 const renderer = new Renderer(canvas);
-const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id, light: 150, sonar: 0 };
+const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id, light: 150, sonar: 0, pet: null, hat: null };
 function setPose(p: SceneState["pose"]) { if (scene.pose !== p) { scene.pose = p; scene.poseT = 0; } }
 /** slow motion: remaining real seconds and the time scale while it lasts */
 let slowmo = 0;
@@ -73,7 +74,7 @@ function readInput() {
   input.hold = pointerDown || keys.has(" ") || keys.has("arrowup") || keys.has("w");
 }
 
-const anyPanelOpen = () => ["album", "pause", "shop"].some((id) => !$(id).classList.contains("hidden"));
+const anyPanelOpen = () => ["album", "pause", "shop", "map", "wardrobe", "aquarium"].some((id) => !$(id).classList.contains("hidden"));
 
 // ------------------------------------------------------------------ dive flow
 async function cast() {
@@ -87,6 +88,7 @@ async function cast() {
   const bait = save.bait ? BAIT_BY_ID[save.bait.id] ?? null : null;
   if (save.bait) { save.bait.uses--; if (save.bait.uses <= 0) save.bait = null; }
   activeBait = bait;
+  if (save.trial) { save.trial.dives--; if (save.trial.dives < 0) save.trial = null; }
   const ctx = { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: Math.random, weather: weatherAt(Date.now()).def, bait };
   const playSec = save.playMs / 1000;
   const floor = ZONES[scene.zone].floor;
@@ -387,6 +389,97 @@ function renderShop() {
   }
 }
 
+// ------------------------------------------------------------------ wardrobe (cosmetics)
+const isOwned = (c: CosmeticDef) => save.owned.includes(c.id) || (!c.price && milestoneMet(c, save.album));
+function renderWardrobe() {
+  const box = $("wardGrid");
+  box.innerHTML = "";
+  for (const c of COSMETICS) {
+    const owned = isOwned(c);
+    const worn = save.wear[c.kind] === c.id;
+    const el = document.createElement("div");
+    el.className = "offer" + (worn ? " worn" : "");
+    el.style.setProperty("--tc", worn ? "#ffe066" : owned ? "#7be495" : "#7f93b5");
+    el.innerHTML = `<img class="bi${owned || c.price ? "" : " lockedimg"}" src="${artUrl(c.art)}" alt="">`;
+    const btn = document.createElement("button");
+    btn.className = "btn big buy " + (owned ? "ok" : c.price ? "gold" : "plain");
+    if (owned) {
+      btn.textContent = worn ? "✓" : "👕";
+      btn.onclick = () => { save.wear[c.kind] = worn ? null : c.id; sfx.buy(); writeSave(save); renderWardrobe(); };
+    } else if (c.price) {
+      btn.textContent = `🪙 ${c.price.toLocaleString()}`;
+      btn.disabled = save.coins < c.price;
+      btn.onclick = () => { if (save.coins < c.price!) return; save.coins -= c.price!; save.owned.push(c.id); save.wear[c.kind] = c.id; sfx.reveal("epic"); writeSave(save); renderWardrobe(); updateUi(); };
+    } else {
+      // milestone goal: shown as the thing to chase
+      btn.textContent = c.album !== undefined ? `📖 ${Object.keys(save.album).length}/${c.album}` : c.fish ? "🎣 ?" : "🟡 ?";
+      btn.disabled = true;
+      if (c.fish && FISH_BY_ID[c.fish]) el.appendChild(fishThumb(c.fish, null, 46, 26, true));
+    }
+    el.appendChild(btn);
+    if (!owned) {
+      // rewarded try: wear it for a few dives
+      const tryb = document.createElement("button");
+      tryb.className = "btn big ad buy";
+      tryb.textContent = `🎬 ×${TRY_DIVES}`;
+      tryb.onclick = async () => {
+        busy = true; const ok = await rewardedBreak(); busy = false;
+        if (ok) { save.trial = { id: c.id, dives: TRY_DIVES }; sfx.reveal("rare"); writeSave(save); $("wardrobe").classList.add("hidden"); }
+      };
+      el.appendChild(tryb);
+    }
+    box.appendChild(el);
+  }
+}
+
+// ------------------------------------------------------------------ aquarium
+let aquaRaf = 0;
+function openAquarium(welcome: boolean) {
+  const now = Date.now();
+  if (!save.aquariumAt) save.aquariumAt = now;
+  const earned = aquariumEarned(save.album, save.aquariumAt, now);
+  $("aquaEarn").textContent = `🪙 +${earned.toLocaleString()}`;
+  $("aquaCollect").textContent = t("collect");
+  $<HTMLButtonElement>("aquaCollect").disabled = earned <= 0;
+  $("aquaDouble").classList.toggle("hidden", earned < 50);
+  $("aquaTitle").textContent = welcome ? "🐠 💤 → 🪙" : "🐠";
+  $("aquarium").classList.remove("hidden");
+  const cv = $<HTMLCanvasElement>("aquaCanvas");
+  const ctx = cv.getContext("2d")!;
+  const ids = aquariumFish(save.album);
+  const swimmers = ids.map((id, i) => ({ id, x: 40 + ((i * 97) % 300), y: 50 + ((i * 53) % 150), dir: i % 2 ? 1 : -1, sp: 18 + (i % 3) * 8 }));
+  let last = performance.now();
+  cancelAnimationFrame(aquaRaf);
+  const bg = img("bg_aquarium");
+  const step = (tm: number) => {
+    const dt = Math.min(0.05, (tm - last) / 1000); last = tm;
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (bg) ctx.drawImage(bg, 0, 0, cv.width, cv.height);
+    for (const f of swimmers) {
+      f.x += f.dir * f.sp * dt;
+      if (f.x < 30) f.dir = 1; if (f.x > cv.width - 30) f.dir = -1;
+      const sp = img(f.id);
+      if (!sp) continue;
+      const w = Math.min(90, 40 + FISH_BY_ID[f.id].size * 0.6), h = (w * sp.height) / sp.width;
+      ctx.save(); ctx.translate(f.x, f.y + Math.sin(tm / 600 + f.x * 0.02) * 5); ctx.scale(f.dir, 1);
+      ctx.drawImage(sp, -w / 2, -h / 2, w, h); ctx.restore();
+    }
+    if (!$("aquarium").classList.contains("hidden")) aquaRaf = requestAnimationFrame(step);
+  };
+  aquaRaf = requestAnimationFrame(step);
+}
+
+async function collectAquarium(double: boolean) {
+  const now = Date.now();
+  let earned = aquariumEarned(save.album, save.aquariumAt || now, now);
+  if (earned <= 0) return;
+  if (double) { busy = true; const ok = await rewardedBreak(); busy = false; if (!ok) return; earned *= 2; }
+  save.coins += earned; save.aquariumAt = now;
+  for (let i = 0; i < 8; i++) setTimeout(() => sfx.coin(i), i * 50);
+  writeSave(save); updateUi();
+  $("aquarium").classList.add("hidden");
+}
+
 function togglePause(force?: boolean) {
   paused = force ?? !paused;
   $("pause").classList.toggle("hidden", !paused);
@@ -405,10 +498,37 @@ function buy(id: UpgradeId) {
   updateUi();
 }
 
+const zoneReachable = (z: ZoneId) => !ZONES[z].after || save.zones.includes(ZONES[z].after!);
+
+/** world map: lake -> ocean -> fork (Frozen North | Coral Reef) */
+const MAP_POS: Record<ZoneId, [number, number]> = { lake: [50, 84], ocean: [50, 52], ice: [22, 16], reef: [78, 16] };
+function renderMap() {
+  const box = $("mapNodes");
+  box.innerHTML = "";
+  const lines = ZONE_ORDER.filter((z) => ZONES[z].after).map((z) => {
+    const [x1, y1] = MAP_POS[ZONES[z].after!], [x2, y2] = MAP_POS[z];
+    const open = save.zones.includes(z);
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${open ? "#ffe066" : "#7f93b5"}" stroke-width="1.6" stroke-dasharray="${open ? "0" : "3 2.5"}" />`;
+  }).join("");
+  box.insertAdjacentHTML("beforeend", `<svg viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>`);
+  for (const z of ZONE_ORDER) {
+    const owned = save.zones.includes(z), reach = zoneReachable(z), price = ZONES[z].price;
+    const n = document.createElement("button");
+    n.className = "btn mnode" + (z === scene.zone ? " here" : "") + (owned ? "" : reach ? " buy" : " far");
+    n.style.left = `${MAP_POS[z][0]}%`; n.style.top = `${MAP_POS[z][1]}%`;
+    n.style.backgroundImage = `url(${artUrl(`bg_${z}`)})`;
+    const status = owned ? (z === scene.zone ? "📍" : "") : reach ? `🔒 🪙${price.toLocaleString()}` : `🔒 ${t("map.needs")} ${tZone(ZONES[z].after!)}`;
+    n.innerHTML = `<span class="mn">${tZone(z)}</span><span class="ms">${status}</span>`;
+    n.disabled = !owned && (!reach || save.coins < price);
+    n.onclick = () => { pickZone(z); $("map").classList.add("hidden"); };
+    box.appendChild(n);
+  }
+}
+
 function pickZone(z: ZoneId) {
   if (scene.mode !== "dock") return;
   if (!save.zones.includes(z)) {
-    if (save.coins < ZONES[z].price) return;
+    if (save.coins < ZONES[z].price || !zoneReachable(z)) return;
     save.coins -= ZONES[z].price;
     save.zones.push(z);
     sfx.event();
@@ -430,6 +550,7 @@ function updateUi() {
   $("letgoBtn").textContent = t("letgo");
   $("doubleLbl").textContent = t("double");
   const dock = scene.mode === "dock";
+  $("aquaBtn").classList.toggle("hidden", Object.keys(save.album).length < 3);
   const mb = $<HTMLButtonElement>("mapBtn");
   mb.classList.toggle("hidden", save.mapPieces < 1);
   mb.disabled = save.mapPieces < 3;
@@ -440,16 +561,13 @@ function updateUi() {
 
   const zones = $("zones");
   zones.innerHTML = "";
-  for (const z of ZONE_ORDER) {
-    const owned = save.zones.includes(z);
-    if (!owned && z !== ZONE_ORDER[save.zones.length]) continue; // show only the next locked zone
-    const b = document.createElement("button");
-    b.className = "btn zone" + (z === scene.zone ? " on" : "") + (owned ? "" : " locked");
-    b.textContent = owned ? tZone(z) : `🔒 ${tZone(z)} 🪙${ZONES[z].price.toLocaleString()}`;
-    b.disabled = !owned && save.coins < ZONES[z].price;
-    b.onclick = () => pickZone(z);
-    zones.appendChild(b);
-  }
+  const b = document.createElement("button");
+  // one button: where you are now; it opens the world map. It glows when a new place is affordable.
+  const canUnlock = ZONE_ORDER.some((z) => !save.zones.includes(z) && zoneReachable(z) && save.coins >= ZONES[z].price);
+  b.className = "btn zone on" + (canUnlock ? " glow" : "");
+  b.innerHTML = `🗺️ ${tZone(scene.zone)}${canUnlock ? " ✨" : ""}`;
+  b.onclick = () => { if (scene.mode === "dock") { renderMap(); $("map").classList.remove("hidden"); } };
+  zones.appendChild(b);
 
   const ups = $("upgrades");
   ups.innerHTML = "";
@@ -557,6 +675,9 @@ function frame(now: number) {
       if (d.phase === "fight") $("reelHint").textContent = "👇 " + t("reel");
     } else $("reelHint").classList.add("hidden");
     scene.light = lanternRadius(save.gear.lantern);
+    const tr = save.trial ? COSMETICS.find((c) => c.id === save.trial!.id) : null;
+    scene.pet = tr?.kind === "pet" ? tr.art : save.wear.pet;
+    scene.hat = tr?.kind === "hat" ? tr.art : save.wear.hat;
     scene.sonar = sonarRange(save.gear.sonar);
     renderer.update(dt, scene);
     setMusicMood(scene.zone, scene.dive && scene.mode === "dive" ? scene.dive.hookY : 0, !!scene.event);
@@ -585,6 +706,13 @@ $("mapBtn").onclick = () => {
   $("mapBtn").classList.toggle("armed", treasureNext);
   toast(treasureNext ? "🗺️ 💰 !" : "🗺️", 1500);
 };
+$("wardBtn").onclick = () => { if (scene.mode === "dock") { renderWardrobe(); $("wardrobe").classList.remove("hidden"); } };
+$("wardClose").onclick = () => $("wardrobe").classList.add("hidden");
+$("aquaBtn").onclick = () => { if (scene.mode === "dock") openAquarium(false); };
+$("aquaClose").onclick = () => $("aquarium").classList.add("hidden");
+$("aquaCollect").onclick = () => void collectAquarium(false);
+$("aquaDouble").onclick = () => void collectAquarium(true);
+$("mapClose").onclick = () => $("map").classList.add("hidden");
 $("shopBtn").onclick = () => { if (scene.mode === "dock") { renderShop(); $("shop").classList.remove("hidden"); } };
 $("shopClose").onclick = () => $("shop").classList.add("hidden");
 $("albumClose").onclick = () => $("album").classList.add("hidden");
@@ -607,6 +735,8 @@ Promise.all([
 ]).then(() => {
   loadingFinished();
   $("loading").classList.add("gone");
+  if (save.aquariumAt && aquariumEarned(save.album, save.aquariumAt, Date.now()) >= 25) openAquarium(true);
+  else if (!save.aquariumAt) save.aquariumAt = Date.now();
   $("coinIco").innerHTML = `<img src="${artUrl("i_coin")}" alt="">`;
   updateUi();
 });

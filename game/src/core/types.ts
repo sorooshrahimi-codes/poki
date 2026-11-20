@@ -4,7 +4,7 @@
 export type Lang = "en" | "es" | "pt" | "hi" | "ja";
 export type Rarity = "common" | "rare" | "epic" | "legendary" | "secret";
 export type MutationId = "gold" | "rainbow" | "giant" | "ghost" | "electric";
-export type ZoneId = "lake" | "ocean" | "ice";
+export type ZoneId = "lake" | "ocean" | "ice" | "reef";
 export type EventId = "blood_moon" | "meteor" | "rainbow_sky" | "golden_hour";
 export type Shape = "fish" | "eel" | "puffer" | "jelly" | "boot" | "can" | "duck" | "crab";
 
@@ -49,6 +49,10 @@ export interface ZoneDef {
   water: [string, string, string];
   /** ice zone technique: floating ice slabs block the hook, and the way out is a hole in the ice */
   ice?: boolean;
+  /** reef zone technique: water currents push the hook sideways */
+  currents?: boolean;
+  /** must own this zone first (the map branches after the ocean) */
+  after?: ZoneId;
 }
 
 export interface EventDef {

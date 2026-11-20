@@ -28,6 +28,9 @@ export interface SceneState {
   light: number;
   /** sonar range (world units), 0 = none */
   sonar: number;
+  /** cosmetics: sprite names or null */
+  pet: string | null;
+  hat: string | null;
   /** seconds since the pose changed: drives the squash-and-stretch pop */
   poseT: number;
 }
@@ -41,11 +44,11 @@ const SPRITE_SCALE = 1.35;
 const BOAT_W = 150;
 /** rod tip and waterline inside the boat sprite, as fractions of its size */
 /** per pose sprite: hull extent and rod tip, as fractions of the sprite (measured on the art) */
-const POSE_GEO: Record<Pose, { hull: [number, number]; tip: [number, number] }> = {
-  idle: { hull: [0, 0.917], tip: [0.998, 0.024] },
-  cast: { hull: [0.155, 0.986], tip: [0, 0.029] },
-  reel: { hull: [0.002, 0.857], tip: [0.971, 0.245] },
-  cheer: { hull: [0, 0.988], tip: [0.967, 0.019] },
+const POSE_GEO: Record<Pose, { hull: [number, number]; tip: [number, number]; head: [number, number] }> = {
+  idle: { hull: [0, 0.917], tip: [0.998, 0.024], head: [0.27, 0.11] },
+  cast: { hull: [0.155, 0.986], tip: [0, 0.029], head: [0.51, 0.1] },
+  reel: { hull: [0.002, 0.857], tip: [0.971, 0.245], head: [0.27, 0.11] },
+  cheer: { hull: [0, 0.988], tip: [0.967, 0.019], head: [0.37, 0.1] },
 };
 export type Pose = "idle" | "cast" | "reel" | "cheer";
 /** shapes that do not bend when swimming */
@@ -127,7 +130,7 @@ export class Renderer {
   private propsFor(zone: ZoneId): Prop[] {
     let list = this.props.get(zone);
     if (list) return list;
-    const rng = makeRng(zone === "lake" ? 11 : zone === "ocean" ? 23 : 37);
+    const rng = makeRng(zone === "lake" ? 11 : zone === "ocean" ? 23 : zone === "ice" ? 37 : 41);
     const names = propNames(zone);
     list = [];
     const floor = ZONES[zone].floor;
@@ -148,7 +151,7 @@ export class Renderer {
   private ambientFor(zone: ZoneId): Ambient[] {
     let list = this.ambient.get(zone);
     if (list) return list;
-    const rng = makeRng(zone === "lake" ? 5 : zone === "ocean" ? 9 : 13);
+    const rng = makeRng(zone === "lake" ? 5 : zone === "ocean" ? 9 : zone === "ice" ? 13 : 17);
     const pool = FISH.filter((f) => f.zone === zone && !f.junk && (f.rarity === "common" || f.rarity === "rare")).map((f) => f.id);
     list = [];
     for (let y = 120; y < ZONES[zone].floor; y += 160 + rng() * 140) {
@@ -241,6 +244,7 @@ export class Renderer {
     this.drawMarkers(c, top, bottom);
     if (ZONES[s.zone].ice) this.drawIceSheet(c, s, left, right);
     if (s.dive) this.drawSlabs(c, s.dive, s.t, top, bottom);
+    if (s.dive) this.drawCurrents(c, s.dive, s.t, top, bottom, left, right);
     if (s.dive) this.drawShadow(c, s.dive, s.t);
     if (s.dive) this.drawDiveFish(c, s.dive, s.t, top, bottom);
     if (s.dive) this.drawSurprise(c, s.dive, s.t);
@@ -548,6 +552,34 @@ export class Renderer {
     }
   }
 
+  /** reef currents: a soft band with streaks racing along it, so the push is readable before you hit it */
+  private drawCurrents(c: Ctx, d: Dive, t: number, top: number, bottom: number, left: number, right: number) {
+    for (const q of d.currents) {
+      if (q.y > bottom + 20 || q.y + q.h < top - 20) continue;
+      const g = c.createLinearGradient(0, q.y, 0, q.y + q.h);
+      g.addColorStop(0, "rgba(170,240,255,0)"); g.addColorStop(0.5, "rgba(170,240,255,0.13)"); g.addColorStop(1, "rgba(170,240,255,0)");
+      c.fillStyle = g; c.fillRect(left, q.y, right - left, q.h);
+      c.save();
+      c.strokeStyle = "rgba(235,252,255,0.55)"; c.lineWidth = 2; c.lineCap = "round";
+      const span = right - left + 120;
+      for (let i = 0; i < 14; i++) {
+        const lane = q.y + 8 + ((i * 37) % Math.max(10, q.h - 16));
+        const x = left - 60 + ((((i * 97 + t * q.v) % span) + span) % span);
+        const len = 22 + (i % 3) * 10, dir = Math.sign(q.v);
+        c.globalAlpha = 0.35 + (i % 4) * 0.12;
+        c.beginPath(); c.moveTo(x, lane); c.quadraticCurveTo(x - dir * len * 0.5, lane - 3, x - dir * len, lane); c.stroke();
+      }
+      // chevrons at the edges show the direction
+      c.globalAlpha = 0.6; c.fillStyle = "#e9fbff";
+      const cy = q.y + q.h / 2, dir = Math.sign(q.v);
+      for (const cx of [left + 26, right - 26]) {
+        const k = (t * 2) % 1;
+        c.beginPath(); c.moveTo(cx + dir * (10 + k * 6), cy); c.lineTo(cx - dir * (4 - k * 6), cy - 9); c.lineTo(cx - dir * (4 - k * 6), cy + 9); c.closePath(); c.fill();
+      }
+      c.restore();
+    }
+  }
+
   /** the frozen surface with a fishing hole under the boat */
   private drawIceSheet(c: Ctx, s: SceneState, left: number, right: number) {
     if (this.camY > 40) return;
@@ -679,6 +711,18 @@ export class Renderer {
     c.rotate(b.tilt);
     c.scale(1 - pop * 0.6, 1 + pop);
     if (b.im) c.drawImage(b.im, b.left, -b.h, b.w, b.h);
+    // cosmetics: a hat over the cap, a pet on the bow
+    const hat = s.hat ? img(s.hat) : null;
+    if (hat) {
+      const hw = b.w * 0.3, hh = (hw * hat.height) / hat.width;
+      c.drawImage(hat, b.left + b.g.head[0] * b.w - hw / 2, -b.h + b.g.head[1] * b.h - hh * 0.72, hw, hh);
+    }
+    const pet = s.pet ? img(s.pet) : null;
+    if (pet) {
+      const pw = 40, ph = (pw * pet.height) / pet.width;
+      const hop = Math.max(0, Math.sin(s.t * 2.2)) > 0.97 ? -6 : 0; // an occasional happy hop
+      c.drawImage(pet, b.left + b.g.hull[1] * b.w - pw - 6, -BOAT_W * 0.2 - ph + 4 + hop, pw, ph);
+    }
     c.restore();
     // ripples around the hull
     c.save();

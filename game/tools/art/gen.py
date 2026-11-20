@@ -91,6 +91,30 @@ JOBS.update({
      "bottom-left an open wooden tackle box full of colorful lures (a shop icon), bottom-right an old rolled treasure map with a red X. " + STYLE, "1:1", True),
 })
 
+JOBS.update({
+  "reef_surface": ("Vertical game background for a fishing game, portrait composition: top 30% a warm sunset-pink tropical sky with a tiny distant lighthouse island and seabirds, crystal clear turquoise shallow sea surface, "
+     "below it a sunlit coral reef underwater world getting deeper and bluer towards the bottom, colorful corals and sea fans only at the far left and right edges, strong light rays, "
+     "the center open and uncluttered for gameplay, no fish, no boat, no characters, no text. " + STYLE, "2:3", False),
+  "reef_floor": ("A wide horizontal game sprite strip on a fully transparent background: a colorful coral reef seabed seen from the side, white sand, pink and orange corals, sea anemones, giant clam with a pearl, starfish; "
+     "the top edge irregular, everything above it transparent. No fish, no text. " + STYLE, "3:2", True),
+  "props_reef": (SHEET + "Underwater coral reef decorations, each tall and vertical: top-left a tall purple sea fan coral, top-right a big brain coral rock with tiny anemones, "
+     "bottom-left tall swaying pink sea anemone tentacles on a rock, bottom-right a tall orange tube coral cluster. " + STYLE, "1:1", True),
+  "fish_reef1": (SHEET + SIDE + "Top-left: a bright blue tang fish with yellow tail. Top-right: a cheerful rainbow parrotfish with a beak-like mouth. "
+     "Bottom-left: a lost pink flip-flop sandal (an object, not a creature). Bottom-right: a cute curly-tailed yellow seahorse, side view facing right. " + STYLE, "1:1", True),
+  "fish_reef2": (SHEET + SIDE + "Top-left: a striped red-and-white lionfish with fan fins. Top-right: a cute green sea turtle swimming, side view facing right. "
+     "Bottom-left: a friendly purple octopus with curly tentacles. Bottom-right: a graceful dark manta ray with white belly, side view facing right. " + STYLE, "1:1", True),
+  "fish_coraldragon": ("A single legendary boss creature game sprite on a fully transparent background, side view facing right, no text: 'Coral Dragon', a majestic leafy sea dragon covered in "
+     "pink and orange coral-like leafy fins, a tiny pearl crown, wise smiling face, magical sparkles. " + STYLE, "3:2", True),
+  "fish_opal": ("A single secret mythical creature game sprite on a fully transparent background, side view facing right, no text: 'Opal Serpent', a long graceful friendly sea serpent whose scales are "
+     "iridescent white opal shimmering pink, mint and gold, flowing fins, kind eyes. " + STYLE, "3:2", True),
+  "pets": (SHEET + "Cute pet companions sitting, side view facing right, each a single animal: top-left an orange cat wearing a tiny life vest, top-right a fluffy white puppy wearing a sailor hat, "
+     "bottom-left a colorful parrot, bottom-right a baby penguin with a scarf. " + STYLE, "1:1", True),
+  "hats": (SHEET + "Cute cartoon hats, each a single hat seen from the front-side, no head: top-left a black pirate captain hat with a skull-free gold emblem, top-right a shiny golden royal crown with gems, "
+     "bottom-left a cozy blue knitted beanie with a pom-pom, bottom-right a straw sun hat with a flower. " + STYLE, "1:1", True),
+  "aquarium": ("Wide game background, landscape composition, no characters, no fish, no text: the inside view of a cute cozy home aquarium tank, bright blue water, white sand floor with colorful pebbles, "
+     "green plants at both sides, a tiny treasure chest and a little castle decoration at the bottom, bubbles, soft light from the top, glass edges framing it. " + STYLE, "3:2", False),
+})
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]
