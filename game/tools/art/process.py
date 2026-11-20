@@ -20,12 +20,15 @@ SHEETS = {
     "props_ice": ["p_crystal", "p_iceberg", "p_arctickelp", "p_icicles"],
     "fish_ice1": ["ice_cod", "arctic_char", "snow_crab", "lost_mitten"],
     "fish_ice2": ["baby_penguin", "frost_jelly", "crystal_trout", "beluga"],
+    "baits1": ["b_worm", "b_shrimp", "b_firefly", "b_golden"],
+    "baits2": ["b_moon", "b_ice", "b_rainbow", "b_bobber"],
+    "gear": ["g_lantern", "g_sonar", "g_shop", "g_map"],
 }
 SINGLES = {"fish_whiskers": "old_whiskers", "fish_marlin": "grand_marlin", "fish_whale": "star_whale", "boat": "boat", "boat_cast": "boat_cast", "boat_reel": "boat_reel", "boat_cheer": "boat_cheer",
            "ice_floor": "floor_ice", "fish_narwhal": "narwhal_king", "fish_aurora": "aurora_ray",
            "lake_floor": "floor_lake", "ocean_floor": "floor_ocean"}
 BACKGROUNDS = {"lake_surface": "bg_lake", "ocean_surface": "bg_ocean", "ice_surface": "bg_ice"}
-MAX = {"i_": 128, "s_": 300, "narwhal_king": 420, "aurora_ray": 460, "boat_": 420, "p_": 360, "floor_": 1024, "boat": 420, "old_whiskers": 420, "grand_marlin": 420, "star_whale": 480}
+MAX = {"i_": 128, "b_": 128, "g_": 128, "s_": 300, "narwhal_king": 420, "aurora_ray": 460, "boat_": 420, "p_": 360, "floor_": 1024, "boat": 420, "old_whiskers": 420, "grand_marlin": 420, "star_whale": 480}
 
 def max_for(name):
     for k, v in MAX.items():

@@ -29,7 +29,7 @@ export const WEATHER_SLOT_MS = 6 * 60_000;
 function hash(n: number) {
   let x = (n * 2654435761) >>> 0;
   x ^= x >>> 16; x = Math.imul(x, 2246822507) >>> 0; x ^= x >>> 13;
-  return x / 4294967296;
+  return (x >>> 0) / 4294967296;
 }
 
 function pick(slot: number): WeatherId {

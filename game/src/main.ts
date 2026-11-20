@@ -4,6 +4,7 @@ import { UPGRADES, UPGRADE_ORDER, capacity, maxDepth, upgradeCost } from "./core
 import { currentEvent, isNight, nextWorldEvent, personalEventDue, type ActiveEvent } from "./core/events.ts";
 import type { Catch, UpgradeId, ZoneId } from "./core/types.ts";
 import { FISH, FISH_BY_ID } from "./data/fish.ts";
+import { BAIT_BY_ID, GEAR, lanternRadius, shopOffers, sonarRange, type BaitDef } from "./data/gear.ts";
 import { RARITY_COLOR, RARITY_ORDER, ZONES, ZONE_ORDER } from "./data/world.ts";
 import { LANGS, LANG_LABEL, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tWeather, tZone } from "./i18n.ts";
 import { setDucked, setMusicMood, setMuted, setRain, sfx, unlockAudio } from "./platform/audio.ts";
@@ -25,7 +26,7 @@ setMuted(save.muted);
 
 const canvas = $<HTMLCanvasElement>("game");
 const renderer = new Renderer(canvas);
-const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id };
+const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id, light: 150, sonar: 0 };
 function setPose(p: SceneState["pose"]) { if (scene.pose !== p) { scene.pose = p; scene.poseT = 0; } }
 /** slow motion: remaining real seconds and the time scale while it lasts */
 let slowmo = 0;
@@ -72,7 +73,7 @@ function readInput() {
   input.hold = pointerDown || keys.has(" ") || keys.has("arrowup") || keys.has("w");
 }
 
-const anyPanelOpen = () => !$("album").classList.contains("hidden") || !$("pause").classList.contains("hidden");
+const anyPanelOpen = () => ["album", "pause", "shop"].some((id) => !$(id).classList.contains("hidden"));
 
 // ------------------------------------------------------------------ dive flow
 async function cast() {
@@ -83,7 +84,10 @@ async function cast() {
   busy = false;
   if (paused) return;
   gameplayStart();
-  const ctx = { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: Math.random, weather: weatherAt(Date.now()).def };
+  const bait = save.bait ? BAIT_BY_ID[save.bait.id] ?? null : null;
+  if (save.bait) { save.bait.uses--; if (save.bait.uses <= 0) save.bait = null; }
+  activeBait = bait;
+  const ctx = { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: Math.random, weather: weatherAt(Date.now()).def, bait };
   const playSec = save.playMs / 1000;
   const floor = ZONES[scene.zone].floor;
   const surprise = forcedSurprise ?? pickSurprise(save.director, playSec, { zone: scene.zone, bottom: Math.min(maxDepth(save.upgrades), floor), floor, capacity: capacity(save.upgrades) }, Math.random);
@@ -142,6 +146,7 @@ function handleFx(d: Dive) {
 
 const SURPRISE_ICON: Record<string, string> = { golden_school: "✨", shark: "🦈", bottle: "🍾", whirlpool: "🌀", chest: "💰", shadow: "👀" };
 let pendingBonus = 0;
+let activeBait: BaitDef | null = null;
 /** test hook: force the next dive's surprise */
 let forcedSurprise: Parameters<typeof noteSurprise>[1] | null = null;
 
@@ -317,6 +322,65 @@ function showAlbum() {
 
 const albumText = () => `${Object.keys(save.album).length}/${FISH.length}`;
 
+// ------------------------------------------------------------------ shop
+const TIER_COLOR: Record<string, string> = { basic: "#9fd0ff", fine: "#4fc3f7", magic: "#c77dff", legend: "#ffc93c" };
+const FX_ICON: Record<string, string> = { rare: "🔷", epic: "🟣", legendary: "🟡", gold: "✨", rainbow: "🌈", ghost: "👻", electric: "⚡" };
+const baitName = (b: BaitDef) => b.names[getLang()] ?? b.names.en;
+
+let shownRestock = 0;
+function renderShop() {
+  const now = Date.now();
+  const { offers, restockAt } = shopOffers(now);
+  shownRestock = restockAt;
+  const left = Math.max(0, Math.ceil((restockAt - now) / 1000));
+  $("restock").textContent = `🔄 ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+  const box = $("offers");
+  box.innerHTML = "";
+  for (const b of offers) {
+    const el = document.createElement("div");
+    el.className = `offer tier-${b.tier}`;
+    el.style.setProperty("--tc", TIER_COLOR[b.tier]);
+    const fx = [...Object.keys(b.rarity ?? {}), ...Object.keys(b.mutation ?? {})].map((k) => `<span>${FX_ICON[k] ?? ""}⬆</span>`).join("") + (b.unlocksSecret ? "<span>❓</span>" : "");
+    el.innerHTML = `<img class="bi" src="${artUrl(b.art)}" alt=""><div class="on">${baitName(b)}</div><div class="ue">🎣 ×${b.uses}</div><div class="fx">${fx}</div>`;
+    // attracted species: thumbnails, dark silhouettes until caught (a teaser)
+    const fxRow = el.querySelector(".fx")!;
+    for (const id of b.attracts ?? []) if (FISH_BY_ID[id]) fxRow.appendChild(fishThumb(id, null, 34, 20, !save.album[id]));
+    const btn = document.createElement("button");
+    btn.className = "btn big gold buy";
+    btn.innerHTML = `🪙 ${b.price.toLocaleString()}`;
+    btn.disabled = save.coins < b.price;
+    btn.onclick = () => {
+      if (save.coins < b.price) return;
+      save.coins -= b.price;
+      save.bait = { id: b.id, uses: (save.bait?.id === b.id ? save.bait.uses : 0) + b.uses };
+      sfx.buy(); writeSave(save); renderShop(); updateUi();
+    };
+    el.appendChild(btn);
+    box.appendChild(el);
+  }
+  const gr = $("gearRow");
+  gr.innerHTML = "";
+  for (const g of GEAR) {
+    const lvl = save.gear[g.id], cost = lvl >= g.max ? null : g.cost(lvl);
+    const el = document.createElement("div");
+    el.className = "offer";
+    el.style.setProperty("--tc", "#7be495");
+    const stat = g.id === "lantern" ? `💡 ${lanternRadius(lvl)}` : `📡 ${sonarRange(lvl) ? Math.round(sonarRange(lvl) / 10) + "m" : "—"}`;
+    el.innerHTML = `<img class="bi" src="${artUrl(g.art)}" alt=""><div class="ue">${"★".repeat(lvl)}${"☆".repeat(g.max - lvl)}</div><div class="fx">${stat}</div>`;
+    const btn = document.createElement("button");
+    btn.className = "btn big gold buy";
+    btn.innerHTML = cost === null ? t("max") : `🪙 ${cost.toLocaleString()}`;
+    btn.disabled = cost === null || save.coins < cost;
+    btn.onclick = () => {
+      if (cost === null || save.coins < cost) return;
+      save.coins -= cost; save.gear[g.id]++;
+      sfx.buy(); writeSave(save); renderShop(); updateUi();
+    };
+    el.appendChild(btn);
+    gr.appendChild(el);
+  }
+}
+
 function togglePause(force?: boolean) {
   paused = force ?? !paused;
   $("pause").classList.toggle("hidden", !paused);
@@ -418,6 +482,16 @@ function updateWeather(now: number) {
 
 function updateEvent(now: number) {
   updateWeather(now);
+  const bp = $("baitPill");
+  const b = save.bait ? BAIT_BY_ID[save.bait.id] : null;
+  bp.classList.toggle("hidden", !b);
+  if (b) bp.innerHTML = `<img src="${artUrl(b.art)}" alt=""> ×${save.bait!.uses}`;
+  if (!$("shop").classList.contains("hidden")) {
+    // only the countdown ticks; offers are rebuilt when the shop actually restocks
+    const { restockAt } = shopOffers(now);
+    if (restockAt !== shownRestock) renderShop();
+    else { const left = Math.max(0, Math.ceil((restockAt - now) / 1000)); $("restock").textContent = `🔄 ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`; }
+  }
   const due = personalEventDue(now, sessionStart, save.seenEvent);
   if (due !== null) personalEventAt = due;
   const ev: ActiveEvent | null = currentEvent(now, personalEventAt);
@@ -460,7 +534,7 @@ function frame(now: number) {
     readInput();
     const d = scene.dive;
     if (scene.mode === "dive" && d) {
-      const ctx = { upgrades: save.upgrades, event: scene.event, night: false, rng: Math.random, weather: weatherAt(Date.now()).def };
+      const ctx = { upgrades: save.upgrades, event: scene.event, night: false, rng: Math.random, weather: weatherAt(Date.now()).def, bait: activeBait };
       stepDive(d, dt, input, ctx);
       handleFx(d);
       reelTick -= dt;
@@ -471,6 +545,8 @@ function frame(now: number) {
       $("reelHint").classList.toggle("hidden", d.phase !== "fight");
       if (d.phase === "fight") $("reelHint").textContent = "👇 " + t("reel");
     } else $("reelHint").classList.add("hidden");
+    scene.light = lanternRadius(save.gear.lantern);
+    scene.sonar = sonarRange(save.gear.sonar);
     renderer.update(dt, scene);
     setMusicMood(scene.zone, scene.dive && scene.mode === "dive" ? scene.dive.hookY : 0, !!scene.event);
     save.playMs += dt * 1000;
@@ -492,6 +568,8 @@ $("doubleBtn").onclick = () => void collect(true);
 $("retryBtn").onclick = () => void snapChoice(true);
 $("letgoBtn").onclick = () => void snapChoice(false);
 $("albumBtn").onclick = () => { if (scene.mode === "dock") showAlbum(); };
+$("shopBtn").onclick = () => { if (scene.mode === "dock") { renderShop(); $("shop").classList.remove("hidden"); } };
+$("shopClose").onclick = () => $("shop").classList.add("hidden");
 $("albumClose").onclick = () => $("album").classList.add("hidden");
 $("pauseBtn").onclick = () => togglePause(true);
 $("resumeBtn").onclick = () => togglePause(false);

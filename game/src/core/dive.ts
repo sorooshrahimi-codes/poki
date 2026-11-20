@@ -4,6 +4,7 @@ import { ascendSpeed, capacity, descendSpeed, luckMult, maxDepth } from "./econo
 import type { SurpriseKind } from "./director.ts";
 import type { ActiveEvent } from "./events.ts";
 import type { WeatherDef } from "./weather.ts";
+import type { BaitDef } from "../data/gear.ts";
 import { pickWeighted, type Rng } from "./rng.ts";
 import type { Catch, FishDef, MutationId, UpgradeLevels, ZoneId } from "./types.ts";
 
@@ -101,6 +102,7 @@ export interface DiveContext {
   night: boolean;
   rng: Rng;
   weather?: WeatherDef | null;
+  bait?: BaitDef | null;
 }
 
 let uidCounter = 1;
@@ -108,9 +110,11 @@ let uidCounter = 1;
 function rollMutation(ctx: DiveContext): MutationId | null {
   for (const m of MUTATIONS) {
     const byWeather = ctx.weather?.mutation?.[m.id];
-    if (m.event && ctx.event?.def.id !== m.event && !byWeather) continue;
-    if (m.night && !ctx.night && !byWeather) continue;
-    const boost = (ctx.event?.def.mutation?.[m.id] ?? 1) * (byWeather ?? 1);
+    const byBait = ctx.bait?.mutation?.[m.id];
+    const allowed = byWeather || byBait;
+    if (m.event && ctx.event?.def.id !== m.event && !allowed) continue;
+    if (m.night && !ctx.night && !allowed) continue;
+    const boost = (ctx.event?.def.mutation?.[m.id] ?? 1) * (byWeather ?? 1) * (byBait ?? 1);
     if (ctx.rng() < m.chance * boost) return m.id;
   }
   return null;
@@ -118,10 +122,11 @@ function rollMutation(ctx: DiveContext): MutationId | null {
 
 export function spawnFish(zone: ZoneId, y: number, ctx: DiveContext): LiveFish | null {
   const luck = luckMult(ctx.upgrades);
-  const pool = FISH.filter((f) => f.zone === zone && y >= f.depth[0] && y <= f.depth[1] && (!f.event || f.event === ctx.event?.def.id));
+  const pool = FISH.filter((f) => f.zone === zone && y >= f.depth[0] && y <= f.depth[1] && (!f.event || f.event === ctx.event?.def.id || ctx.bait?.unlocksSecret));
   const def = pickWeighted(pool, (f) => {
     const base = RARITY_WEIGHT[f.rarity];
-    const ev = (ctx.event?.def.rarity?.[f.rarity] ?? 1) * (ctx.weather?.rarity?.[f.rarity] ?? 1);
+    const ev = (ctx.event?.def.rarity?.[f.rarity] ?? 1) * (ctx.weather?.rarity?.[f.rarity] ?? 1) * (ctx.bait?.rarity?.[f.rarity] ?? 1)
+      * (ctx.bait?.attracts?.includes(f.id) ? 4 : 1);
     // junk is a joke, not a nuisance: it shows up, but rarely
     return base * (f.rarity === "common" ? 1 : luck) * ev * (f.junk ? 0.3 : 1);
   }, ctx.rng);

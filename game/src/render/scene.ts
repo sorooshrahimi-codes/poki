@@ -24,6 +24,10 @@ export interface SceneState {
   hint: boolean;
   pose: Pose;
   weather: WeatherId;
+  /** lantern: light radius around the hook in the dark */
+  light: number;
+  /** sonar range (world units), 0 = none */
+  sonar: number;
   /** seconds since the pose changed: drives the squash-and-stretch pop */
   poseT: number;
 }
@@ -244,6 +248,7 @@ export class Renderer {
     c.restore();
     this.drawDarkness(s);
     if (s.hint && s.mode === "dock") this.drawHint(s.t);
+    if (s.dive && s.mode === "dive" && s.sonar > 0) this.drawSonar(s);
     if (s.dive?.fight && (s.dive.phase === "fight" || s.dive.phase === "snapped")) this.drawFight(s.dive, s.t);
     if (this.flash > 0) {
       c.save(); c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
@@ -737,7 +742,7 @@ export class Renderer {
     };
     const d = s.dive;
     if (d && s.mode === "dive") {
-      hole(d.hookX, d.hookY, 150, 1);
+      hole(d.hookX, d.hookY, s.light, 1);
       // a lantern beam pointing the way the hook travels
       const x = (v.ox + d.hookX * v.scale) * sc, y = (d.hookY - this.camY) * v.scale * sc;
       const dirY = d.phase === "ascend" ? -1 : 1, len = 260 * v.scale * sc, spread = 0.42;
@@ -762,6 +767,33 @@ export class Renderer {
     c.restore();
   }
 
+  /** sonar: arrows at the screen edge point at valuable fish you cannot see yet */
+  private drawSonar(s: SceneState) {
+    const d = s.dive!, v = this.view, c = this.ctx;
+    const top = this.camY, bottom = this.camY + v.viewH;
+    c.save();
+    c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+    for (const f of d.fish) {
+      if (f.hooked || (f.def.rarity === "common" || f.def.rarity === "rare") && !f.mut) continue;
+      const dy = f.y - d.hookY;
+      if (Math.abs(dy) > s.sonar) continue;
+      if (f.y > top + 30 && f.y < bottom - 30) continue; // on screen: no arrow needed
+      const below = f.y >= bottom - 30;
+      const sx = Math.max(24, Math.min(v.w - 24, v.ox + f.x * v.scale));
+      const sy = below ? v.h - 30 : 140;
+      const pulse = 1 + Math.sin(s.t * 6 + f.uid) * 0.15;
+      c.fillStyle = f.mut === "gold" ? "#ffd84a" : RARITY_COLOR[f.def.rarity];
+      c.strokeStyle = "#0d1e45"; c.lineWidth = 3;
+      c.beginPath();
+      const r = 11 * pulse, dir = below ? 1 : -1;
+      c.moveTo(sx, sy + dir * r); c.lineTo(sx - r, sy - dir * r * 0.6); c.lineTo(sx + r, sy - dir * r * 0.6); c.closePath();
+      c.stroke(); c.fill();
+      c.font = "700 11px Fredoka, sans-serif"; c.textAlign = "center"; c.fillStyle = "#fff";
+      c.fillText(`${Math.round(Math.abs(dy) / 10)}m`, sx, sy - dir * 18);
+    }
+    c.restore();
+  }
+
   /** fog: a milky veil underwater that only clears around the hook (sonar and lanterns matter) */
   private drawFogLayer(s: SceneState) {
     const v = this.view, f = this.fog.getContext("2d")!;
@@ -774,7 +806,7 @@ export class Renderer {
     const d = s.dive;
     if (d && s.mode === "dive") {
       f.globalCompositeOperation = "destination-out";
-      const x = (v.ox + d.hookX * v.scale) * sc, y = (d.hookY - this.camY) * v.scale * sc, r = 130 * v.scale * sc;
+      const x = (v.ox + d.hookX * v.scale) * sc, y = (d.hookY - this.camY) * v.scale * sc, r = s.light * 0.9 * v.scale * sc;
       const g = f.createRadialGradient(x, y, 0, x, y, r);
       g.addColorStop(0, "rgba(0,0,0,1)"); g.addColorStop(1, "rgba(0,0,0,0)");
       f.fillStyle = g; f.beginPath(); f.arc(x, y, r, 0, Math.PI * 2); f.fill();

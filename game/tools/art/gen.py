@@ -82,6 +82,15 @@ JOBS.update({
      "aurora light ribbons, starry speckles, kind eyes, magical. " + STYLE, "3:2", True),
 })
 
+JOBS.update({
+  "baits1": (SHEET + "Fishing bait items, each a single cute object: top-left a wiggly pink earthworm with a happy face, top-right a plump pink shrimp, "
+     "bottom-left a glowing firefly-light lure shaped like a little bug with a warm yellow glowing belly, bottom-right a shiny golden fishing lure shaped like a small fish with sparkles. " + STYLE, "1:1", True),
+  "baits2": (SHEET + "Magical fishing bait items, each a single cute object: top-left a silver crescent-moon shaped glowing lure with tiny stars, top-right an icy blue crystal bait shaped like a snowflake drop, "
+     "bottom-left a rainbow-striped jelly bait drop that shimmers, bottom-right a red-and-white classic fishing bobber with a tiny star on it. " + STYLE, "1:1", True),
+  "gear": (SHEET + "Fishing gear icons, each a single object: top-left a cozy brass ship lantern glowing warm yellow, top-right a round green sonar screen device with a radar sweep and blips, "
+     "bottom-left an open wooden tackle box full of colorful lures (a shop icon), bottom-right an old rolled treasure map with a red X. " + STYLE, "1:1", True),
+})
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]

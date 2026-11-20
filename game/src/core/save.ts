@@ -21,12 +21,14 @@ export interface SaveData {
   playMs: number;
   director: DirectorState;
   mapPieces: number;
+  bait: { id: string; uses: number } | null;
+  gear: { lantern: number; sonar: number };
 }
 
 export const newSave = (): SaveData => ({
   v: 1, coins: 0, upgrades: { line: 0, capacity: 0, luck: 0 }, zones: ["lake"], zone: "lake",
   album: {}, seenEvent: false, muted: false, lang: null, dives: 0, playMs: 0,
-  director: newDirector(), mapPieces: 0,
+  director: newDirector(), mapPieces: 0, bait: null, gear: { lantern: 0, sonar: 0 },
 });
 
 /** parse anything (old, partial or broken) into a valid save */
@@ -36,7 +38,7 @@ export function readSave(raw: string | null): SaveData {
   try {
     const d = JSON.parse(raw);
     if (!d || d.v !== 1) return base;
-    return { ...base, ...d, upgrades: { ...base.upgrades, ...d.upgrades }, album: d.album ?? {}, director: { ...base.director, ...d.director } };
+    return { ...base, ...d, upgrades: { ...base.upgrades, ...d.upgrades }, album: d.album ?? {}, director: { ...base.director, ...d.director }, gear: { ...base.gear, ...d.gear } };
   } catch {
     return base;
   }

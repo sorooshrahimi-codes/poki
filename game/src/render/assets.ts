@@ -18,7 +18,7 @@ export const BG_WATERLINE: Record<ZoneId, number> = { lake: 0.245, ocean: 0.228 
 
 const NAMES = [
   ...FISH.map((f) => f.id), "boat", "boat_cast", "boat_reel", "boat_cheer", "floor_lake", "floor_ocean", "bg_lake", "bg_ocean",
-  ...PROPS.lake, ...PROPS.ocean, "i_coin", "i_line", "i_hooks", "i_luck", "s_shark", "s_bottle", "s_chest", "s_gull",
+  ...PROPS.lake, ...PROPS.ocean, "i_coin", "i_line", "i_hooks", "i_luck", "s_shark", "s_bottle", "s_chest", "s_gull", "b_worm", "b_shrimp", "b_firefly", "b_golden", "b_moon", "b_ice", "b_rainbow", "g_lantern", "g_sonar", "g_shop", "g_map",
 ];
 
 const raw = new Map<string, HTMLImageElement>();

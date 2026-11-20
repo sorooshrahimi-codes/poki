@@ -20,13 +20,13 @@
         <button class="pill btn round" id="muteBtn">🔊</button>
         <button class="pill btn round" id="pauseBtn">⏸</button>
       </div>
-      <div id="status"><div class="pill" id="weatherPill"></div><div class="pill hidden" id="eventPill"></div></div>
+      <div id="status"><div class="pill hidden" id="baitPill"></div><div class="pill" id="weatherPill"></div><div class="pill hidden" id="eventPill"></div></div>
       <div id="diveHud" class="hidden">
         <div class="pill" id="depthN">0m</div>
         <div class="pill" id="slots"></div>
       </div>
       <div id="dock">
-        <div id="zones"></div>
+        <div id="dockRow"><div id="zones"></div><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
         <div id="upgrades"></div>
       </div>
       <div id="reveal" class="panel hidden">
@@ -45,6 +45,12 @@
           <button class="btn big ad" id="retryBtn">🎬 <span id="retryLbl"></span></button>
           <button class="btn big plain" id="letgoBtn"></button>
         </div>
+      </div>
+      <div id="shop" class="panel hidden">
+        <div class="title"><img class="ti" src="./art/g_shop.webp" alt=""> <span id="restock"></span></div>
+        <div id="offers"></div>
+        <div id="gearRow"></div>
+        <button class="btn big ok" id="shopClose">✕</button>
       </div>
       <div id="album" class="panel hidden">
         <div class="title"><span id="albumTitle"></span> <span id="albumCount"></span></div>
