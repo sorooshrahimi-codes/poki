@@ -91,7 +91,7 @@ export const DERBY_RULES: DerbyRule[] = ["value", "count", "heaviest"];
  */
 export function derbyRivals(seed: number, rule: DerbyRule, avgDiveValue: number, avgDiveCount: number, avgBestKg: number) {
   const dives = DERBY_MS / 16_000; // about one dive every 16 s
-  const base = rule === "value" ? avgDiveValue * dives : rule === "count" ? avgDiveCount * dives : avgBestKg * 1.6;
+  const base = rule === "value" ? avgDiveValue * dives : rule === "count" ? avgDiveCount * dives : avgBestKg * 2.6;
   return [0, 1, 2, 3, 4].map((i) => ({
     name: RIVAL_NAMES[(seed + i * 5) % RIVAL_NAMES.length],
     npc: (seed + i) % 4,

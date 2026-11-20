@@ -7,6 +7,8 @@ import { FISH, FISH_BY_ID } from "./data/fish.ts";
 import { COSMETICS, TRY_DIVES, aquariumEarned, aquariumFish, aquariumRate, milestoneMet, type CosmeticDef } from "./data/cosmetics.ts";
 import { MERGE_COUNT, ORDER_SLOTS, canFill, fill, keep, matching, merge, newOrder, tankPower, type Order } from "./core/tank.ts";
 import { MISSIONS } from "./data/missions.ts";
+import { DERBY_COOLDOWN_MS, DERBY_MS, DERBY_RULES, LEAGUE_SIZE, PROMOTE, DEMOTE, TIERS, TIER_ICON, addXp, derbyRivals, leaguePoints, leagueReward, leagueTable, levelReward, rankOf, titleIndex, voyageCoinMult, weekEndsAt, weekOf, xpForCatch, xpNeed, type DerbyRule, type Tier } from "./core/progress.ts";
+import { makeRng } from "./core/rng.ts";
 import { BAIT_BY_ID, GEAR, lanternRadius, shopOffers, sonarRange, type BaitDef } from "./data/gear.ts";
 import { RARITY_COLOR, RARITY_ORDER, ZONES, ZONE_ORDER } from "./data/world.ts";
 import { LANGS, LANG_LABEL, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tWeather, tZone } from "./i18n.ts";
@@ -77,7 +79,7 @@ function readInput() {
   input.hold = pointerDown || keys.has(" ") || keys.has("arrowup") || keys.has("w");
 }
 
-const anyPanelOpen = () => ["album", "pause", "shop", "map", "wardrobe", "aquarium", "orders"].some((id) => !$(id).classList.contains("hidden"));
+const anyPanelOpen = () => ["album", "pause", "shop", "map", "wardrobe", "aquarium", "orders", "compete", "result"].some((id) => !$(id).classList.contains("hidden"));
 
 // ------------------------------------------------------------------ dive flow
 async function cast() {
@@ -92,7 +94,8 @@ async function cast() {
   if (save.bait) { save.bait.uses--; if (save.bait.uses <= 0) save.bait = null; }
   activeBait = bait;
   if (save.trial) { save.trial.dives--; if (save.trial.dives < 0) save.trial = null; }
-  const ctx = { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: Math.random, weather: weatherAt(Date.now()).def, bait };
+  const dailyRng = play.kind === "daily" ? makeRng(dayOf(Date.now()) * 99991 + 7) : null;
+  const ctx = { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: dailyRng ?? Math.random, weather: weatherAt(Date.now()).def, bait };
   const playSec = save.playMs / 1000;
   const floor = ZONES[scene.zone].floor;
   const surprise = forcedSurprise ?? pickSurprise(save.director, playSec, { zone: scene.zone, bottom: Math.min(maxDepth(save.upgrades), floor), floor, capacity: capacity(save.upgrades) }, Math.random);
@@ -202,8 +205,21 @@ async function collect(double: boolean) {
     save.stats.catches++;
     if (c.mut && !e.muts.includes(c.mut)) e.muts.push(c.mut);
   }
+  total = Math.round(total * voyageCoinMult(save.voyage));
   total += pendingBonus;
   pendingBonus = 0;
+  // progression: every catch (kept or sold) gives XP and league points
+  let xp = 0, pts = 0;
+  for (const c of pending) {
+    const def = FISH_BY_ID[c.fish];
+    xp += xpForCatch(c.value);
+    pts += leaguePoints(def.rarity, !!c.mut, !!def.junk);
+  }
+  rollLeague();
+  save.league.points += pts;
+  const ups = addXp(save.prog, xp);
+  for (const lv of ups) { const r = levelReward(lv); save.coins += r; setTimeout(() => { toast(`⭐ ${t("levelup")} ${lv} · ${titleText()} · 🪙+${r}`, 2600); sfx.event(); }, 900); }
+  scorePlay(pending);
   if (keepSet.size) toast(`📥 ${keepSet.size} → 🐠`, 1600);
   keepSet.clear();
   if (double) total *= 2;
@@ -217,6 +233,7 @@ async function collect(double: boolean) {
   scene.dive = null;
   writeSave(save);
   updateUi();
+  setTimeout(afterPlayCollect, 400);
 }
 
 // ------------------------------------------------------------------ panels
@@ -703,6 +720,227 @@ function renderOrders() {
   }
 }
 
+
+// ------------------------------------------------------------------ meta game: level, league, derby, duel, daily, voyage
+type Play =
+  | { kind: "normal" }
+  | { kind: "derby"; rule: DerbyRule; endsAt: number; score: number; rivals: { name: string; npc: number; score: number }[] }
+  | { kind: "duel"; turn: 0 | 1; dives: number; scores: [number, number] }
+  | { kind: "daily" };
+let play: Play = { kind: "normal" };
+const DUEL_ROUNDS = 3;
+const dayOf = (now: number) => Math.floor(now / 86_400_000);
+const titleText = () => t(`lv.t${titleIndex(save.prog.level)}` as Parameters<typeof t>[0]);
+const tierName = (tr: string) => t(`tier.${tr}` as Parameters<typeof t>[0]);
+const RULE_ICON: Record<DerbyRule, string> = { value: "🪙", count: "🐟", heaviest: "⚖️" };
+
+/** a new UTC week: settle last week's league (promotion / demotion and reward) */
+function rollLeague() {
+  const now = Date.now(), wk = weekOf(now);
+  if (save.league.week === wk) return;
+  if (save.league.week >= 0) {
+    const tier = save.league.tier as Tier;
+    const end = weekEndsAt(save.league.week) - 1;
+    const table = leagueTable(save.league.week, tier, save.league.points, end);
+    const rank = rankOf(table);
+    const ti = TIERS.indexOf(tier);
+    const moved = rank <= PROMOTE && ti < TIERS.length - 1 ? 1 : rank > LEAGUE_SIZE - DEMOTE && ti > 0 ? -1 : 0;
+    const coins = leagueReward(tier, rank);
+    save.coins += coins;
+    save.league.lastResult = { week: save.league.week, rank, tier, moved, coins };
+    save.league.tier = TIERS[ti + moved];
+    setTimeout(() => toast(`${TIER_ICON[tier]} #${rank} · 🪙+${coins}${moved > 0 ? " ⬆️" : moved < 0 ? " ⬇️" : ""}`, 3200), 1200);
+  }
+  save.league.week = wk;
+  save.league.points = 0;
+}
+
+/** keep rolling averages per dive so derby rivals match this player's real strength */
+function noteAverages(list: Catch[]) {
+  const v = list.reduce((a, c) => a + c.value, 0), kg = list.reduce((a, c) => Math.max(a, c.kg ?? 0), 0);
+  const k = 0.15;
+  save.avg.value = save.avg.value * (1 - k) + v * k;
+  save.avg.count = save.avg.count * (1 - k) + list.length * k;
+  save.avg.kg = save.avg.kg * (1 - k) + kg * k;
+}
+
+function scorePlay(list: Catch[]) {
+  noteAverages(list);
+  if (play.kind === "derby") {
+    if (Date.now() > play.endsAt + 20_000) return; // the last dive may finish a little after the bell
+    if (play.rule === "value") play.score += list.reduce((a, c) => a + c.value, 0);
+    else if (play.rule === "count") play.score += list.filter((c) => !FISH_BY_ID[c.fish].junk).length;
+    else play.score = Math.max(play.score, ...list.map((c) => c.kg ?? 0));
+  } else if (play.kind === "duel") {
+    play.scores[play.turn] += list.reduce((a, c) => a + c.value, 0);
+    play.dives++;
+  } else if (play.kind === "daily") {
+    const v = list.reduce((a, c) => a + c.value, 0);
+    const today = dayOf(Date.now());
+    if (save.daily.day !== today) { save.daily.day = today; save.daily.tries = 0; save.daily.best = 0; }
+    save.daily.tries++;
+    const first = save.daily.lastDay !== today;
+    if (first) {
+      save.daily.streak = save.daily.lastDay === today - 1 ? save.daily.streak + 1 : 1;
+      save.daily.lastDay = today;
+      const r = 150 + 50 * Math.min(10, save.daily.streak);
+      save.coins += r;
+      setTimeout(() => toast(`🌅 ${t("cmp.daily")} · 🔥${save.daily.streak} · 🪙+${r}`, 2600), 700);
+    }
+    save.daily.best = Math.max(save.daily.best, v);
+    play = { kind: "normal" };
+  }
+}
+
+function afterPlayCollect() {
+  if (play.kind === "derby" && Date.now() >= play.endsAt) endDerby();
+  else if (play.kind === "duel") {
+    if (play.dives >= DUEL_ROUNDS * 2) endDuel();
+    else { play.turn = play.turn === 0 ? 1 : 0; toast(`👥 ${t("duel.p")} ${play.turn + 1} 🎣`, 2000); }
+  }
+  updatePlayPill();
+}
+
+function startDerby() {
+  const rule = DERBY_RULES[Math.floor(Date.now() / 60_000) % DERBY_RULES.length];
+  const seed = Math.floor(Date.now() / 1000) % 9973;
+  play = { kind: "derby", rule, endsAt: Date.now() + DERBY_MS, score: 0, rivals: derbyRivals(seed, rule, save.avg.value, save.avg.count, save.avg.kg) };
+  save.derby.lastAt = Date.now();
+  $("compete").classList.add("hidden");
+  toast(`🏆 ${t("cmp.derby")}: ${RULE_ICON[rule]} ${t(`rule.${rule}` as Parameters<typeof t>[0])}`, 2800);
+  sfx.event();
+  writeSave(save);
+  updatePlayPill();
+}
+
+function derbyStandings(p: Extract<Play, { kind: "derby" }>) {
+  // rivals' scores grow through the 3 minutes; yours is real
+  const k = Math.min(1, 1 - (p.endsAt - Date.now()) / DERBY_MS);
+  const rows = p.rivals.map((r) => ({ ...r, score: Math.round(r.score * k * 10) / 10, you: false }));
+  rows.push({ name: t("cmp.you"), npc: -1, score: Math.round(p.score * 10) / 10, you: true });
+  return rows.sort((a, b) => b.score - a.score);
+}
+
+function endDerby() {
+  if (play.kind !== "derby") return;
+  const p = play;
+  const rows = p.rivals.map((r) => ({ ...r, you: false })).concat([{ name: t("cmp.you"), npc: -1, score: p.score, you: true }]).sort((a, b) => b.score - a.score);
+  const place = rows.findIndex((r) => r.you) + 1;
+  const prize = [0, 1500, 800, 400, 150, 100, 50][place] * (1 + TIERS.indexOf(save.league.tier as Tier) * 0.5);
+  save.coins += Math.round(prize);
+  if (place === 1) { save.derby.wins++; save.derby.trophies++; }
+  play = { kind: "normal" };
+  writeSave(save); updateUi();
+  showResult(`🏆 ${t("cmp.derby")}`, rows.slice(0, 6).map((r, i) => `${["🥇", "🥈", "🥉"][i] ?? "#" + (i + 1)} ${r.you ? "<b>" + r.name + "</b>" : r.name} · ${RULE_ICON[p.rule]} ${fmtScore(p.rule, r.score)}`), `${t("derby.place")} ${place} · 🪙+${Math.round(prize)}`, place <= 3);
+}
+const fmtScore = (rule: DerbyRule, v: number) => (rule === "heaviest" ? fmtKg(v) : Math.round(v).toLocaleString());
+
+function startDuel() {
+  play = { kind: "duel", turn: 0, dives: 0, scores: [0, 0] };
+  $("compete").classList.add("hidden");
+  toast(`👥 ${t("duel.p")} 1 🎣`, 2200);
+  updatePlayPill();
+}
+
+function endDuel() {
+  if (play.kind !== "duel") return;
+  const [a, b] = play.scores;
+  play = { kind: "normal" };
+  const head = a === b ? t("duel.draw") : `${t("duel.p")} ${a > b ? 1 : 2} ${t("duel.win")}`;
+  showResult(`👥 ${t("cmp.duel")}`, [`${t("duel.p")} 1 · 🪙 ${a.toLocaleString()}`, `${t("duel.p")} 2 · 🪙 ${b.toLocaleString()}`], head, true);
+}
+
+function startDaily() {
+  const today = dayOf(Date.now());
+  if (save.daily.lastDay === today) return;
+  play = { kind: "daily" };
+  $("compete").classList.add("hidden");
+  toast(`🌅 ${t("cmp.daily")}`, 1800);
+  updatePlayPill();
+}
+
+function canVoyage() { return ZONE_ORDER.every((z) => save.zones.includes(z)) && maxDepth(save.upgrades) >= 2000; }
+function newVoyage() {
+  if (!canVoyage()) return;
+  save.voyage++;
+  save.coins = 0;
+  save.upgrades = { line: 0, capacity: 0, luck: 0 };
+  save.zones = ["lake"]; save.zone = "lake"; scene.zone = "lake";
+  sfx.reveal("secret"); renderer.flashIt(1);
+  toast(`⛵ ⭐×${save.voyage} · 🪙×${voyageCoinMult(save.voyage).toFixed(2)}`, 3000);
+  $("compete").classList.add("hidden");
+  writeSave(save); updateUi();
+}
+
+function showResult(title: string, lines: string[], footer: string, celebrate: boolean) {
+  $("resultTitle").textContent = title;
+  $("resultBody").innerHTML = lines.map((l) => `<div>${l}</div>`).join("");
+  $("resultFoot").textContent = footer;
+  $("result").classList.remove("hidden");
+  if (celebrate) { sfx.reveal("legendary"); renderer.flashIt(0.6); }
+}
+
+function updatePlayPill() {
+  const el = $("playPill");
+  if (play.kind === "normal") { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  if (play.kind === "derby") {
+    const left = Math.max(0, Math.ceil((play.endsAt - Date.now()) / 1000));
+    const rows = derbyStandings(play);
+    const rank = rows.findIndex((r) => r.you) + 1;
+    el.textContent = `🏆 ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} · ${RULE_ICON[play.rule]} ${fmtScore(play.rule, play.score)} · #${rank}`;
+  } else if (play.kind === "duel") {
+    el.textContent = `👥 P${play.turn + 1} · ${play.scores[0].toLocaleString()} : ${play.scores[1].toLocaleString()} · ${Math.min(DUEL_ROUNDS, Math.floor(play.dives / 2) + 1)}/${DUEL_ROUNDS}`;
+  } else el.textContent = `🌅 ${t("cmp.daily")}`;
+}
+
+function renderLevelPill() {
+  const need = xpNeed(save.prog.level);
+  $("lvlN").textContent = String(save.prog.level);
+  $("lvlBar").style.width = `${Math.round((save.prog.xp / need) * 100)}%`;
+  $("voyN").textContent = save.voyage ? `⛵${save.voyage}` : "";
+}
+
+function renderCompete() {
+  rollLeague();
+  const now = Date.now();
+  const tier = save.league.tier as Tier;
+  // profile
+  $("cmpProfile").innerHTML = `<div class="ptitle">⭐ ${save.prog.level} · ${titleText()}</div><div class="pbar"><i style="width:${Math.round((save.prog.xp / xpNeed(save.prog.level)) * 100)}%"></i></div>`
+    + `<div class="pstat">🏆 ${save.derby.trophies} · 🔥 ${save.daily.streak} · ⛵ ${save.voyage}</div>`;
+  // league
+  const table = leagueTable(save.league.week, tier, save.league.points, now);
+  const rank = rankOf(table);
+  const left = Math.max(0, weekEndsAt(save.league.week) - now);
+  const d = Math.floor(left / 86_400_000), h = Math.floor((left % 86_400_000) / 3_600_000);
+  const show = table.slice(0, 6);
+  if (rank > 6) show.push(table[rank - 1]);
+  const NPCS2 = ["npc_captain", "npc_chef", "npc_scientist", "npc_granny"];
+  $("cmpLeague").innerHTML = `<div class="ch">${TIER_ICON[tier]} ${t("cmp.league")}: ${tierName(tier)} <small>⏳ ${d}d ${h}h ${t("cmp.left")}</small></div>`
+    + show.map((r) => {
+      const pos = table.indexOf(r) + 1;
+      const zone = pos <= PROMOTE && tier !== "legend" ? "lup" : pos > LEAGUE_SIZE - DEMOTE && tier !== "bronze" ? "ldown" : "";
+      return `<div class="lrow ${r.you ? "me" : ""} ${zone}"><span class="lp">${pos}</span>${r.you ? "⭐" : `<img src="${artUrl(NPCS2[r.npc])}" alt="">`}<span class="ln">${r.you ? t("cmp.you") : r.name}</span><span class="ls">${r.score.toLocaleString()}</span></div>`;
+    }).join("")
+    + `<div class="lnote">⬆️ ${t("cmp.promote")} · ⬇️ ${t("cmp.demote")}</div>`;
+  // derby
+  const cd = Math.max(0, save.derby.lastAt + DERBY_COOLDOWN_MS - now);
+  const rule = DERBY_RULES[Math.floor(now / 60_000) % DERBY_RULES.length];
+  const db = $("derbyBtn") as HTMLButtonElement;
+  $("cmpDerby").querySelector(".cd")!.innerHTML = `${RULE_ICON[rule]} ${t(`rule.${rule}` as Parameters<typeof t>[0])}<br><small>🥇 🪙1500 · 🥈 800 · 🥉 400</small>`;
+  db.disabled = cd > 0 || play.kind !== "normal";
+  db.textContent = cd > 0 ? `⏳ ${Math.ceil(cd / 60000)}m` : t("cmp.start");
+  $("derbySkip").classList.toggle("hidden", cd <= 0);
+  // daily
+  const doneToday = save.daily.lastDay === dayOf(now);
+  $("cmpDaily").querySelector(".cd")!.innerHTML = `🔥 ${t("daily.streak")}: ${save.daily.streak} · ${t("daily.best")}: 🪙${save.daily.best.toLocaleString()}${doneToday ? `<br><small>${t("daily.done")}</small>` : ""}`;
+  ($("dailyBtn") as HTMLButtonElement).disabled = doneToday || play.kind !== "normal";
+  ($("duelBtn") as HTMLButtonElement).disabled = play.kind !== "normal";
+  // voyage
+  $("cmpVoyage").querySelector(".cd")!.textContent = canVoyage() ? t("voy.desc") : `🔒 ${t("voy.need")}`;
+  ($("voyBtn") as HTMLButtonElement).disabled = !canVoyage();
+}
+
 function togglePause(force?: boolean) {
   paused = force ?? !paused;
   $("pause").classList.toggle("hidden", !paused);
@@ -804,6 +1042,8 @@ function pickZone(z: ZoneId) {
 }
 
 function updateUi() {
+  renderLevelPill();
+  updatePlayPill();
   $("coinsN").textContent = save.coins.toLocaleString();
   $("albumN").textContent = albumText();
   $("langBtn").textContent = LANG_LABEL[getLang()];
@@ -885,6 +1125,8 @@ function updateWeather(now: number) {
 
 function updateEvent(now: number) {
   updateWeather(now);
+  updatePlayPill();
+  if (play.kind === "derby" && now >= play.endsAt && scene.mode === "dock") endDerby();
   const bp = $("baitPill");
   const b = save.bait ? BAIT_BY_ID[save.bait.id] : null;
   bp.classList.toggle("hidden", !b);
@@ -993,6 +1235,15 @@ $("aquaClose").onclick = () => $("aquarium").classList.add("hidden");
 $("aquaCollect").onclick = () => void collectAquarium(false);
 $("aquaDouble").onclick = () => void collectAquarium(true);
 $("baitPill").onclick = () => { const b = save.bait ? BAIT_BY_ID[save.bait.id] : null; if (b) toast(`${baitName(b)}: ${baitEffect(b).replace(/<br>/g, " · ")}`, 2600); };
+$("lvlPill").onclick = () => { if (scene.mode === "dock") { renderCompete(); $("compete").classList.remove("hidden"); } };
+$("competeBtn").onclick = () => { if (scene.mode === "dock") { renderCompete(); $("compete").classList.remove("hidden"); } };
+$("competeClose").onclick = () => $("compete").classList.add("hidden");
+$("derbyBtn").onclick = () => startDerby();
+$("derbySkip").onclick = async () => { busy = true; const ok = await rewardedBreak(); busy = false; if (ok) { save.derby.lastAt = 0; renderCompete(); } };
+$("dailyBtn").onclick = () => startDaily();
+$("duelBtn").onclick = () => startDuel();
+$("voyBtn").onclick = () => newVoyage();
+$("resultClose").onclick = () => $("result").classList.add("hidden");
 $("mapClose").onclick = () => $("map").classList.add("hidden");
 $("shopBtn").onclick = () => { if (scene.mode === "dock") { renderShop(); $("shop").classList.remove("hidden"); } };
 $("shopClose").onclick = () => $("shop").classList.add("hidden");
@@ -1025,4 +1276,4 @@ updateUi();
 requestAnimationFrame(frame);
 
 // debug handle for automated checks (harmless in production)
-(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, catchValue, updateUi, showLegend, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };
+(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, catchValue, updateUi, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };

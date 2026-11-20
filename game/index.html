@@ -14,20 +14,21 @@
     <div id="ui">
       <div id="top">
         <div class="pill" id="coins"><span class="ico" id="coinIco">🪙</span><b id="coinsN">0</b></div>
+        <button class="pill btn" id="lvlPill"><span class="ico">⭐</span><b id="lvlN">1</b><span id="voyN"></span><span class="xpbar"><i id="lvlBar"></i></span></button>
         <button class="pill btn" id="albumBtn"><span class="ico">📖</span><b id="albumN">0/0</b></button>
         <div class="spacer"></div>
         <button class="pill btn round" id="langBtn"></button>
         <button class="pill btn round" id="muteBtn">🔊</button>
         <button class="pill btn round" id="pauseBtn">⏸</button>
       </div>
-      <div id="status"><button class="pill btn hidden" id="baitPill"></button><div class="pill" id="weatherPill"></div><div class="pill hidden" id="eventPill"></div></div>
+      <div id="status"><div class="pill hidden" id="playPill"></div><button class="pill btn hidden" id="baitPill"></button><div class="pill" id="weatherPill"></div><div class="pill hidden" id="eventPill"></div></div>
       <div id="diveHud" class="hidden">
         <div class="pill" id="depthN">0m</div>
         <div class="pill" id="slots"></div>
       </div>
       <div id="dock">
         <div id="mission" class="hidden"></div>
-        <div id="dockRow"><div id="zones"></div><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb round2" id="aquaBtn">🐠</button><button class="btn zone shopb round2" id="ordersBtn">📋<span id="ordersBadge" class="hidden"></span></button><button class="btn zone shopb round2" id="wardBtn">🎩</button><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
+        <div id="dockRow"><div id="zones"></div><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb round2" id="aquaBtn">🐠</button><button class="btn zone shopb round2" id="competeBtn">🏆</button><button class="btn zone shopb round2" id="ordersBtn">📋<span id="ordersBadge" class="hidden"></span></button><button class="btn zone shopb round2" id="wardBtn">🎩</button><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
         <div id="upgrades"></div>
       </div>
       <div id="reveal" class="panel hidden">
@@ -64,6 +65,25 @@
         <div id="tankList"></div>
         <div class="row"><button class="btn big ad" id="aquaDouble">🎬 x2</button><button class="btn big ok" id="aquaCollect"></button></div>
         <button class="btn big plain" id="aquaClose">✕</button>
+      </div>
+      <div id="compete" class="panel hidden">
+        <div id="cmpProfile"></div>
+        <div id="cmpLeague" class="ccard"></div>
+        <div class="crow">
+          <div id="cmpDerby" class="ccard small"><div class="ch">🏆</div><div class="cd"></div><button class="btn big gold" id="derbyBtn"></button><button class="btn big ad hidden" id="derbySkip">🎬 ⏩</button></div>
+          <div id="cmpDaily" class="ccard small"><div class="ch">🌅</div><div class="cd"></div><button class="btn big gold" id="dailyBtn">▶</button></div>
+        </div>
+        <div class="crow">
+          <div id="cmpDuel" class="ccard small"><div class="ch">👥</div><div class="cd">P1 vs P2 · 3×</div><button class="btn big ok" id="duelBtn">▶</button></div>
+          <div id="cmpVoyage" class="ccard small"><div class="ch">⛵</div><div class="cd"></div><button class="btn big gold" id="voyBtn">⛵</button></div>
+        </div>
+        <button class="btn big plain" id="competeClose">✕</button>
+      </div>
+      <div id="result" class="panel hidden">
+        <div class="title" id="resultTitle"></div>
+        <div id="resultBody"></div>
+        <div id="resultFoot"></div>
+        <button class="btn big ok" id="resultClose">OK</button>
       </div>
       <div id="orders" class="panel hidden">
         <div class="title">📋</div>
