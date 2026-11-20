@@ -41,6 +41,14 @@ export function currentEvent(now: number, personalEventAt: number | null): Activ
 }
 
 /** local night (20:00-06:00) enables the ghost mutation */
+/** 1 in full daylight, 0 at night, smooth through dawn (6-8) and dusk (17:30-19:30), by the player's clock */
+export const daylightAt = (now: number) => {
+  const d = new Date(now), h = d.getHours() + d.getMinutes() / 60;
+  if (h >= 8 && h <= 17.5) return 1;
+  if (h > 6 && h < 8) return (h - 6) / 2;
+  if (h > 17.5 && h < 19.5) return 1 - (h - 17.5) / 2;
+  return 0;
+};
 export const isNight = (now: number) => {
   const h = new Date(now).getHours();
   return h >= 20 || h < 6;

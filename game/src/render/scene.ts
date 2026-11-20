@@ -26,6 +26,8 @@ export interface SceneState {
   hint: boolean;
   pose: Pose;
   weather: WeatherId;
+  /** 1 = full day, 0 = night (local clock) */
+  daylight: number;
   /** lantern: light radius around the hook in the dark */
   light: number;
   /** sonar range (world units), 0 = none */
@@ -334,6 +336,28 @@ export class Renderer {
         fg.addColorStop(0, "rgba(0,0,0,0)"); fg.addColorStop(1, bgBottomColor(s.zone));
         c.fillStyle = fg; c.fillRect(left, fadeTop, width, bgBottomY - fadeTop + 1);
       }
+      // less sun: the painted water (and its painted light) dims, the sky turns to dusk and night
+      const L = this.sun(s);
+      if (L < 0.95 && bgBottomY > 0) {
+        c.save(); c.globalCompositeOperation = "multiply";
+        c.fillStyle = "#1d4f86"; c.globalAlpha = (1 - L) * 0.42;
+        c.fillRect(left, 0, width, bgBottomY);
+        c.restore();
+      }
+      if (s.daylight < 1 && top < 0) {
+        c.save(); c.globalCompositeOperation = "multiply";
+        c.fillStyle = s.daylight > 0.4 ? "#c9849a" : "#26346a"; c.globalAlpha = (1 - s.daylight) * 0.6;
+        c.fillRect(left, y0, width, -y0 + 2);
+        c.restore();
+        if (s.daylight < 0.4 && s.weather === "sunny") {
+          // a few twinkling stars high up
+          for (let i = 0; i < 14; i++) {
+            const sx = left + ((i * 97) % Math.max(1, width)), sy = y0 + ((i * 53) % Math.max(10, -y0 * 0.45));
+            c.fillStyle = `rgba(255,255,230,${(0.4 - s.daylight) * 2 * (0.5 + 0.5 * Math.sin(s.t * 2 + i))})`;
+            c.beginPath(); c.arc(sx, sy, 1.6, 0, Math.PI * 2); c.fill();
+          }
+        }
+      }
       if (top < 0) this.drawSkyLayers(c, s, y0, left, right);
       // weather over the sky
       if (s.weather !== "sunny" && top < 0) {
@@ -457,20 +481,35 @@ export class Renderer {
     }
   }
 
+  /** how much sunlight reaches the water: the local clock times the weather */
+  private sun(s: SceneState) {
+    const w = s.weather === "sunny" ? 1 : s.weather === "fog" ? 0.45 : s.weather === "rain" ? 0.25 : 0.1;
+    return s.daylight * w;
+  }
+
   private drawRays(c: Ctx, s: SceneState, top: number, left: number, right: number) {
-    if (top > 520) return;
+    const L = this.sun(s);
+    if (top > 520 || L < 0.08) return;
     c.save();
     c.globalCompositeOperation = "lighter";
-    // soft god rays
+    // soft god rays: each beam is three nested layers so the edges fade instead of cutting off,
+    // and the beams lean and breathe slowly like light through moving water
     for (let i = 0; i < 4; i++) {
-      const x = left + ((i * 173 + s.t * 5) % (right - left + 200)) - 100;
-      const g = c.createLinearGradient(0, 0, 0, 380);
-      g.addColorStop(0, "rgba(255,255,240,0.03)"); g.addColorStop(1, "rgba(255,255,240,0)");
-      c.fillStyle = g;
-      c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 34, 0); c.lineTo(x + 110, 380); c.lineTo(x + 60, 380); c.fill();
+      const x = left + ((i * 173 + s.t * 4) % (right - left + 200)) - 100;
+      const lean = 60 + Math.sin(s.t * 0.21 + i * 1.7) * 25;
+      const a = 0.022 * L * (0.6 + 0.4 * Math.sin(s.t * 0.5 + i * 2.1));
+      const len = 300 + (i % 2) * 80;
+      for (const wk of [1, 0.65, 0.35]) {
+        const g = c.createLinearGradient(0, 0, 0, len);
+        g.addColorStop(0, `rgba(255,252,235,${a})`); g.addColorStop(1, "rgba(255,252,235,0)");
+        c.fillStyle = g;
+        const w0 = 30 * wk, w1 = 70 * wk, mid = x + 15;
+        c.beginPath(); c.moveTo(mid - w0 / 2, 0); c.lineTo(mid + w0 / 2, 0); c.lineTo(mid + lean + w1 / 2, len); c.lineTo(mid + lean - w1 / 2, len); c.fill();
+      }
     }
+    c.globalAlpha = Math.min(1, L * 1.2);
     // caustics: wobbly light lines just under the surface
-    c.strokeStyle = "rgba(255,255,255,0.04)"; c.lineWidth = 2;
+    c.strokeStyle = "rgba(255,255,255,0.04)"; c.lineWidth = 2; // scaled by the sun through globalAlpha
     for (let row = 0; row < 4; row++) {
       const y = 18 + row * 26;
       c.beginPath();

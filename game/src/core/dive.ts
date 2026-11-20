@@ -142,6 +142,8 @@ export interface DiveContext {
   rng: Rng;
   weather?: WeatherDef | null;
   bait?: BaitDef | null;
+  /** the fishing spot on the world map: its creatures turn up more often */
+  spot?: { attracts: string[]; rare?: number } | null;
 }
 
 let uidCounter = 1;
@@ -165,7 +167,8 @@ export function spawnFish(zone: ZoneId, y: number, ctx: DiveContext): LiveFish |
   const def = pickWeighted(pool, (f) => {
     const base = RARITY_WEIGHT[f.rarity];
     const ev = (ctx.event?.def.rarity?.[f.rarity] ?? 1) * (ctx.weather?.rarity?.[f.rarity] ?? 1) * (ctx.bait?.rarity?.[f.rarity] ?? 1)
-      * (ctx.bait?.attracts?.includes(f.id) ? 4 : 1);
+      * (ctx.bait?.attracts?.includes(f.id) ? 4 : 1)
+      * (ctx.spot?.attracts.includes(f.id) ? 3 : 1) * (ctx.spot?.rare && (f.rarity === "legendary" || f.rarity === "epic") ? ctx.spot.rare : 1);
     // junk is a joke, not a nuisance: it shows up, but rarely
     return base * (f.rarity === "common" ? 1 : luck) * ev * (f.junk ? 0.3 : 1);
   }, ctx.rng);

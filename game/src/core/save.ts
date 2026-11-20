@@ -16,6 +16,8 @@ export interface SaveData {
   upgrades: UpgradeLevels;
   zones: ZoneId[];
   zone: ZoneId;
+  /** chosen fishing spot on the world map */
+  spot?: string;
   album: Record<string, AlbumEntry>;
   seenEvent: boolean;
   muted: boolean;

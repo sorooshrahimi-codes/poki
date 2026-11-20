@@ -1,12 +1,14 @@
 import { catchValue, diveCatches, resolveSnap, startDive, stepDive, type Dive, type DiveInput } from "./core/dive.ts";
 import { noteDive, noteSurprise, pickSurprise } from "./core/director.ts";
 import { UPGRADES, UPGRADE_ORDER, capacity, maxDepth, upgradeCost } from "./core/economy.ts";
-import { currentEvent, isNight, nextWorldEvent, personalEventDue, type ActiveEvent } from "./core/events.ts";
+import { currentEvent, daylightAt, isNight, nextWorldEvent, personalEventDue, type ActiveEvent } from "./core/events.ts";
 import type { Catch, UpgradeId, ZoneId } from "./core/types.ts";
 import { FISH, FISH_BY_ID } from "./data/fish.ts";
 import { COSMETICS, TRY_DIVES, aquariumEarned, aquariumFish, aquariumRate, milestoneMet, type CosmeticDef } from "./data/cosmetics.ts";
 import { MERGE_COUNT, ORDER_SLOTS, canFill, fill, keep, matching, merge, newOrder, tankPower, type Order } from "./core/tank.ts";
 import { MISSIONS } from "./data/missions.ts";
+import { SPOT_BY_ID, kindsCaught, spotsOf, type SpotDef } from "./data/spots.ts";
+import { WorldMap } from "./ui/worldmap.ts";
 import { DERBY_COOLDOWN_MS, DERBY_MS, DERBY_RULES, LEAGUE_SIZE, PROMOTE, DEMOTE, TIERS, TIER_ICON, addXp, derbyRivals, leaguePoints, leagueReward, leagueTable, levelReward, rankOf, titleIndex, voyageCoinMult, weekEndsAt, weekOf, xpForCatch, xpNeed, type DerbyRule, type Tier } from "./core/progress.ts";
 import { makeRng } from "./core/rng.ts";
 import { BAIT_BY_ID, GEAR, lanternRadius, shopOffers, sonarRange, type BaitDef } from "./data/gear.ts";
@@ -34,7 +36,7 @@ setMuted(save.muted);
 
 const canvas = $<HTMLCanvasElement>("game");
 const renderer = new Renderer(canvas);
-const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id, light: 150, sonar: 0, pet: null, hat: null, outfit: null, outfitId: null, paint: null, paintId: null };
+const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id, daylight: daylightAt(Date.now()), light: 150, sonar: 0, pet: null, hat: null, outfit: null, outfitId: null, paint: null, paintId: null };
 function setPose(p: SceneState["pose"]) { if (scene.pose !== p) { scene.pose = p; scene.poseT = 0; } }
 /** slow motion: remaining real seconds and the time scale while it lasts */
 let slowmo = 0;
@@ -107,7 +109,7 @@ async function cast() {
   // a friend challenge is fair: the same sea, the same rod and clear sky for both players
   const ctx = ch
     ? { upgrades: CH_UPGRADES, event: null, night: false, rng: dailyRng!, weather: WEATHER.sunny, bait: null }
-    : { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: dailyRng ?? Math.random, weather: weatherAt(Date.now()).def, bait };
+    : { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: dailyRng ?? Math.random, weather: weatherAt(Date.now()).def, bait, spot: play.kind === "daily" ? null : currentSpot() };
   const playSec = save.playMs / 1000;
   const floor = ZONES[scene.zone].floor;
   const surprise = ch ? null : forcedSurprise ?? pickSurprise(save.director, playSec, { zone: scene.zone, bottom: Math.min(maxDepth(save.upgrades), floor), floor, capacity: capacity(save.upgrades) }, Math.random);
@@ -1108,42 +1110,65 @@ function buy(id: UpgradeId) {
 
 const zoneReachable = (z: ZoneId) => !ZONES[z].after || save.zones.includes(ZONES[z].after!);
 
-/** world map: lake -> ocean -> fork (Frozen North | Coral Reef) */
-const MAP_POS_TALL: Record<ZoneId, [number, number]> = { lake: [50, 86], ocean: [50, 57], ice: [18, 32], reef: [82, 32], volcano: [50, 15] };
-/** wide screens read the journey left to right */
-const MAP_POS_WIDE: Record<ZoneId, [number, number]> = { lake: [11, 50], ocean: [36, 50], ice: [63, 24], reef: [63, 76], volcano: [89, 50] };
-let MAP_POS = MAP_POS_TALL;
 /** big numbers stay short in the HUD: 9,999 · 12.3K · 1.25M */
 const shortNum = (n: number) => n < 10_000 ? n.toLocaleString() : n < 1_000_000 ? `${(n / 1000).toFixed(n < 100_000 ? 1 : 0)}K` : `${(n / 1e6).toFixed(2)}M`;
 const ZONE_TECH: Partial<Record<ZoneId, string>> = { ice: "🧊", reef: "🌊", volcano: "🌋" };
 
-function renderMap() {
-  const box = $("mapNodes");
-  const wide = innerWidth > innerHeight * 1.2;
-  MAP_POS = wide ? MAP_POS_WIDE : MAP_POS_TALL;
-  box.classList.toggle("wide", wide);
-  box.innerHTML = "";
-  const lines = ZONE_ORDER.filter((z) => ZONES[z].after).map((z) => {
-    const [x1, y1] = MAP_POS[ZONES[z].after!], [x2, y2] = MAP_POS[z];
-    const open = save.zones.includes(z);
-    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${open ? "#ffe066" : "#7f93b5"}" stroke-width="1.6" stroke-dasharray="${open ? "0" : "3 2.5"}" />`;
-  }).join("");
-  box.insertAdjacentHTML("beforeend", `<svg viewBox="0 0 100 100" preserveAspectRatio="none">${lines}</svg>`);
-  for (const z of ZONE_ORDER) {
-    const owned = save.zones.includes(z), reach = zoneReachable(z), price = ZONES[z].price;
-    const n = document.createElement("button");
-    n.className = "btn mnode" + (z === scene.zone ? " here" : "") + (owned ? "" : reach ? " buy" : " far");
-    n.style.left = `${MAP_POS[z][0]}%`; n.style.top = `${MAP_POS[z][1]}%`;
-    n.style.backgroundImage = `url(${artUrl(`bg_${z}`)})`;
-    const status = owned ? (z === scene.zone ? "📍" : "") : reach ? `🔒 🪙${price.toLocaleString()}` : `🔒 ${t("map.needs")} ${tZone(ZONES[z].after!)}`;
-    // how much of this place's logbook is filled, and its special technique
-    const all = FISH.filter((f) => f.zone === z), got = all.filter((f) => save.album[f.id]).length;
-    const prog = `<span class="mp"><i style="width:${Math.round((got / all.length) * 100)}%"></i><b>🐟 ${got}/${all.length}</b></span>`;
-    n.innerHTML = `<span class="mn">${ZONE_TECH[z] ?? ""} ${tZone(z)}</span>${owned ? prog : ""}<span class="ms">${status}</span>`;
-    n.disabled = !owned && (!reach || save.coins < price);
-    n.onclick = () => { pickZone(z); $("map").classList.add("hidden"); };
-    box.appendChild(n);
+// ------------------------------------------------------------------ world map: places and their fishing spots
+const kindsIn = (z: ZoneId) => kindsCaught(save.album, z, (id) => FISH_BY_ID[id]?.zone);
+const spotOpen = (sp: SpotDef) => save.zones.includes(sp.zone) && kindsIn(sp.zone) >= sp.need;
+/** the spot you fish at now (always one in the current place) */
+function currentSpot(): SpotDef {
+  const sp = save.spot ? SPOT_BY_ID[save.spot] : null;
+  return sp && sp.zone === scene.zone && spotOpen(sp) ? sp : spotsOf(scene.zone)[0];
+}
+const spotName = (sp: SpotDef) => sp.names[getLang()] ?? sp.names.en;
+const worldMap = new WorldMap($("wmapCanvas") as HTMLCanvasElement, () => ({
+  owned: (z) => save.zones.includes(z),
+  spotOpen,
+  current: currentSpot().id,
+  boat: `kid_${(save.wear.hat ?? "hat_cap").replace("hat_", "")}_idle`,
+  regionLabel: (z) => {
+    const all = FISH.filter((f) => f.zone === z).length;
+    return save.zones.includes(z) ? `${ZONE_TECH[z] ?? ""} ${tZone(z)} · 🐟${kindsIn(z)}/${all}` : `🔒 ${tZone(z)}`;
+  },
+}), (sp, z) => renderMapCard(sp, z));
+
+function openMap() {
+  if (scene.mode !== "dock") return;
+  $("map").classList.remove("hidden");
+  worldMap.open();
+}
+function closeMap() { $("map").classList.add("hidden"); worldMap.close(); }
+
+/** the card under the map: what this spot or place offers, and the one action you can take */
+function renderMapCard(sp: SpotDef | null, z: ZoneId | null) {
+  const card = $("mapCard");
+  if (!z) { card.innerHTML = `<div class="mcHint">👆 ${t("map.tap")}</div>`; return; }
+  const owned = save.zones.includes(z);
+  if (!owned || !sp) {
+    const reach = zoneReachable(z), price = ZONES[z].price;
+    const fish = FISH.filter((f) => f.zone === z && !f.junk && f.rarity !== "secret").slice(0, 6);
+    card.innerHTML = `<div class="mcName">${ZONE_TECH[z] ?? ""} ${tZone(z)}</div><div class="mcFish"></div><div class="mcAct"></div>`;
+    for (const f of fish) card.querySelector(".mcFish")!.appendChild(fishThumb(f.id, null, 44, 34, !save.album[f.id]));
+    const b = document.createElement("button");
+    b.className = "btn big gold";
+    if (owned) { b.textContent = `🎣 ${t("map.go")}`; b.onclick = () => { pickZone(z); closeMap(); }; }
+    else if (!reach) { b.textContent = `🔒 ${t("map.needs")} ${tZone(ZONES[z].after!)}`; b.disabled = true; }
+    else { b.innerHTML = `🔓 ${tZone(z)} · 🪙${price.toLocaleString()}`; b.disabled = save.coins < price; b.onclick = () => { pickZone(z); renderMapCard(spotsOf(z)[0], z); }; }
+    card.querySelector(".mcAct")!.appendChild(b);
+    return;
   }
+  const open = spotOpen(sp), here = sp.id === currentSpot().id;
+  card.innerHTML = `<div class="mcName">${spotName(sp)} <small>${ZONE_TECH[z] ?? ""} ${tZone(z)}</small></div><div class="mcFish"></div><div class="mcAct"></div>`;
+  // the creatures this spot draws: caught ones in colour, the rest as mystery silhouettes
+  for (const id of sp.attracts) card.querySelector(".mcFish")!.appendChild(fishThumb(id, null, 44, 34, !save.album[id]));
+  const b = document.createElement("button");
+  b.className = "btn big " + (open ? "ok" : "plain");
+  if (here) { b.textContent = `📍 ${t("map.here")}`; b.onclick = closeMap; }
+  else if (open) { b.textContent = `🎣 ${t("map.go")}`; b.onclick = () => { save.spot = sp.id; pickZone(z); closeMap(); }; }
+  else { b.textContent = `🔒 ${t("map.catch").replace("{n}", String(sp.need)).replace("{z}", tZone(z))} (${kindsIn(z)}/${sp.need})`; b.disabled = true; }
+  card.querySelector(".mcAct")!.appendChild(b);
 }
 
 function pickZone(z: ZoneId) {
@@ -1211,8 +1236,8 @@ function updateUi() {
   // one button: where you are now; it opens the world map. It glows when a new place is affordable.
   const canUnlock = ZONE_ORDER.some((z) => !save.zones.includes(z) && zoneReachable(z) && save.coins >= ZONES[z].price);
   b.className = "btn zone on" + (canUnlock ? " glow" : "");
-  b.innerHTML = `🗺️ ${tZone(scene.zone)}${canUnlock ? " ✨" : ""}`;
-  b.onclick = () => { if (scene.mode === "dock") { renderMap(); $("map").classList.remove("hidden"); } };
+  b.innerHTML = `🗺️ ${spotName(currentSpot())}${canUnlock ? " ✨" : ""}`;
+  b.onclick = openMap;
   zones.appendChild(b);
 
   const ups = $("upgrades");
@@ -1254,6 +1279,7 @@ function updateWeather(now: number) {
   const w = weatherAt(now);
   if (forcedWeather) w.def = WEATHER[forcedWeather];
   scene.weather = w.def.id;
+  scene.daylight = daylightAt(Date.now());
   const pill = $("weatherPill");
   const left = Math.max(0, Math.ceil((w.endsAt - now) / 1000));
   pill.textContent = `${w.def.icon} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
@@ -1391,7 +1417,7 @@ $("chBtn").onclick = () => startChallenge(1 + Math.floor(Math.random() * 999_983
 $("resultAct").onclick = () => void shareChallenge();
 $("voyBtn").onclick = () => newVoyage();
 $("resultClose").onclick = () => { $("result").classList.add("hidden"); $("resultAct").classList.add("hidden"); $("resultPlay").classList.add("hidden"); };
-$("mapClose").onclick = () => $("map").classList.add("hidden");
+$("mapClose").onclick = closeMap;
 $("shopBtn").onclick = () => { if (scene.mode === "dock") { renderShop(); $("shop").classList.remove("hidden"); } };
 $("shopClose").onclick = () => $("shop").classList.add("hidden");
 $("albumClose").onclick = () => $("album").classList.add("hidden");
@@ -1439,4 +1465,4 @@ updateUi();
 requestAnimationFrame(frame);
 
 // debug handle for automated checks (harmless in production)
-(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, catchValue, updateUi, FISH_BY_ID, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };
+(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, worldMap, catchValue, updateUi, FISH_BY_ID, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };
