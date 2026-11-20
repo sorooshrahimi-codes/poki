@@ -464,3 +464,8 @@ body:has(#reveal:not(.hidden)) #guide { bottom: auto; top: 92px; }
   #dock { left: 4px; right: 4px; }
   #zones .zone { max-width: 118px; }
 }
+/* tab bar on grouped panels */
+.panel > .tabs { display: flex; gap: 6px; align-self: center; background: rgba(5,15,40,.45); padding: 4px; border-radius: 16px; }
+.panel > .tabs .tab { position: relative; font-size: 22px; padding: 4px 18px; border-radius: 12px; border: 2px solid transparent; background: transparent; color: #fff; cursor: pointer; }
+.panel > .tabs .tab.on { background: linear-gradient(#ffcf5a, #ff9a1f); border-color: #0d1e45; box-shadow: 0 3px 0 #0d1e45; }
+.panel > .tabs .tab .badge { top: -6px; right: -6px; }

@@ -823,6 +823,53 @@ function addEyelids(port: HTMLElement, name: string) {
 }
 addEyelids($("guidePort"), "npc_captain");
 
+// ------------------------------------------------------------------ fewer buttons: related panels share one button and a tab bar
+/** buttons folded into another button's panel as a tab */
+const MERGED: Record<string, string> = { ordersBtn: "aquaBtn", wardBtn: "shopBtn", crewBtn: "wheelBtn" };
+interface Tab { panel: string; icon: string; open: () => void; avail: () => boolean; badge?: () => string }
+const TAB_GROUPS: Tab[][] = [
+  [{ panel: "aquarium", icon: "🐠", open: () => openAquarium(false), avail: () => true },
+   { panel: "orders", icon: "📋", open: () => { renderOrders(); $("orders").classList.remove("hidden"); }, avail: () => save.dives >= 8, badge: () => { const n = fillableOrders(); return n ? String(n) : ""; } }],
+  [{ panel: "shop", icon: "🛒", open: () => { renderShop(); $("shop").classList.remove("hidden"); }, avail: () => true },
+   { panel: "wardrobe", icon: "🎩", open: () => { renderWardrobe(); $("wardrobe").classList.remove("hidden"); }, avail: () => save.dives >= 10 || save.prog.level >= 3 }],
+  [{ panel: "wheel", icon: "🎡", open: () => openWheel(), avail: () => true, badge: () => (save.wheel === undefined || Date.now() >= (save.wheel?.next ?? 0) ? "!" : "") },
+   { panel: "crew", icon: "🧭", open: () => { renderCrew(); $("crew").classList.remove("hidden"); }, avail: () => save.dives >= 12, badge: () => (Object.values(save.crew ?? {}).some((tr) => Date.now() >= tr.endsAt) ? "!" : "") }],
+];
+function openTab(panel: string) {
+  if (scene.mode !== "dock") return;
+  const group = TAB_GROUPS.find((g) => g.some((tb) => tb.panel === panel));
+  if (!group) return;
+  if (panel === "wheel" && wheelSpinning) return;
+  for (const tb of group) $(tb.panel).classList.add("hidden");
+  group.find((tb) => tb.panel === panel)!.open();
+  syncTabs();
+}
+/** every grouped panel gets a small tab bar on top; tabs not unlocked yet stay out of sight */
+function syncTabs() {
+  for (const group of TAB_GROUPS) {
+    const shown = group.filter((tb) => tb.avail());
+    for (const tb of group) {
+      const el = $(tb.panel);
+      let bar = el.querySelector(":scope > .tabs") as HTMLElement | null;
+      if (!bar) { bar = document.createElement("div"); bar.className = "tabs"; el.prepend(bar); }
+      bar.classList.toggle("hidden", shown.length < 2);
+      if (shown.length < 2) continue;
+      const key = shown.map((s2) => s2.panel + (s2.badge?.() ?? "")).join("|") + "@" + tb.panel;
+      if (bar.dataset.key === key) continue;
+      bar.dataset.key = key;
+      bar.innerHTML = "";
+      for (const s2 of shown) {
+        const b = document.createElement("button");
+        b.className = "tab" + (s2.panel === tb.panel ? " on" : "");
+        const badge = s2.badge?.() ?? "";
+        b.innerHTML = `${s2.icon}${badge ? `<span class="badge">${badge}</span>` : ""}`;
+        b.onclick = () => openTab(s2.panel);
+        bar.appendChild(b);
+      }
+    }
+  }
+}
+
 // ------------------------------------------------------------------ the harbor grows with you
 let harborCheer = 0, harborFresh: HarborId | null = null, harborFreshT = 0, harborCheck = 0;
 const harborView: HarborView = { built: new Set(), best: [], tank: [], statue: null, daylight: 1, cheer: 0, fresh: null, freshT: 0 };
@@ -988,8 +1035,11 @@ function collectTrip(id: string) {
 /** badges: a free spin is ready / someone is back from a trip */
 function updateExtrasBadges() {
   const now = Date.now();
-  $("wheelBadge").classList.toggle("hidden", !(save.wheel === undefined || now >= (save.wheel?.next ?? 0)));
-  $("crewBadge").classList.toggle("hidden", !Object.values(save.crew ?? {}).some((tr) => now >= tr.endsAt));
+  const spin = save.wheel === undefined || now >= (save.wheel?.next ?? 0);
+  const back = Object.values(save.crew ?? {}).some((tr) => now >= tr.endsAt);
+  $("wheelBadge").classList.toggle("hidden", !(spin || back));
+  $("crewBadge").classList.toggle("hidden", !back);
+  syncTabs();
 }
 setInterval(() => {
   updateExtrasBadges();
@@ -1429,8 +1479,9 @@ function updateUi() {
     ["crewBtn", save.dives >= 12],
   ];
   for (const [id, open] of gates) {
-    const el = $(id);
-    el.classList.toggle("hidden", !open);
+    const host = MERGED[id];
+    const el = $(host ?? id);
+    if (host) $(id).classList.add("hidden"); else el.classList.toggle("hidden", !open);
     if (open && !save.seenBtns.includes(id)) {
       save.seenBtns.push(id);
       if (save.dives > 0) { guide(id as TipId); el.classList.add("newbtn"); setTimeout(() => el.classList.remove("newbtn"), 6000); toast(`✨ ${el.textContent?.trim() || "🛒"} !`, 1800); }
@@ -1441,6 +1492,8 @@ function updateUi() {
   const fo = fillableOrders();
   $("ordersBadge").textContent = fo ? String(fo) : "";
   $("ordersBadge").classList.toggle("hidden", !fo);
+  $("aquaBadge").textContent = fo ? String(fo) : "";
+  $("aquaBadge").classList.toggle("hidden", !fo);
   const mb = $<HTMLButtonElement>("mapBtn");
   mb.classList.toggle("hidden", save.mapPieces < 1);
   mb.disabled = false;
@@ -1629,10 +1682,10 @@ $("mapBtn").onclick = () => {
   $("mapBtn").classList.toggle("armed", treasureNext);
   toast(treasureNext ? `🗺️ ${t("tmap.armed")}` : "🗺️", 2200);
 };
-$("wardBtn").onclick = () => { if (scene.mode === "dock") { renderWardrobe(); $("wardrobe").classList.remove("hidden"); } };
+$("wardBtn").onclick = () => openTab("wardrobe");
 $("wardClose").onclick = () => $("wardrobe").classList.add("hidden");
-$("aquaBtn").onclick = () => { if (scene.mode === "dock") openAquarium(false); };
-$("wheelBtn").onclick = () => { if (scene.mode === "dock") openWheel(); };
+$("aquaBtn").onclick = () => openTab("aquarium");
+$("wheelBtn").onclick = () => openTab(Object.values(save.crew ?? {}).some((tr) => Date.now() >= tr.endsAt) && Date.now() < (save.wheel?.next ?? Infinity) ? "crew" : "wheel");
 $("wheelClose").onclick = () => { if (!wheelSpinning) $("wheel").classList.add("hidden"); };
 $("wheelSpin").onclick = () => { const w = wheelState(); if (Date.now() >= w.next) { w.next = Date.now() + WHEEL_FREE_MS; void doSpin(); } };
 $("wheelAd").onclick = async () => {
@@ -1643,9 +1696,9 @@ $("wheelAd").onclick = async () => {
   w.ads++;
   void doSpin();
 };
-$("crewBtn").onclick = () => { if (scene.mode === "dock") { renderCrew(); $("crew").classList.remove("hidden"); } };
+$("crewBtn").onclick = () => openTab("crew");
 $("crewClose").onclick = () => $("crew").classList.add("hidden");
-$("ordersBtn").onclick = () => { if (scene.mode === "dock") { renderOrders(); $("orders").classList.remove("hidden"); } };
+$("ordersBtn").onclick = () => openTab("orders");
 $("ordersClose").onclick = () => $("orders").classList.add("hidden");
 $("aquaClose").onclick = () => $("aquarium").classList.add("hidden");
 $("aquaCollect").onclick = () => void collectAquarium(false);
@@ -1663,7 +1716,7 @@ $("resultAct").onclick = () => void shareChallenge();
 $("voyBtn").onclick = () => newVoyage();
 $("resultClose").onclick = () => { $("result").classList.add("hidden"); $("resultAct").classList.add("hidden"); $("resultPlay").classList.add("hidden"); };
 $("mapClose").onclick = closeMap;
-$("shopBtn").onclick = () => { if (scene.mode === "dock") { renderShop(); $("shop").classList.remove("hidden"); } };
+$("shopBtn").onclick = () => openTab("shop");
 $("shopClose").onclick = () => $("shop").classList.add("hidden");
 $("albumClose").onclick = () => $("album").classList.add("hidden");
 $("pauseBtn").onclick = () => togglePause(true);
