@@ -7,6 +7,7 @@ import { FISH, FISH_BY_ID } from "./data/fish.ts";
 import { COSMETICS, TRY_DIVES, aquariumEarned, aquariumFish, aquariumRate, milestoneMet, type CosmeticDef } from "./data/cosmetics.ts";
 import { MERGE_COUNT, ORDER_SLOTS, canFill, fill, keep, matching, merge, newOrder, tankPower, type Order } from "./core/tank.ts";
 import { MISSIONS } from "./data/missions.ts";
+import { EYES } from "./data/eyes.ts";
 import { SPOT_BY_ID, kindsCaught, spotsOf, type SpotDef } from "./data/spots.ts";
 import { WorldMap } from "./ui/worldmap.ts";
 import { DERBY_COOLDOWN_MS, DERBY_MS, DERBY_RULES, LEAGUE_SIZE, PROMOTE, DEMOTE, TIERS, TIER_ICON, addXp, derbyRivals, leaguePoints, leagueReward, leagueTable, levelReward, rankOf, titleIndex, voyageCoinMult, weekEndsAt, weekOf, xpForCatch, xpNeed, type DerbyRule, type Tier } from "./core/progress.ts";
@@ -24,7 +25,7 @@ import "@fontsource/fredoka/latin-700.css";
 import { artUrl, img, loadAssets, loadRest, spriteTinted } from "./render/assets.ts";
 import { drawFish } from "./render/fish.ts";
 import { recolor } from "./render/recolor.ts";
-import { Renderer, type SceneState } from "./render/scene.ts";
+import { Renderer, blinkTest, type SceneState } from "./render/scene.ts";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -791,6 +792,17 @@ function nextTip() {
 }
 let tipTimer = 0;
 
+/** HTML portraits blink too: an eyelid over each detected eye, closing for a moment every few seconds */
+function addEyelids(port: HTMLElement, name: string) {
+  for (const [ex, ey, rx, ry, col] of EYES[name] ?? []) {
+    const lid = document.createElement("i");
+    lid.className = "lid";
+    Object.assign(lid.style, { left: `${(ex - rx * 1.2) * 100}%`, top: `${(ey - ry * 1.2) * 100}%`, width: `${rx * 240}%`, height: `${ry * 240}%`, background: col });
+    port.appendChild(lid);
+  }
+}
+addEyelids($("guidePort"), "npc_captain");
+
 // ------------------------------------------------------------------ meta game: level, league, derby, friend challenge, daily, voyage
 type Play =
   | { kind: "normal" }
@@ -1224,7 +1236,8 @@ function updateUi() {
   $("ordersBadge").classList.toggle("hidden", !fo);
   const mb = $<HTMLButtonElement>("mapBtn");
   mb.classList.toggle("hidden", save.mapPieces < 1);
-  mb.disabled = save.mapPieces < 3;
+  mb.disabled = false;
+  mb.classList.toggle("dim", save.mapPieces < 3); // still collecting: tapping explains instead of doing nothing
   $("mapN").textContent = `${Math.min(save.mapPieces, 3)}/3`;
   mb.classList.toggle("armed", treasureNext);
   $("dock").classList.toggle("hidden", !dock);
@@ -1392,10 +1405,11 @@ $("retryBtn").onclick = () => void snapChoice(true);
 $("letgoBtn").onclick = () => void snapChoice(false);
 $("albumBtn").onclick = () => { if (scene.mode === "dock") showAlbum(); };
 $("mapBtn").onclick = () => {
-  if (scene.mode !== "dock" || save.mapPieces < 3) return;
+  if (scene.mode !== "dock") return;
+  if (save.mapPieces < 3) { toast(`🗺️ ${t("tmap.how").replace("{n}", String(3 - save.mapPieces))}`, 3200); sfx.tap(); return; }
   treasureNext = !treasureNext;
   $("mapBtn").classList.toggle("armed", treasureNext);
-  toast(treasureNext ? "🗺️ 💰 !" : "🗺️", 1500);
+  toast(treasureNext ? `🗺️ ${t("tmap.armed")}` : "🗺️", 2200);
 };
 $("wardBtn").onclick = () => { if (scene.mode === "dock") { renderWardrobe(); $("wardrobe").classList.remove("hidden"); } };
 $("wardClose").onclick = () => $("wardrobe").classList.add("hidden");
@@ -1465,4 +1479,4 @@ updateUi();
 requestAnimationFrame(frame);
 
 // debug handle for automated checks (harmless in production)
-(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, worldMap, catchValue, updateUi, FISH_BY_ID, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };
+(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, worldMap, blinkTest, catchValue, updateUi, FISH_BY_ID, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };

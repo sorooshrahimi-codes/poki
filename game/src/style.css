@@ -371,3 +371,13 @@ body:has(.panel:not(.hidden):not(#reveal)) #guide { display: none; }
 #mapCard .btn.big { font-size: 17px; padding: 8px 16px; }
 @media (orientation: landscape) and (max-height: 600px) { #mapCard { min-height: 0; padding: 6px 12px; } #mapCard .mcName { font-size: 17px; } }
 #map { pointer-events: auto; }
+/* portraits blink */
+#guide .port { position: relative; display: inline-block; flex-shrink: 0; line-height: 0; }
+.lid { position: absolute; border-radius: 50%; transform-origin: 50% 0; transform: scaleY(0); border-bottom: 2px solid rgba(20,25,50,.85);
+  animation: lid 3.7s infinite; pointer-events: none; }
+@keyframes lid { 0%, 93%, 100% { transform: scaleY(0); } 95.5% { transform: scaleY(1); } }
+#guide img { animation: none; }
+#guide .port { animation: talk 0.5s ease-in-out infinite alternate; transform-origin: 50% 100%; }
+/* the treasure map while still collecting pieces: visibly "in progress", but tappable for an explanation */
+#mapBtn.dim { filter: saturate(0.45) brightness(0.92); }
+#mapBtn.dim #mapN { color: #ffe066; }

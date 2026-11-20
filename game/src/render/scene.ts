@@ -1,3 +1,4 @@
+import { EYES } from "../data/eyes.ts";
 import { COLUMN, FIGHT_GRACE, ICE_HOLE, VENT_ERUPT, VENT_WARN, ventCycle, type Dive, type LiveFish } from "../core/dive.ts";
 import type { ActiveEvent } from "../core/events.ts";
 import type { WeatherId } from "../core/weather.ts";
@@ -679,6 +680,7 @@ export class Renderer {
         c.drawImage(sp, i * sw, 0, sw + 1, sp.height, -w / 2 - pad + i * dw, -h / 2 - pad + dy, dw + 0.6, h + pad * 2);
       }
     }
+    blink(c, def.id, -w / 2, -h / 2 - 3 * k, w, h, t, def.value);
     if (glint) drawGlint(c, mut ? spriteTinted(def.id, mut)! : inner, -w / 2, -h / 2, w, h, t * 0.33 + def.value * 0.01, this.view.scale * this.view.dpr);
   }
 
@@ -965,7 +967,7 @@ export class Renderer {
     // hull bottom sits a little under the waterline
     const bottomY = 14 + bob;
     const left = -(g.hull[0] + g.hull[1]) / 2 * w;
-    return { im, p, w, h, cx, bottomY, left, tilt, g };
+    return { im, p, key, w, h, cx, bottomY, left, tilt, g };
   }
 
   private rodTip(t: number, pose: Pose) {
@@ -987,7 +989,7 @@ export class Renderer {
     c.translate(b.cx, b.bottomY);
     c.rotate(b.tilt + Math.sin(s.t * 0.9) * 0.012);
     c.scale(1 - pop * 0.6 - breathe * 0.4, 1 + pop + breathe);
-    if (b.im) c.drawImage(this.dressed(b.p, b.im), b.left, -b.h, b.w, b.h);
+    if (b.im) { c.drawImage(this.dressed(b.p, b.im), b.left, -b.h, b.w, b.h); blink(c, b.key, b.left, -b.h, b.w, b.h, s.t, 7); }
     // cosmetics: a hat over the cap, a pet on the bow
     // no hat chosen = the classic red cap
     const pet = s.pet ? img(s.pet) : null;
@@ -997,6 +999,7 @@ export class Renderer {
       const hop = Math.max(0, Math.sin(s.t * 2.2)) > 0.97 ? -6 : 0; // an occasional happy hop
       const bowX = b.left + b.g.hull[1] * b.w - pw * 0.72;
       c.drawImage(pet, bowX, -BOAT_W * 0.2 - ph + 6 + hop, pw, ph);
+      blink(c, s.pet!, bowX, -BOAT_W * 0.2 - ph + 6 + hop, pw, ph, s.t, 3);
     }
     c.restore();
     // reflection: the boat mirrored in the water, squashed and rippling (sells the water surface)
@@ -1325,4 +1328,36 @@ export function roundRect(c: Ctx, x: number, y: number, w: number, h: number, r:
   c.arcTo(x, y + h, x, y, r);
   c.arcTo(x, y, x + w, y, r);
   c.closePath();
+}
+
+/**
+ * Eyelids: every creature with detected eyes (tools/art/eyes.py) blinks now and then, each on its own
+ * rhythm, sometimes twice in a row. Drawn in the sprite's own box (x, y, w, h), after the sprite.
+ */
+export function blinkAmount(t: number, seed: number) {
+  const per = 2.4 + (Math.abs(seed * 7919) % 23) / 10, ph = (t + (seed % 97) * 0.61) % per;
+  const one = (p: number) => (p >= 0 && p < 0.16 ? Math.sin((p / 0.16) * Math.PI) : 0);
+  return Math.max(one(ph), (Math.floor(t / per + seed) % 4 === 0 ? one(ph - 0.24) : 0));
+}
+/** test hook: hold every eye at this closure (-1 = normal blinking) */
+export const blinkTest = { k: -1 };
+export function blink(c: Ctx, name: string, x: number, y: number, w: number, h: number, t: number, seed: number, force = -1) {
+  const eyes = EYES[name];
+  if (!eyes) return;
+  const k = blinkTest.k >= 0 ? blinkTest.k : force >= 0 ? force : blinkAmount(t, seed);
+  if (k < 0.05) return;
+  for (const [ex, ey, rx, ry, col] of eyes) {
+    const cx = x + ex * w, cy = y + ey * h, ax = rx * w * 1.25, ay = ry * h * 1.25;
+    c.save();
+    c.beginPath(); c.ellipse(cx, cy, ax, ay, 0, 0, Math.PI * 2); c.clip();
+    // the upper lid comes most of the way down, the lower lid rises a little: they meet just under the middle
+    const up = cy - ay + ay * 1.12 * k, lo = cy + ay - ay * 0.88 * k;
+    c.fillStyle = col;
+    c.beginPath(); c.moveTo(cx - ax, cy - ay - 2); c.lineTo(cx + ax, cy - ay - 2); c.lineTo(cx + ax, up); c.quadraticCurveTo(cx, up + ay * 0.5 * k, cx - ax, up); c.closePath(); c.fill();
+    c.beginPath(); c.moveTo(cx - ax, cy + ay + 2); c.lineTo(cx + ax, cy + ay + 2); c.lineTo(cx + ax, lo); c.quadraticCurveTo(cx, lo + ay * 0.2 * k, cx - ax, lo); c.closePath(); c.fill();
+    // lash line along the upper lid's edge
+    c.strokeStyle = "rgba(25,22,45,0.9)"; c.lineWidth = Math.max(1.2, ax * 0.24); c.lineCap = "round";
+    c.beginPath(); c.moveTo(cx - ax * 0.85, up + ay * 0.04); c.quadraticCurveTo(cx, up + ay * 0.5 * k, cx + ax * 0.85, up + ay * 0.04); c.stroke();
+    c.restore();
+  }
 }
