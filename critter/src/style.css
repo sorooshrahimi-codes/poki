@@ -71,3 +71,14 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #2a6b3a; fon
 .btn.lang { display: flex; align-items: center; gap: 10px; background: linear-gradient(#2c4f86, #1b345f); font-size: 16px; padding: 5px 10px; border-radius: 14px; text-align: left; }
 .btn.lang img { width: 30px; height: 20px; border-radius: 3px; display: block; flex: none; }
 .btn.lang.on { background: linear-gradient(#7be495, #2fb35a); }
+/* landscape phones: park controls in a right-hand column */
+@media (orientation: landscape) and (max-height: 600px) {
+  #parkUi { left: auto; right: 8px; top: 52px; bottom: 8px; width: 322px; justify-content: flex-end; gap: 6px; }
+  #parkTop { left: auto; right: 8px; translate: none; top: 8px; display: none; }
+  #parkUi .row .btn.big { font-size: 14px; padding: 4px 8px; min-height: 40px; }
+  .btn.up { width: 100px; padding: 2px 2px 4px; }
+  .btn.up .ui { font-size: 18px; }
+  #jarBox { top: 52px; }
+}
+#jarBox.shake { animation: jarshake 0.12s linear infinite; border-color: #ff4d6d; }
+@keyframes jarshake { 0% { transform: translate(-2px, 0) rotate(-2deg); } 50% { transform: translate(2px, 1px) rotate(2deg); } 100% { transform: translate(-2px, 0) rotate(-2deg); } }

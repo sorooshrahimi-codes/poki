@@ -2,7 +2,7 @@ import "@fontsource/fredoka/500.css";
 import "@fontsource/fredoka/600.css";
 import "@fontsource/fredoka/700.css";
 import "./style.css";
-import { newField, stepField, spawn, type Field } from "./core/field.ts";
+import { newField, sizeField, stepField, spawn, type Field } from "./core/field.ts";
 import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tankSize, upgradeCost, type UpgradeId } from "./core/economy.ts";
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
@@ -41,7 +41,7 @@ window.addEventListener("pointerup", () => { input.on = false; });
 window.addEventListener("pointercancel", () => { input.on = false; });
 window.addEventListener("keydown", (e) => { if (e.key === " ") { input.on = true; firstTouch(); } });
 window.addEventListener("keyup", (e) => { if (e.key === " ") input.on = false; });
-window.addEventListener("resize", () => { view.resize(); field.W = view.W; field.H = view.H; field.farY = view.H * 0.6; field.nearY = view.H * 0.88; });
+window.addEventListener("resize", () => { view.resize(); sizeField(field, view.W, view.H); });
 
 let started = false;
 function firstTouch() {
@@ -358,7 +358,10 @@ function updateUi() {
   $("incomeN").textContent = `🪙 ${short(incomePerSec())}/s`;
   renderBiomes();
   renderNest();
-  view.parkBottom = save.nest.length ? 330 : 272;
+  // landscape phones: the park buttons sit in a right-hand column, the pedestals take the rest
+  const side = innerWidth > innerHeight && innerHeight < 600;
+  view.parkRight = side ? 330 / view.scale : 0;
+  view.parkBottom = side ? 24 : save.nest.length ? 330 : 272;
   const anyReady = save.nest.some((e) => Date.now() >= e.readyAt);
   $("parkBtn").textContent = tr("park") + (anyReady ? " 🐣" : "");
   const box = $("ups");
@@ -423,6 +426,10 @@ function frame(now: number) {
     }
     view.drawPark(save, parkBiome, t, dt);
   }
+  // a full jar that is still being fed rattles: time to go to the park
+  const over = mode === "field" && input.on && field.jar >= field.cap;
+  $("jarBox").classList.toggle("shake", over);
+  if (over) $("parkBtn").classList.add("pulse");
   uiT -= dt;
   if (uiT <= 0) { uiT = 0.25; updateUi(); }
   requestAnimationFrame(frame);

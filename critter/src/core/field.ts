@@ -47,6 +47,8 @@ export interface Field {
   /** seconds until the next surprise */
   nextSurprise: number;
   W: number; H: number;
+  /** the play area: on wide screens it stays a phone-like strip in the middle (the kid stands at `left`) */
+  left: number; right: number;
   /** ground band: far edge and near edge (feet y) */
   farY: number; nearY: number;
   nozzle: { x: number; y: number };
@@ -68,8 +70,14 @@ let bossClock = 75;
 export const resetBossClock = (s: number) => { bossClock = s; };
 export const depthK = (f: Field, y: number) => 0.62 + 0.38 * Math.max(0, Math.min(1, (y - f.farY) / (f.nearY - f.farY)));
 
+export const PLAY_W = 620;
+export function sizeField(f: Field, W: number, H: number) {
+  f.W = W; f.H = H; f.farY = H * 0.6; f.nearY = H * 0.88;
+  f.left = Math.max(6, (W - PLAY_W) / 2); f.right = Math.min(W, f.left + PLAY_W);
+}
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
-  return { biome, nextSurprise: 22, W, H, farY: H * 0.6, nearY: H * 0.88, nozzle: { x: 0, y: 0 }, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  const left = Math.max(6, (W - PLAY_W) / 2);
+  return { biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.6, nearY: H * 0.88, nozzle: { x: 0, y: 0 }, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -91,7 +99,7 @@ export function spawn(f: Field, rng: Rng, opt: { def?: CritterDef; mut?: Mutatio
   const mr = MUTATIONS.find((m) => m.id === mut)?.resist ?? 1;
   const c: Critter = {
     uid: uid++, def, mut,
-    x: opt.x ?? f.nozzle.x + 90 + rng() * (f.W - f.nozzle.x - 120),
+    x: opt.x ?? f.nozzle.x + 90 + rng() * (f.right - f.nozzle.x - 120),
     y: opt.y ?? f.farY + rng() * (f.nearY - f.farY),
     dir: rng() < 0.5 ? 1 : -1, lift: 0, hopT: rng(), hopPer: 0.7 + rng() * 0.8,
     state: "roam", grip: 0, pullT: 0, resist: def.resist * mr, born: f.t,
@@ -134,7 +142,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
     if (bossClock <= 0 && !f.critters.some((c) => c.boss > 0)) {
       // the region boss: its biggest legend, giant, fights back three times
       const def = pool.filter((d) => d.rarity === "legendary").sort((a, b) => b.income - a.income)[0];
-      const c = spawn(f, rng, { def, mut: null, x: f.W - 70, y: f.farY + (f.nearY - f.farY) * 0.55 });
+      const c = spawn(f, rng, { def, mut: null, x: f.right - 70, y: f.farY + (f.nearY - f.farY) * 0.55 });
       c.boss = 3; c.scale = 2.1; c.resist = def.resist; c.dir = -1;
       bossClock = 150 + rng() * 60;
       f.ev.push({ kind: "surprise", s: "boss", c });
@@ -143,14 +151,14 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
       const w = (d: CritterDef) => (d.rarity === "rare" ? 6 : d.rarity === "epic" ? 3 : 1);
       let tot = rares.reduce((a, d) => a + w(d), 0), r = rng() * tot, def = rares[0];
       for (const d of rares) { r -= w(d); if (r <= 0) { def = d; break; } }
-      const c = spawn(f, rng, { def, x: f.W - 30, y: f.farY + (f.nearY - f.farY) * (0.3 + rng() * 0.5) });
+      const c = spawn(f, rng, { def, x: f.right - 30, y: f.farY + (f.nearY - f.farY) * (0.3 + rng() * 0.5) });
       c.dir = -1;
       f.ev.push({ kind: "surprise", s: "visitor", c });
     } else if (roll < 0.75) {
       for (let i = 0; i < 3; i++) spawn(f, rng, { mut: "gold", x: f.nozzle.x + 140 + i * 60, y: f.farY + (f.nearY - f.farY) * (0.2 + i * 0.3) });
       f.ev.push({ kind: "surprise", s: "golden_rain" });
     } else {
-      for (let i = 0; i < 6; i++) { const c = spawn(f, rng, { def: pool[Math.floor(rng() * 5)], mut: null, x: f.W + 20 + i * 30, y: f.farY + (f.nearY - f.farY) * rng() }); c.dir = -1; c.hopPer = 0.45; }
+      for (let i = 0; i < 6; i++) { const c = spawn(f, rng, { def: pool[Math.floor(rng() * 5)], mut: null, x: f.right + 20 + i * 30, y: f.farY + (f.nearY - f.farY) * rng() }); c.dir = -1; c.hopPer = 0.45; }
       f.ev.push({ kind: "surprise", s: "stampede" });
     }
   }
@@ -188,7 +196,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
         f.ev.push({ kind: "flee", c });
       }
     }
-    if (c.fleeT > 0) { c.fleeT -= dt; c.x += c.dir * 150 * dt; c.x = Math.max(f.nozzle.x + 60, Math.min(f.W - 20, c.x)); }
+    if (c.fleeT > 0) { c.fleeT -= dt; c.x += c.dir * 150 * dt; c.x = Math.max(f.nozzle.x + 60, Math.min(f.right - 20, c.x)); }
     if (c.hidden) { c.lift = 0; continue; }
     if (inCone && c.def.behave === "split" && !c.split && c.state === "roam" && c.boss === 0) {
       // pop! it becomes two smaller ones, each worth catching
@@ -209,7 +217,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
           if (c.grip >= 1) {
             if (c.boss > 1) {
               // the boss breaks free and leaps away: two more rounds
-              c.boss--; c.grip = 0; c.state = "roam"; c.x = f.nozzle.x + 120 + rng() * (f.W - f.nozzle.x - 160); c.lift = 60;
+              c.boss--; c.grip = 0; c.state = "roam"; c.x = f.nozzle.x + 120 + rng() * (f.right - f.nozzle.x - 160); c.lift = 60;
               f.ev.push({ kind: "bossPhase", c });
               for (let i = 0; i < 2; i++) spawn(f, rng, { def: pool[Math.floor(rng() * 4)], mut: null, x: c.x + (i ? 40 : -40), y: c.y });
             } else c.state = "pulled";
@@ -226,7 +234,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
       c.lift = c.air + Math.sin(c.hopT * 1.6 + c.uid) * 26;
       c.x += c.dir * 46 * dt;
       if (c.x < f.nozzle.x + 60) c.dir = 1;
-      if (c.x > f.W - 24) c.dir = -1;
+      if (c.x > f.right - 24) c.dir = -1;
     } else if (c.state === "roam") {
       // hop about, turning at the edges
       c.hopT += dt / c.hopPer;
@@ -234,7 +242,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
       c.lift = ph < 0.45 ? Math.sin((ph / 0.45) * Math.PI) * c.def.hop * depthK(f, c.y) * (c.boss ? 2 : 1) : 0;
       if (ph < 0.45) c.x += c.dir * 34 * dt;
       if (c.x < f.nozzle.x + 60) c.dir = 1;
-      if (c.x > f.W - 24) c.dir = -1;
+      if (c.x > f.right - 24) c.dir = -1;
       c.pullT = Math.max(0, c.pullT - dt);
     } else if (c.state === "pulled") {
       // flies into the nozzle, faster as it gets close

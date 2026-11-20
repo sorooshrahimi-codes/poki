@@ -57,7 +57,8 @@ export class View {
     this.dpr = Math.min(2, devicePixelRatio || 1);
     this.canvas.width = Math.round(w * this.dpr); this.canvas.height = Math.round(h * this.dpr);
     this.canvas.style.width = w + "px"; this.canvas.style.height = h + "px";
-    this.scale = Math.min(w / 360, h / 640);
+    // short landscape screens (phones on their side) see a shorter world, so everything stays big
+    this.scale = Math.min(w / 360, h / (w > h && h < 600 ? 470 : 640));
     this.W = w / this.scale; this.H = h / this.scale;
   }
   toWorld(px: number, py: number) { return { x: px / this.scale, y: py / this.scale }; }
@@ -69,12 +70,23 @@ export class View {
     c.clearRect(-20, -20, this.W + 40, this.H + 40);
   }
 
-  /** a background image covering the screen, anchored to the bottom so the ground lines up */
+  /** a background image covering the screen, anchored to the bottom so the ground lines up.
+   *  On wide screens it is fitted to the height and continued sideways with mirrored copies, instead of zooming in. */
   private cover(name: string) {
     const im = img(name), c = this.c;
     if (!im) { c.fillStyle = "#8fd36b"; c.fillRect(0, 0, this.W, this.H); return; }
-    const k = Math.max(this.W / im.width, this.H / im.height), w = im.width * k, h = im.height * k;
-    c.drawImage(im, (this.W - w) / 2, this.H - h, w, h);
+    const k = Math.max(this.H / im.height, Math.min(this.W / im.width, (this.H * 1.25) / im.height));
+    const w = im.width * k, h = im.height * k, x0 = (this.W - w) / 2, y0 = this.H - h;
+    c.drawImage(im, x0, y0, w, h);
+    for (let i = 1; x0 - (i - 1) * w > 0 || x0 + i * w < this.W; i++) {
+      for (const side of [-1, 1]) {
+        const x = x0 + side * i * w;
+        if (x > this.W || x + w < 0) continue;
+        c.save();
+        if (i % 2) { c.translate(x + w, y0); c.scale(-1, 1); c.drawImage(im, 0, 0, w, h); } else c.drawImage(im, x, y0, w, h);
+        c.restore();
+      }
+    }
   }
 
   drawField(f: Field, up: Upgrades, t: number, dt: number) {
@@ -85,7 +97,7 @@ export class View {
     this.cheer = Math.max(0, this.cheer - dt);
     const kid = img(this.cheer > 0 && img("kid_cheer") ? "kid_cheer" : f.beam ? "kid_vac_suck" : "kid_vac");
     const kw = 118, kh = kid ? (kw * kid.height) / kid.width : 130;
-    const kx = 6, ky = f.nearY + 6 - kh + Math.sin(t * 2.4) * 1.5;
+    const kx = f.left, ky = f.nearY + 6 - kh + Math.sin(t * 2.4) * 1.5;
     f.nozzle.x = kx + kw * (f.beam ? 0.97 : 0.95); f.nozzle.y = ky + kh * (f.beam ? 0.5 : 0.52);
     // critters far to near, so near ones overlap far ones
     const list = [...f.critters].sort((a, b) => a.y - b.y);
@@ -228,10 +240,14 @@ export class View {
   /** pedestal positions for one place's page of the park: a 3-wide grid filling the lawn */
   /** room the park ui takes at the bottom (set by the controller) */
   parkBottom = 270;
+  /** room the park ui takes on the right (landscape phones put it in a side column) */
+  parkRight = 0;
   parkSlots(biome: BiomeId) {
-    const list = critterOf(biome), cols = 3, rows = Math.ceil(list.length / cols);
-    const top = 112, bottom = this.H - this.parkBottom, gw = Math.min(this.W - 20, 420);
-    return list.map((d, i) => ({ def: d, x: (this.W - gw) / 2 + gw * ((i % cols) + 0.5) / cols, y: top + (bottom - top) * (Math.floor(i / cols) + 0.75) / rows }));
+    const wide = this.W > 640;
+    const list = critterOf(biome), cols = wide ? 6 : 3, rows = Math.ceil(list.length / cols);
+    const area = this.W - this.parkRight;
+    const top = this.parkRight ? 70 : 112, bottom = this.H - this.parkBottom, gw = Math.min(area - 20, wide ? 760 : 420);
+    return list.map((d, i) => ({ def: d, x: (area - gw) / 2 + gw * ((i % cols) + 0.5) / cols, y: top + (bottom - top) * (Math.floor(i / cols) + 0.75) / rows }));
   }
 
   /** critters flying out of the jar to their pedestals */
