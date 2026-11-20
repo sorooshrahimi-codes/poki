@@ -11,6 +11,7 @@ import type { BiomeId } from "./core/types.ts";
 import { commercialBreak, gameplayStart, gameplayStop, initPoki, loadingFinished, rewardedBreak } from "./platform/poki.ts";
 import { setDucked, setMuted, setRain, sfx, unlockAudio } from "./platform/audio.ts";
 import { View, img, loadArt } from "./render/view.ts";
+import { EGG_ART, EGG_MINUTES, NEST_SLOTS, eggDrop, hatch } from "./core/eggs.ts";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const save = loadSave();
@@ -55,6 +56,14 @@ function payOffline() {
 }
 
 // ------------------------------------------------------------------ field events
+/** a label per critter at most every 2.5 s, so a wriggling critter does not stack messages */
+const lastSaid = new Map<string, number>();
+function fresh(uid: number, what: string) {
+  const k = uid + what, now = t;
+  if (now - (lastSaid.get(k) ?? -9) < 2.5) return false;
+  lastSaid.set(k, now);
+  return true;
+}
 function handleEvents() {
   for (const e of field.ev) {
     if (e.kind === "caught") {
@@ -68,6 +77,15 @@ function handleEvents() {
       save.coins += coins; save.catches++;
       if (combo >= 3) { view.text(field.nozzle.x + 70, field.nozzle.y - 70, `COMBO ×${combo}!`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo)); sfx.coin(combo); }
       if (c.boss > 0) { toast(`👑 You caught the giant ${c.def.name}! +🪙${coins.toLocaleString()}`, 3200); view.shake = 14; sfx.reveal("legendary"); }
+      if (c.boss > 0 || c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") view.cheer = 1.2;
+      // special catches sometimes leave an egg in the nest
+      const egg = c.boss > 0 ? "golden" : eggDrop(c.def.rarity, c.mut, rng);
+      if (egg && save.nest.length < NEST_SLOTS) {
+        save.nest.push({ tier: egg, biome: field.biome, readyAt: Date.now() + EGG_MINUTES[egg] * 60_000 });
+        view.text(field.nozzle.x + 60, field.nozzle.y - 90, "🥚 An egg!", "#fff4c0", 18);
+        sfx.newFish();
+        if (!save.tips.includes("egg")) { save.tips.push("egg"); setTimeout(() => toast(`🥚 It left an egg! It hatches in the park in ${EGG_MINUTES[egg]} min.`, 3200), 900); }
+      }
       const isNew = !save.index[c.def.id] && !jar.slice(0, -1).some((j) => j.id === c.def.id);
       sfx.hook(c.def.rarity === "legendary" ? "legendary" : c.def.rarity);
       view.burst(field.nozzle.x, field.nozzle.y, c.mut === "gold" ? "#ffd84a" : RARITY_COLOR[c.def.rarity], c.def.rarity === "common" && !c.mut ? 10 : 24);
@@ -76,9 +94,11 @@ function handleEvents() {
       if (isNew) sfx.newFish();
       if (field.jar >= field.cap) { toast("🫙 Jar full! Bring them to the park", 2400); sfx.event(); }
     } else if (e.kind === "tug") {
+      if (!fresh(e.c.uid, "tug")) continue;
       sfx.turn();
-      view.text(e.c.x, e.c.y - 95, e.c.mut === "gold" ? "✨ GOLDEN! Hold on!" : "💪 Hold on!", "#ffe066", 16);
+      view.text(Math.min(view.W - 80, Math.max(80, e.c.x)), e.c.y - 95, e.c.mut === "gold" ? "✨ GOLDEN! Hold on!" : "💪 Hold on!", "#ffe066", 16);
     } else if (e.kind === "escape") {
+      if (!fresh(e.c.uid, "esc")) continue;
       view.text(e.c.x, e.c.y - 40, "💨 escaped!", "#ffffff", 14); sfx.snap();
     } else if (e.kind === "full") {
       $("parkBtn").classList.add("pulse");
@@ -167,6 +187,47 @@ function buy(id: UpgradeId) {
   sfx.buy(); writeSave(save); updateUi();
 }
 
+/** the nest in the park: eggs count down in real time; a ready one hatches on tap, a waiting one can be hurried with a video */
+let nestKey = "";
+function renderNest() {
+  const now = Date.now();
+  const key = save.nest.map((e) => `${e.tier}${Math.max(0, Math.ceil((e.readyAt - now) / 1000))}`).join() + mode;
+  if (key === nestKey) return;
+  nestKey = key;
+  const box = $("nest");
+  box.classList.toggle("hidden", save.nest.length === 0);
+  box.innerHTML = "";
+  save.nest.forEach((e, i) => {
+    const left = e.readyAt - now, ready = left <= 0;
+    const b = document.createElement("button");
+    b.className = "btn egg" + (ready ? " ready" : "");
+    const mm = Math.floor(left / 60_000), ss = Math.floor((left % 60_000) / 1000);
+    b.innerHTML = `<img src="./art/${EGG_ART[e.tier]}.webp" alt=""><span>${ready ? "🐣!" : `${mm}:${String(ss).padStart(2, "0")} 🎬`}</span>`;
+    b.onclick = async () => {
+      if (busy) return;
+      if (!ready) { busy = true; const ok = await rewardedBreak(); busy = false; if (!ok) return; }
+      hatchEgg(i);
+    };
+    box.appendChild(b);
+  });
+}
+function hatchEgg(i: number) {
+  const e = save.nest[i];
+  if (!e) return;
+  save.nest.splice(i, 1);
+  const { def, mut } = hatch(e, rng);
+  const isNew = !save.index[def.id];
+  const entry = (save.index[def.id] ??= { count: 0, muts: [] });
+  entry.count++;
+  if (mut && !entry.muts.includes(mut)) entry.muts.push(mut);
+  parkBiome = def.biome; biomesKey = "";
+  const slot = view.parkSlots(def.biome).find((s2) => s2.def.id === def.id);
+  if (slot) view.fly(def.art, view.W / 2, view.H - 260, slot.x, slot.y - 30, 0.1);
+  sfx.reveal(def.rarity === "legendary" ? "legendary" : def.rarity === "epic" ? "epic" : "rare");
+  toast(`🐣 ${mut === "gold" ? "A GOLDEN " : ""}${def.name} hatched!${isNew ? " NEW!" : ""}`, 2800);
+  writeSave(save); nestKey = ""; updateUi();
+}
+
 /** a happy little coin sound for each critter landing on its pedestal */
 function jarSounds(n: number) { for (let i = 0; i < Math.min(n, 12); i++) setTimeout(() => sfx.coin(i), 450 + i * 120); }
 
@@ -217,6 +278,10 @@ function updateUi() {
   $("parkUi").classList.toggle("hidden", mode !== "park");
   $("incomeN").textContent = `🪙 ${short(incomePerSec())}/s`;
   renderBiomes();
+  renderNest();
+  view.parkBottom = save.nest.length ? 330 : 272;
+  const anyReady = save.nest.some((e) => Date.now() >= e.readyAt);
+  $("parkBtn").textContent = anyReady ? "🏡 Park 🐣" : "🏡 Park";
   const box = $("ups");
   box.innerHTML = "";
   for (const id of UPGRADE_ORDER) {

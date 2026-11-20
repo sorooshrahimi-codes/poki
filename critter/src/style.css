@@ -47,3 +47,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #2a6b3a; fon
 .btn.bio { background: linear-gradient(#2c4f86, #1b345f); font-size: 15px; padding: 5px 12px; }
 .btn.bio.on { background: linear-gradient(#7be495, #2fb35a); }
 .btn.bio.locked { background: linear-gradient(#ffcf5a, #ff9a1f); }
+#nest { display: flex; gap: 6px; }
+.btn.egg { background: linear-gradient(#fff4d6, #f2c46a); padding: 2px 8px 4px; display: flex; flex-direction: column; align-items: center; font-size: 12px; color: #5a3a10; text-shadow: none; min-width: 62px; }
+.btn.egg img { height: 38px; display: block; }
+.btn.egg.ready { animation: wobble 0.6s ease-in-out infinite; background: linear-gradient(#ffe066, #ff9a1f); color: #fff; text-shadow: 0 2px 0 rgba(13,22,48,.5); font-size: 14px; }
+@keyframes wobble { 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }

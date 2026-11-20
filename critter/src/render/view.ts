@@ -7,7 +7,7 @@ import { EYES } from "../data/eyes.ts";
 import type { SaveData } from "../core/save.ts";
 
 type Ctx = CanvasRenderingContext2D;
-const NAMES = [...CRITTERS.map((c) => c.art), "kid_vac", "kid_vac_suck", "bg_meadow", "bg_forest", "bg_park", "pedestal", "jar", "coin", "nozzle"];
+const NAMES = [...CRITTERS.map((c) => c.art), "kid_vac", "kid_vac_suck", "kid_cheer", "egg_speckled", "egg_sky", "egg_star", "egg_golden", "bg_frost", "bg_meadow", "bg_forest", "bg_park", "pedestal", "jar", "coin", "nozzle"];
 const imgs = new Map<string, HTMLImageElement>();
 export const img = (n: string) => imgs.get(n) ?? null;
 export function loadArt(onProgress: (k: number) => void) {
@@ -47,6 +47,8 @@ export class View {
   scale = 1; W = 360; H = 640; dpr = 1;
   parts: Part[] = [];
   shake = 0;
+  /** seconds left of the kid's cheer after a great catch */
+  cheer = 0;
   canvas: HTMLCanvasElement;
   constructor(canvas: HTMLCanvasElement) { this.canvas = canvas; this.c = canvas.getContext("2d")!; this.resize(); }
 
@@ -80,7 +82,8 @@ export class View {
     const c = this.c;
     this.cover(BIOMES.find((b) => b.id === f.biome)!.bg);
     // the fisher... the catcher: a kid with a vacuum, on the left, standing on the near ground
-    const kid = img(f.beam ? "kid_vac_suck" : "kid_vac");
+    this.cheer = Math.max(0, this.cheer - dt);
+    const kid = img(this.cheer > 0 && img("kid_cheer") ? "kid_cheer" : f.beam ? "kid_vac_suck" : "kid_vac");
     const kw = 118, kh = kid ? (kw * kid.height) / kid.width : 130;
     const kx = 6, ky = f.nearY + 6 - kh + Math.sin(t * 2.4) * 1.5;
     f.nozzle.x = kx + kw * (f.beam ? 0.97 : 0.95); f.nozzle.y = ky + kh * (f.beam ? 0.5 : 0.52);
@@ -217,9 +220,11 @@ export class View {
   }
 
   /** pedestal positions for one place's page of the park: a 3-wide grid filling the lawn */
+  /** room the park ui takes at the bottom (set by the controller) */
+  parkBottom = 270;
   parkSlots(biome: BiomeId) {
     const list = critterOf(biome), cols = 3, rows = Math.ceil(list.length / cols);
-    const top = 118, bottom = this.H - 250, gw = Math.min(this.W - 20, 420);
+    const top = 112, bottom = this.H - this.parkBottom, gw = Math.min(this.W - 20, 420);
     return list.map((d, i) => ({ def: d, x: (this.W - gw) / 2 + gw * ((i % cols) + 0.5) / cols, y: top + (bottom - top) * (Math.floor(i / cols) + 0.75) / rows }));
   }
 

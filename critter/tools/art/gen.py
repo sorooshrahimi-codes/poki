@@ -35,6 +35,19 @@ JOBS = {
   "bg_forest": ("Vertical game background, portrait composition, side view: a magical glowing mushroom forest clearing at soft twilight. Top 45% giant friendly mushrooms and tall trees with fireflies and a soft purple-blue sky, "
      "middle a wide open mossy clearing with small glowing mushrooms that stays uncluttered for gameplay, bottom 20% a flat mossy ground band with a dirt path, ferns only at the far left and right edges. "
      "No characters, no creatures, no text. " + STYLE, "2:3", False),
+  "crit_frost1": (SHEET + CRIT + "Top-left: 'Snowpuff', a round white snowball critter with rosy cheeks. Top-right: 'Pengo', a chubby baby penguin ball. "
+     "Bottom-left: 'Icicub', a light-blue ice cube critter with a frosty top. Bottom-right: 'Mittens', a fluffy white arctic fox kit ball. " + STYLE, "1:1", True),
+  "crit_frost2": (SHEET + CRIT + "Top-left: 'Frostbite', a small blue yeti ball with tiny horns. Top-right: 'Sealio', a round grey baby seal. "
+     "Bottom-left: 'Glacier', a sturdy turquoise crystal-rock critter. Bottom-right: 'Flurry', a little snowflake fairy critter with icy wings. " + STYLE, "1:1", True),
+  "crit_frost3": (SHEET + CRIT + "Top-left: 'Auroray', a rare glowing aurora jellyfish-ball floating in green and pink light. Top-right: 'Crystowl', an epic snowy owl with crystal feathers. "
+     "Bottom-left: 'Frostking', a legendary majestic snow lion cub with an ice crown and flowing frosty mane. Bottom-right: 'Wyrmling', a legendary baby ice dragon with sparkling scales. " + STYLE, "1:1", True),
+  "bg_frost": ("Vertical game background, portrait composition, side view: cute snowy mountain peaks under a soft pastel sky with a faint aurora. Top 45% snowy mountains and pine trees, "
+     "middle a wide open snowy field with small ice crystals that stays uncluttered for gameplay, bottom 20% a flat snowy ground band with a frozen path, snowy pines only at the far left and right edges. "
+     "No characters, no creatures, no text. " + STYLE, "2:3", False),
+  "eggs": (SHEET + "Four magical critter eggs standing upright, each a different rarity: top-left a speckled cream egg, top-right a sky-blue egg with white swirls, "
+     "bottom-left a purple egg with glowing star patterns, bottom-right a golden egg with gems and a soft glow. " + STYLE, "1:1", True),
+  "kid_cheer": ("A single game sprite on a fully transparent background: the same cheerful kid explorer (red cap, blue overalls, sneakers, glossy vacuum backpack with a bubble-glass dome) "
+     "jumping for joy, both arms up holding the vacuum nozzle high, eyes closed with a huge grin, side view facing right. Full body, no ground, no text. " + STYLE, "1:1", True, [dl.STYLE_REF, "https://media.base44.com/images/public/6aea41c732ebf572da66fc50/6ed63788d_generated_38770da9.png"]),
 }
 
 if __name__ == "__main__":

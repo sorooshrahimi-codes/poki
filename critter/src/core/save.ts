@@ -1,5 +1,6 @@
 import type { Upgrades } from "./economy.ts";
 import type { BiomeId } from "./types.ts";
+import type { Egg } from "./eggs.ts";
 
 export interface SaveData {
   v: 1;
@@ -14,9 +15,11 @@ export interface SaveData {
   tips: string[];
   biome: BiomeId;
   biomes: BiomeId[];
+  /** eggs waiting in the nest */
+  nest: Egg[];
 }
 
-export const newSave = (): SaveData => ({ v: 1, coins: 0, up: { power: 0, range: 0, tank: 0 }, index: {}, catches: 0, lastSeen: Date.now(), muted: false, tips: [], biome: "meadow", biomes: ["meadow"] });
+export const newSave = (): SaveData => ({ v: 1, coins: 0, up: { power: 0, range: 0, tank: 0 }, index: {}, catches: 0, lastSeen: Date.now(), muted: false, tips: [], biome: "meadow", biomes: ["meadow"], nest: [] });
 
 const KEY = "crittervac.save.v1";
 export function loadSave(): SaveData {

@@ -55,10 +55,24 @@ export const CRITTERS: CritterDef[] = [
   c("crystalcap", "Crystalcap", "epic", 60, 10, 3.8, 130, "#c9b8ff", "burrow"),
   c("elderoak", "Elderoak", "legendary", 70, 10, 6, 420, "#5f9b4a"),
   c("moonfawn", "Moonfawn", "legendary", 70, 28, 7, 600, "#fff4d6", "shy"),
+  ...biome("frost"),
+  c("snowpuff", "Snowpuff", "common", 56, 22, 1, 36, "#ffffff"),
+  c("pengo", "Pengo", "common", 56, 14, 1.2, 40, "#22304a", "shy"),
+  c("icicub", "Icicub", "common", 52, 8, 1.4, 44, "#9fe0ff", "burrow"),
+  c("mittens", "Mittens", "common", 54, 26, 1.2, 46, "#f4f8ff", "shy"),
+  c("frostbite", "Frostbite", "common", 58, 18, 1.4, 52, "#7fb8ff"),
+  c("sealio", "Sealio", "rare", 60, 10, 2, 160, "#a8b4c4", "shell"),
+  c("glacier", "Glacier", "rare", 60, 6, 2.6, 190, "#3fd0d0", "split"),
+  c("flurry", "Flurry", "rare", 52, 30, 1.8, 170, "#dff4ff", "fly"),
+  c("auroray", "Auroray", "epic", 58, 30, 3.6, 640, "#a0ffd0", "fly"),
+  c("crystowl", "Crystowl", "epic", 60, 20, 4, 720, "#cfe8ff", "fly"),
+  c("frostking", "Frostking", "legendary", 72, 22, 6.5, 2600, "#e0f4ff", "shy"),
+  c("wyrmling", "Wyrmling", "legendary", 72, 20, 7.5, 3600, "#8fd3ff", "fly"),
 ];
 export const BIOMES: { id: BiomeId; name: string; icon: string; bg: string; price: number }[] = [
   { id: "meadow", name: "Sunny Meadow", icon: "🌼", bg: "bg_meadow", price: 0 },
   { id: "forest", name: "Mushroom Forest", icon: "🍄", bg: "bg_forest", price: 9000 },
+  { id: "frost", name: "Frosty Peaks", icon: "❄️", bg: "bg_frost", price: 260000 },
 ];
 export const critterOf = (b: BiomeId) => CRITTERS.filter((d) => d.biome === b);
 export const CRITTER_BY_ID: Record<string, CritterDef> = Object.fromEntries(CRITTERS.map((d) => [d.id, d]));

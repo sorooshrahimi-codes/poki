@@ -12,13 +12,14 @@ const median = (a: number[]) => { const b = a.filter((x) => x >= 0).sort((x, y) 
 const fmt = (s: number) => (isNaN(s) ? "never" : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`);
 
 let bossTotal = 0;
-const res: { firstJar: number; forest: number; coins: number[]; buys: number; income: number; species: number; tugs: number; tugWon: number }[] = [];
+const res: { frost: number; firstJar: number; forest: number; coins: number[]; buys: number; income: number; species: number; tugs: number; tugWon: number }[] = [];
 for (let n = 0; n < SESSIONS; n++) {
   const rng = makeRng(n * 7919 + 1), skill = 0.5 + rng() * 0.45;
   resetBossClock(75);
   const up: Upgrades = { power: 0, range: 0, tank: 0 };
   const index: Record<string, number> = {};
   let bosses = 0;
+  let frost = -1;
   let coins = 0, t = 0, firstJar = -1, forest = -1, buys = 0, biome: BiomeId = "meadow", tugs = 0, tugWon = 0;
   const owned: BiomeId[] = ["meadow"];
   const coinsAt: number[] = [];
@@ -55,22 +56,24 @@ for (let n = 0; n < SESSIONS; n++) {
     if (firstJar < 0) firstJar = t;
     for (const id of jar) index[id] = (index[id] ?? 0) + 1;
     t += 6; coins += income() * 6; // walk to the park, look around, buy
-    for (const b of BIOMES) if (!owned.includes(b.id) && coins >= b.price) { coins -= b.price; owned.push(b.id); biome = b.id; if (b.id === "forest") forest = t; }
+    for (const b of BIOMES) if (!owned.includes(b.id) && coins >= b.price) { coins -= b.price; owned.push(b.id); biome = b.id; if (b.id === "forest") forest = t; if (b.id === "frost") frost = t; }
     for (;;) {
       const o = UPGRADE_ORDER.map((id) => ({ id, c: upgradeCost(up, id) })).filter((x) => x.c !== null).sort((a, b) => a.c! - b.c!)[0];
       if (!o || o.c! > coins) break;
       // save up for the forest once it is close
-      if (!owned.includes("forest") && coins - o.c! < BIOMES[1].price * 0.6 && o.c! > 200) break;
+      const next = BIOMES.find((b) => !owned.includes(b.id));
+      if (next && coins - o.c! < next.price * 0.6 && o.c! > next.price * 0.02) break;
       coins -= o.c!; up[o.id]++; buys++;
     }
     for (const m of [1, 3, 5, 10, 15]) if (coinsAt.length < [1, 3, 5, 10, 15].indexOf(m) + 1 && t >= m * 60) coinsAt.push(Math.round(coins));
   }
   bossTotal += bosses;
-  res.push({ firstJar, forest, coins: coinsAt, buys, income: Math.round(income()), species: Object.keys(index).length, tugs, tugWon });
+  res.push({ frost, firstJar, forest, coins: coinsAt, buys, income: Math.round(income()), species: Object.keys(index).length, tugs, tugWon });
 }
 console.log(`Critter Vac sim: ${SESSIONS} sessions x ${MINUTES} min`);
 console.log(`first full jar    median ${fmt(median(res.map((r) => r.firstJar)))}  (target 0:15-1:00: the first reward comes fast)`);
 console.log(`forest unlocked   median ${fmt(median(res.map((r) => r.forest)))}, ${Math.round((res.filter((r) => r.forest >= 0).length / SESSIONS) * 100)}% of sessions (target 5:00-10:00)`);
+console.log(`frost unlocked    median ${fmt(median(res.map((r) => r.frost)))}, ${Math.round((res.filter((r) => r.frost >= 0).length / SESSIONS) * 100)}% of sessions (target 15:00-30:00)`);
 console.log(`upgrades bought   median ${median(res.map((r) => r.buys))}; species found median ${median(res.map((r) => r.species))}/${CRITTERS.length}; park income median ${median(res.map((r) => r.income))}/s`);
 console.log(`tug fights        ${(res.reduce((a, r) => a + r.tugs, 0) / SESSIONS).toFixed(1)} per session, won ${Math.round((res.reduce((a, r) => a + r.tugWon, 0) / Math.max(1, res.reduce((a, r) => a + r.tugs, 0))) * 100)}%`);
 console.log(`bosses caught     ${(bossTotal / SESSIONS).toFixed(1)} per session`);
