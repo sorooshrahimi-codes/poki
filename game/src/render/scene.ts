@@ -59,15 +59,16 @@ const POSE_GEO: Record<Pose, { hull: [number, number]; tip: [number, number]; he
 };
 export type Pose = "idle" | "cast" | "reel" | "cheer";
 /** per-hat fit on the head: width as a share of the sprite, vertical sink (share of height), x nudge */
-const HAT_FIT: Record<string, { w: number; dy: number; dx?: number }> = {
-  hat_cap: { w: 0.34, dy: 0.01 },
-  hat_beanie: { w: 0.3, dy: 0.035 },
-  hat_rain: { w: 0.36, dy: 0.02 },
-  hat_sailor: { w: 0.33, dy: 0.015 },
-  hat_frog: { w: 0.31, dy: 0.035 },
-  hat_straw: { w: 0.38, dy: 0.025 },
-  hat_pirate: { w: 0.37, dy: 0.02 },
-  hat_crown: { w: 0.26, dy: 0.045 },
+export const HAT_FIT: Record<string, { w: number; dy: number; dx?: number }> = {
+  // tuned at large size so each hat covers the top of the hair, not perched on it
+  hat_cap: { w: 0.4, dy: 0.05, dx: 0.025 },
+  hat_beanie: { w: 0.37, dy: 0.06, dx: 0.025 },
+  hat_rain: { w: 0.42, dy: 0.035, dx: 0.025 },
+  hat_sailor: { w: 0.39, dy: 0.05, dx: 0.025 },
+  hat_frog: { w: 0.37, dy: 0.06, dx: 0.025 },
+  hat_straw: { w: 0.47, dy: 0.06, dx: 0.025 },
+  hat_pirate: { w: 0.44, dy: 0.055, dx: 0.025 },
+  hat_crown: { w: 0.3, dy: 0.055, dx: 0.025 },
 };
 
 /** shapes that do not bend when swimming */

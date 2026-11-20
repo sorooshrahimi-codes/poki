@@ -20,7 +20,7 @@ import "@fontsource/fredoka/latin-700.css";
 import { artUrl, img, loadAssets, spriteTinted } from "./render/assets.ts";
 import { drawFish } from "./render/fish.ts";
 import { recolor } from "./render/recolor.ts";
-import { Renderer, type SceneState } from "./render/scene.ts";
+import { HAT_FIT, Renderer, type SceneState } from "./render/scene.ts";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -486,7 +486,11 @@ function renderWardPreview() {
   const w = 190, h = (w * kid.height) / kid.width, ox = 25, oy = cv.height - h - 4;
   x.drawImage(src, ox, oy, w, h);
   const hat = img(save.wear.hat ?? "hat_cap");
-  if (hat) { const hw = w * 0.34, hh = (hw * hat.height) / hat.width; x.drawImage(hat, ox + 0.27 * w - hw / 2, oy + 0.13 * h - hh * 0.72, hw, hh); }
+  if (hat) {
+    const f = HAT_FIT[save.wear.hat ?? "hat_cap"] ?? { w: 0.4, dy: 0.05, dx: 0.025 };
+    const hw = w * f.w, hh = (hw * hat.height) / hat.width;
+    x.drawImage(hat, ox + 0.27 * w - hw / 2 + (f.dx ?? 0) * w, oy + (0.12 + f.dy) * h - hh * 0.72, hw, hh);
+  }
   const pet = save.wear.pet ? img(save.wear.pet) : null;
   if (pet) { const pw = 58, ph = (pw * pet.height) / pet.width; x.drawImage(pet, ox + 0.926 * w - pw * 0.72, oy + h - w * 0.2 * (w / 150) * 0.75 - ph + 6, pw, ph); }
 }
