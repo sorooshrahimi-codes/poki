@@ -29,7 +29,7 @@ let rush: { seed: number; left: number; score: number; goal: number | null } | n
 let rushRng = makeRng(1);
 /** what is in the jar right now (species and mutation of each critter) */
 let jar: { id: string; mut: string | null }[] = [];
-let busy = false, t = 0, combo = 0, lastCatch = -9;
+let busy = false, t = 0, combo = 0, lastCatch = -9, colourTarget = 1;
 
 // ------------------------------------------------------------------ input: hold anywhere to suck, aim with the finger
 const input: { on: boolean; x: number; y: number; tap?: boolean } = { on: false, x: view.W * 0.6, y: view.H * 0.7 };
@@ -86,6 +86,12 @@ function handleEvents() {
       if (c.boss > 0) coins += Math.round(c.def.income * 60);
       if (rush) rush.score += coins; else { save.coins += coins; save.catches++; }
       if (combo >= 3) { view.text(field.nozzle.x + 70, field.nozzle.y - 70, tf("combo", { n: combo }), combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo)); sfx.coin(combo); }
+      if (c.boss > 0 && !(save.restored ??= []).includes(field.biome)) {
+        // the giant was Gloom's: the colour floods back into this place, for good
+        save.restored.push(field.biome); writeSave(save);
+        view.gloomFlee = 0.01; colourTarget = 1;
+        setTimeout(() => { toast(tf("restored", { place: biomeName(BIOMES.find((b) => b.id === field.biome)!) }), 3600); sfx.reveal("legendary"); view.shake = 10; }, 700);
+      }
       if (c.boss > 0) { toast(tf("bossCaught", { name: critterName(c.def), n: coins.toLocaleString() }), 3200); view.shake = 14; sfx.reveal("legendary"); }
       if (c.boss > 0 || c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") view.cheer = 1.2;
       // special catches sometimes leave an egg in the nest
@@ -127,9 +133,9 @@ function handleEvents() {
       view.burst(e.c.x, e.c.y - 30, "#7fd3ff", 14, 140); view.text(e.c.x, e.c.y - 70, tr("split"), "#9be7ff", 15); sfx.boing();
     } else if (e.kind === "hide") {
       sfx.bonk();
-      if (!save.tips.includes(e.c.def.behave)) { save.tips.push(e.c.def.behave); toast(tr(e.c.def.behave === "shell" ? "tipShell" : "tipBurrow"), 3000); }
+      if (started && !save.tips.includes(e.c.def.behave)) { save.tips.push(e.c.def.behave); toast(tr(e.c.def.behave === "shell" ? "tipShell" : "tipBurrow"), 3000); }
     } else if (e.kind === "flee") {
-      if (!save.tips.includes("shy")) { save.tips.push("shy"); toast(tr("tipShy"), 3000); }
+      if (started && !save.tips.includes("shy")) { save.tips.push("shy"); toast(tr("tipShy"), 3000); }
     } else if (e.kind === "bossPhase") {
       view.shake = 12; sfx.snap(); view.burst(e.c.x, e.c.y - 60, "#ffd84a", 30, 220);
       view.text(e.c.x, e.c.y - 110, tf("bossPhase", { n: e.c.boss }), "#ffe066", 17);
@@ -457,6 +463,9 @@ function frame(now: number) {
   coinAcc += incomePerSec() * dt;
   if (coinAcc >= 1) { const n = Math.floor(coinAcc); coinAcc -= n; save.coins += n; save.lastSeen = Date.now(); }
   view.fluting = input.on && field.tool === "flute";
+  // grey until its giant is caught; the colour eases in when restored
+  if (!(save.restored ?? []).includes(field.biome) && view.gloomFlee === 0) colourTarget = 0;
+  view.colour += (colourTarget - view.colour) * Math.min(1, dt * 1.2);
   field.companion = (save.companion as Field["companion"]) ?? null;
   if (mode === "rush" && rush) {
     rush.left -= dt;
@@ -498,6 +507,12 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
   loadingFinished();
   $("loading").classList.add("gone");
   payOffline();
+  // the story, once: one short card, then straight into play
+  if (!save.tips.includes("story")) {
+    $("storyText").textContent = tr("story"); $("storyGo").textContent = tr("storyGo");
+    $("story").classList.remove("hidden");
+    $("storyGo").onclick = () => { save.tips.push("story"); writeSave(save); $("story").classList.add("hidden"); };
+  }
   setTimeout(offerRush, 700);
   if (save.catches > 0) $("hint").classList.add("hidden");
   const coin = img("coin"), jarImg = img("jar");

@@ -18,6 +18,8 @@ export interface SaveData {
   biomes: BiomeId[];
   /** eggs waiting in the nest */
   nest: Egg[];
+  /** places whose colour is back (their giant boss was caught) */
+  restored?: string[];
   /** the legend that comes along on the hunt */
   companion?: string | null;
   /** best 60-second rush score */

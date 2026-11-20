@@ -19,6 +19,7 @@ export const LANG_FLAG: Record<Lang, string> = {
 };
 
 export type Key =
+  | "story" | "storyGo" | "restored"
   | "toolNew" | "tipBubble" | "tipFlute" | "bubbled" | "abHerd" | "abFreeze" | "compJoin" | "compTip" | "compPick"
   | "hint" | "park" | "parkTitle" | "lure" | "rush" | "catchMore" | "share" | "ok" | "play" | "lang"
   | "offline" | "combo" | "bossCaught" | "egg" | "eggTip" | "new" | "newName" | "jarFull" | "holdGold" | "hold" | "escaped"
@@ -30,6 +31,7 @@ export type Key =
 // \u2060 (word joiner) keeps short Japanese button labels on one line: kana may otherwise break between any two characters
 const T: Record<Lang, Partial<Record<Key, string>>> = {
   en: {
+    story: "A grumpy cloud called Gloom drained the colours from Critter Land! Catch critters and beat each place's giant to bring the colour back.", storyGo: "Let's go!", restored: "🌈 Gloom ran away! {place} is colourful again!",
     toolNew: "{x} unlocked!", tipBubble: "🫧 Bubble wand: tap a critter to trap it in a bubble, then vacuum it up!", tipFlute: "🎵 Flute: hold it and critters come to you. Then switch to the vacuum!", bubbled: "Bubbled!", abHerd: "🐕 Herding!", abFreeze: "❄️ Freeze!", compJoin: "🐾 {name} joins your hunt!", compTip: "🐾 Tap a legend in the park to take it hunting with you!", compPick: "🐾 Companion",
     hint: "👆 Hold & aim to suck up critters!", park: "🏡 Park", parkTitle: "🏡 Critter Park", lure: "🎬 ✨ Lure", rush: "🏁 Rush", catchMore: "Catch more!", share: "📤 Challenge a friend", ok: "OK", play: "🏁 Play!", lang: "Language",
     offline: "🏡 +🪙{n} while you were away!", combo: "COMBO ×{n}!", bossCaught: "👑 You caught the giant {name}! +🪙{n}", egg: "🥚 An egg!", eggTip: "🥚 It left an egg! It hatches in the park in {n} min.",
@@ -42,6 +44,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Suction", "up.range": "Reach", "up.tank": "Jar", max: "MAX",
   },
   fr: {
+    story: "Un nuage grognon nommé Gloom a volé les couleurs de Critter Land ! Attrape des bestioles et bats le géant de chaque lieu pour ramener les couleurs.", storyGo: "C'est parti !", restored: "🌈 Gloom s'est enfui ! {place} retrouve ses couleurs !",
     toolNew: "{x} débloqué !", tipBubble: "🫧 Baguette à bulles : touche une bestiole pour l'enfermer dans une bulle, puis aspire-la !", tipFlute: "🎵 Flûte : maintiens-la et les bestioles viennent à toi. Puis reprends l'aspirateur !", bubbled: "En bulle !", abHerd: "🐕 Rassemblement !", abFreeze: "❄️ Gel !", compJoin: "🐾 {name} t'accompagne !", compTip: "🐾 Touche une légende du parc pour l'emmener chasser !", compPick: "🐾 Compagnon",
     hint: "👆 Vise et aspire les bestioles !", park: "🏡 Parc", parkTitle: "🏡 Parc des bestioles", lure: "🎬 ✨ Appât", rush: "🏁 Course", catchMore: "Attraper !", share: "📤 Défier un ami", ok: "OK", play: "🏁 Jouer !", lang: "Langue",
     offline: "🏡 +🪙{n} pendant ton absence !", combo: "COMBO ×{n} !", bossCaught: "👑 Géant attrapé : {name} ! +🪙{n}", egg: "🥚 Un œuf !", eggTip: "🥚 Il a laissé un œuf ! Il éclot au parc dans {n} min.",
@@ -54,6 +57,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Aspiration", "up.range": "Portée", "up.tank": "Bocal", max: "MAX",
   },
   de: {
+    story: "Eine grummelige Wolke namens Gloom hat Critter Land die Farben gestohlen! Fang Tierchen und besiege den Riesen jedes Ortes, um die Farben zurückzuholen.", storyGo: "Los geht's!", restored: "🌈 Gloom ist geflohen! {place} ist wieder bunt!",
     toolNew: "{x} freigeschaltet!", tipBubble: "🫧 Blasenstab: Tippe ein Tierchen an, fang es in einer Blase und saug es ein!", tipFlute: "🎵 Flöte: Halte sie, dann kommen die Tierchen zu dir. Dann zurück zum Sauger!", bubbled: "Eingeblubbert!", abHerd: "🐕 Treiben!", abFreeze: "❄️ Einfrieren!", compJoin: "🐾 {name} jagt mit dir!", compTip: "🐾 Tippe eine Legende im Park an, um sie mitzunehmen!", compPick: "🐾 Begleiter",
     hint: "👆 Halten & zielen zum Einsaugen!", park: "🏡 Park", parkTitle: "🏡 Tierchen-Park", lure: "🎬 ✨ Köder", rush: "🏁 Sprint", catchMore: "Fangen!", share: "📤 Herausfordern", ok: "OK", play: "🏁 Los!", lang: "Sprache",
     offline: "🏡 +🪙{n}, während du weg warst!", combo: "KOMBO ×{n}!", bossCaught: "👑 Riesen-{name} gefangen! +🪙{n}", egg: "🥚 Ein Ei!", eggTip: "🥚 Ein Ei! Es schlüpft in {n} Min. im Park.",
@@ -66,6 +70,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Saugkraft", "up.range": "Reichweite", "up.tank": "Glas", max: "MAX",
   },
   es: {
+    story: "¡Una nube gruñona llamada Gloom robó los colores de Critter Land! Atrapa bichitos y vence al gigante de cada lugar para traer el color de vuelta.", storyGo: "¡Vamos!", restored: "🌈 ¡Gloom huyó! ¡{place} vuelve a tener color!",
     toolNew: "¡{x} desbloqueado!", tipBubble: "🫧 Varita de burbujas: toca un bichito para atraparlo en una burbuja y luego aspíralo!", tipFlute: "🎵 Flauta: mantenla y los bichitos vienen a ti. ¡Luego cambia a la aspiradora!", bubbled: "¡Burbuja!", abHerd: "🐕 ¡Arreando!", abFreeze: "❄️ ¡Congelar!", compJoin: "🐾 ¡{name} se une a tu caza!", compTip: "🐾 ¡Toca una leyenda del parque para llevarla contigo!", compPick: "🐾 Compañero",
     hint: "👆 ¡Mantén y apunta para aspirar!", park: "🏡 Parque", parkTitle: "🏡 Parque de bichitos", lure: "🎬 ✨ Cebo", rush: "🏁 Carrera", catchMore: "¡A cazar!", share: "📤 Reta a un amigo", ok: "OK", play: "🏁 ¡Jugar!", lang: "Idioma",
     offline: "🏡 ¡+🪙{n} mientras no estabas!", combo: "¡COMBO ×{n}!", bossCaught: "👑 ¡Atrapaste al {name} gigante! +🪙{n}", egg: "🥚 ¡Un huevo!", eggTip: "🥚 ¡Dejó un huevo! Eclosiona en el parque en {n} min.",
@@ -78,6 +83,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Succión", "up.range": "Alcance", "up.tank": "Frasco", max: "MÁX",
   },
   it: {
+    story: "Una nuvola brontolona di nome Gloom ha rubato i colori di Critter Land! Cattura creaturine e sconfiggi il gigante di ogni luogo per riportare i colori.", storyGo: "Andiamo!", restored: "🌈 Gloom è scappato! {place} è di nuovo colorato!",
     toolNew: "{x} sbloccato!", tipBubble: "🫧 Bacchetta a bolle: tocca una creaturina per intrappolarla in una bolla, poi aspirala!", tipFlute: "🎵 Flauto: tienilo premuto e le creaturine vengono da te. Poi passa all'aspirapolvere!", bubbled: "In bolla!", abHerd: "🐕 Radunata!", abFreeze: "❄️ Gelo!", compJoin: "🐾 {name} caccia con te!", compTip: "🐾 Tocca una leggenda nel parco per portarla a caccia!", compPick: "🐾 Compagno",
     hint: "👆 Tieni e mira per aspirare!", park: "🏡 Parco", parkTitle: "🏡 Parco Bestioline", lure: "🎬 ✨ Esca", rush: "🏁 Corsa", catchMore: "Cattura!", share: "📤 Sfida un amico", ok: "OK", play: "🏁 Gioca!", lang: "Lingua",
     offline: "🏡 +🪙{n} mentre eri via!", combo: "COMBO ×{n}!", bossCaught: "👑 Hai preso {name} gigante! +🪙{n}", egg: "🥚 Un uovo!", eggTip: "🥚 Ha lasciato un uovo! Si schiude nel parco tra {n} min.",
@@ -90,6 +96,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Risucchio", "up.range": "Portata", "up.tank": "Barattolo", max: "MAX",
   },
   pt: {
+    story: "Uma nuvem rabugenta chamada Gloom roubou as cores de Critter Land! Pegue bichinhos e vença o gigante de cada lugar para trazer as cores de volta.", storyGo: "Vamos lá!", restored: "🌈 Gloom fugiu! {place} tem cores de novo!",
     toolNew: "{x} desbloqueado!", tipBubble: "🫧 Varinha de bolhas: toque num bichinho para prendê-lo numa bolha e depois aspire!", tipFlute: "🎵 Flauta: segure e os bichinhos vêm até você. Depois troque para o aspirador!", bubbled: "Na bolha!", abHerd: "🐕 Pastoreando!", abFreeze: "❄️ Congelar!", compJoin: "🐾 {name} caça com você!", compTip: "🐾 Toque numa lenda do parque para levá-la à caça!", compPick: "🐾 Companheiro",
     hint: "👆 Segure e mire para aspirar!", park: "🏡 Parque", parkTitle: "🏡 Parque dos Bichinhos", lure: "🎬 ✨ Isca", rush: "🏁 Corrida", catchMore: "Pegar mais!", share: "📤 Desafiar amigo", ok: "OK", play: "🏁 Jogar!", lang: "Idioma",
     offline: "🏡 +🪙{n} enquanto você estava fora!", combo: "COMBO ×{n}!", bossCaught: "👑 Você pegou o {name} gigante! +🪙{n}", egg: "🥚 Um ovo!", eggTip: "🥚 Deixou um ovo! Ele choca no parque em {n} min.",
@@ -102,6 +109,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Sucção", "up.range": "Alcance", "up.tank": "Pote", max: "MÁX",
   },
   tr: {
+    story: "Gloom adında huysuz bir bulut Critter Land'in renklerini çaldı! Hayvancıkları yakala, her yerin devini yen ve renkleri geri getir.", storyGo: "Haydi!", restored: "🌈 Gloom kaçtı! {place} yeniden renkli!",
     toolNew: "{x} açıldı!", tipBubble: "🫧 Baloncuk çubuğu: bir hayvancığa dokun, baloncuğa hapset, sonra çek!", tipFlute: "🎵 Flüt: basılı tut, hayvancıklar sana gelsin. Sonra süpürgeye geç!", bubbled: "Baloncukta!", abHerd: "🐕 Topluyor!", abFreeze: "❄️ Dondur!", compJoin: "🐾 {name} avına katıldı!", compTip: "🐾 Yanına almak için parktaki bir efsaneye dokun!", compPick: "🐾 Yoldaş",
     hint: "👆 Basılı tut, nişan al, çek!", park: "🏡 Park", parkTitle: "🏡 Hayvancık Parkı", lure: "🎬 ✨ Yem", rush: "🏁 Yarış", catchMore: "Yakala!", share: "📤 Meydan oku", ok: "Tamam", play: "🏁 Oyna!", lang: "Dil",
     offline: "🏡 Sen yokken +🪙{n} kazandın!", combo: "KOMBO ×{n}!", bossCaught: "👑 Dev {name} yakalandı! +🪙{n}", egg: "🥚 Bir yumurta!", eggTip: "🥚 Bir yumurta bıraktı! Parkta {n} dk sonra çatlar.",
@@ -114,6 +122,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Emiş", "up.range": "Menzil", "up.tank": "Kavanoz", max: "MAKS",
   },
   hi: {
+    story: "Gloom नाम के एक चिड़चिड़े बादल ने क्रिटर लैंड के रंग चुरा लिए! जीव पकड़ो और हर जगह के दानव को हराकर रंग वापस लाओ।", storyGo: "चलो!", restored: "🌈 Gloom भाग गया! {place} फिर से रंगीन है!",
     toolNew: "{x} खुल गया!", tipBubble: "🫧 बुलबुला छड़ी: किसी जीव पर टैप करो, उसे बुलबुले में फँसाओ, फिर खींच लो!", tipFlute: "🎵 बाँसुरी: दबाए रखो, जीव तुम्हारे पास आएँगे। फिर वैक्यूम पर जाओ!", bubbled: "बुलबुले में!", abHerd: "🐕 हाँक रहा है!", abFreeze: "❄️ जमाओ!", compJoin: "🐾 {name} तुम्हारे साथ शिकार पर!", compTip: "🐾 पार्क में किसी दिग्गज पर टैप करो, उसे साथ ले चलो!", compPick: "🐾 साथी",
     hint: "👆 दबाकर रखो, निशाना लगाओ, खींचो!", park: "🏡 पार्क", parkTitle: "🏡 क्रिटर पार्क", lure: "🎬 ✨ चारा", rush: "🏁 रेस", catchMore: "और पकड़ो!", share: "📤 दोस्त को चुनौती", ok: "ठीक है", play: "🏁 खेलो!", lang: "भाषा",
     offline: "🏡 तुम्हारे पीछे +🪙{n} मिले!", combo: "कॉम्बो ×{n}!", bossCaught: "👑 तुमने विशाल {name} पकड़ा! +🪙{n}", egg: "🥚 एक अंडा!", eggTip: "🥚 एक अंडा मिला! यह पार्क में {n} मिनट में फूटेगा।",
@@ -126,6 +135,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "खिंचाव", "up.range": "पहुँच", "up.tank": "जार", max: "मैक्स",
   },
   ja: {
+    story: "ふきげんな雲「グルーム」がクリッターランドの色をうばった!いきものをつかまえて、各地の巨大ボスをたおし、色を取りもどそう!", storyGo: "いくぞ!", restored: "🌈 グルームがにげた!{place}に色がもどった!",
     toolNew: "{x}が使えるようになった!", tipBubble: "🫧 シャボン杖:いきものをタップしてシャボンに閉じこめ、すいこもう!", tipFlute: "🎵 笛:長押しするといきものが寄ってくる。そのあと掃除機に持ちかえよう!", bubbled: "シャボン!", abHerd: "🐕 追いこみ!", abFreeze: "❄️ こおらせ!", compJoin: "🐾 {name}がいっしょに来てくれた!", compTip: "🐾 パークの伝説をタップして、いっしょに連れて行こう!", compPick: "🐾 あいぼう",
     hint: "👆 おしっぱなしで すいこもう！", park: "🏡 パーク", parkTitle: "🏡 いきものパーク", lure: "🎬 ル\u2060ア\u2060ー", rush: "🏁 ラ\u2060ッ\u2060シ\u2060ュ", catchMore: "い\u2060こ\u2060う\u2060！", share: "📤 友だちと勝負", ok: "OK", play: "🏁 プレイ！", lang: "ことば",
     offline: "🏡 るすの間に +🪙{n}！", combo: "コンボ ×{n}！", bossCaught: "👑 でっかい{name}をゲット！ +🪙{n}", egg: "🥚 タマゴだ！", eggTip: "🥚 タマゴをのこした！パークで{n}分後にかえるよ。",
