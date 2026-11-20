@@ -20,7 +20,7 @@ const OVERHEAD = 4;
 
 const bad = (f: { def: { rarity: Rarity; junk?: boolean } }) => f.def.junk || f.def.rarity === "common";
 
-function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; next: number; hold: boolean }): DiveInput {
+function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; next: number; hold: boolean; stuck: number; lastY: number }): DiveInput {
   if (d.phase === "fight" && d.fight) {
     // a human sees the zone late and over-corrects: decide every 0.12-0.35 s, aim with noise
     const fg = d.fight;
@@ -30,6 +30,18 @@ function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; 
       memo.hold = fg.marker + fg.vel * 0.1 * skill < aim;
     }
     return { targetX: null, axis: 0, hold: memo.hold };
+  }
+  // ice: blocked by a slab -> go around it; near the surface -> aim for the hole
+  if (d.slabs.length || d.hole) {
+    if (Math.abs(d.hookY - memo.lastY) < 0.5) memo.stuck += 1 / 30; else memo.stuck = 0;
+    memo.lastY = d.hookY;
+    if (memo.stuck > 0.25) {
+      const sl = d.slabs.find((q) => Math.abs(d.hookX - q.x) <= q.w / 2 + 8 && Math.abs(d.hookY - q.y) < 40);
+      memo.x = sl ? (sl.x > COLUMN / 2 ? sl.x - sl.w / 2 - 25 : sl.x + sl.w / 2 + 25) : COLUMN / 2;
+      memo.next = d.t + 0.5;
+      return { targetX: memo.x, axis: 0, hold: false };
+    }
+    if (d.phase === "ascend" && d.hookY < 160 && d.hole) return { targetX: COLUMN / 2, axis: 0, hold: false };
   }
   // reaction time: the bot re-decides every 0.15-0.4 s
   if (d.t < memo.next) return { targetX: memo.x, axis: 0, hold: false };
@@ -54,13 +66,13 @@ function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; 
   return { targetX: best, axis: 0, hold: false };
 }
 
-interface Result { surprises: number; firstSurprise: number; stolen: number; firstUpgrade: number; ocean: number; coins: number[]; rarities: Record<Rarity, number>; fights: number; won: number; dives: number; legFights: number; firstLegendary: number }
+interface Result { ice: number; surprises: number; firstSurprise: number; stolen: number; firstUpgrade: number; ocean: number; coins: number[]; rarities: Record<Rarity, number>; fights: number; won: number; dives: number; legFights: number; firstLegendary: number }
 
 function session(seed: number): Result {
   const rng = makeRng(seed);
   const skill = 0.45 + rng() * 0.45; // from distracted kid to focused player
   const s = newSave();
-  let t = 0, firstUpgrade = -1, ocean = -1;
+  let t = 0, firstUpgrade = -1, ocean = -1, ice = -1;
   const coins: number[] = [];
   const rarities = Object.fromEntries(RARITY_ORDER.map((r) => [r, 0])) as Record<Rarity, number>;
   let fights = 0, won = 0, dives = 0, earned = 0, legFights = 0, firstLegendary = -1, surprises = 0, firstSurprise = -1, stolen = 0;
@@ -71,7 +83,7 @@ function session(seed: number): Result {
     const kind = pickSurprise(director, t, { zone: s.zone, bottom: Math.min(maxDepth(s.upgrades), ZONES[s.zone].floor), floor: ZONES[s.zone].floor, capacity: capOf(s.upgrades) }, rng);
     if (kind) { noteSurprise(director, kind, t); surprises++; if (firstSurprise < 0) firstSurprise = t; }
     const d = startDive(s.zone, ctx, kind);
-    const memo = { x: d.hookX, next: 0, hold: false };
+    const memo = { x: d.hookX, next: 0, hold: false, stuck: 0, lastY: -1 };
     let fighting = false;
     while (d.phase !== "done" && d.t < 120) {
       if (d.phase === "snapped") resolveSnap(d, false);
@@ -93,6 +105,7 @@ function session(seed: number): Result {
     // but stop buying small upgrades once the ticket is close
     const oceanLocked = !s.zones.includes("ocean");
     if (oceanLocked && s.coins >= ZONES.ocean.price) { s.coins -= ZONES.ocean.price; s.zones.push("ocean"); s.zone = "ocean"; ocean = t; }
+    else if (!oceanLocked && !s.zones.includes("ice") && s.coins >= ZONES.ice.price && s.upgrades.line >= 12) { s.coins -= ZONES.ice.price; s.zones.push("ice"); s.zone = "ice"; ice = t; }
     for (;;) {
       const options = UPGRADE_ORDER.map((id) => ({ id, cost: upgradeCost(s.upgrades, id) })).filter((o) => o.cost !== null) as { id: typeof UPGRADE_ORDER[number]; cost: number }[];
       options.sort((a, b) => a.cost - b.cost);
@@ -104,7 +117,7 @@ function session(seed: number): Result {
     }
     while (coins.length < Math.floor(t / 60)) coins.push(earned);
   }
-  return { firstUpgrade, ocean, coins, rarities, fights, won, dives, legFights, firstLegendary, surprises, firstSurprise, stolen };
+  return { ice, firstUpgrade, ocean, coins, rarities, fights, won, dives, legFights, firstLegendary, surprises, firstSurprise, stolen };
 }
 
 const median = (a: number[]) => { const b = a.filter((x) => x >= 0).sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : NaN; };
@@ -117,6 +130,7 @@ const reachedOcean = results.filter((r) => r.ocean >= 0).length / SESSIONS;
 console.log(`Deep Luck economy sim: ${SESSIONS} sessions x ${MINUTES} min, ${FISH.length} fish`);
 console.log(`first upgrade   median ${fmt(first)}   (target 0:30-1:00)`);
 console.log(`ocean unlocked  median ${fmt(ocean)}   (target 4:30-8:00), ${(reachedOcean * 100).toFixed(0)}% of sessions`);
+console.log(`frozen north     median ${fmt(median(results.map((r) => r.ice)))}, ${(results.filter((r) => r.ice >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions`);
 console.log(`dives per minute ${(median(results.map((r) => r.dives)) / MINUTES).toFixed(1)}`);
 for (const m of [1, 3, 5, 10, 15].filter((m) => m <= MINUTES)) console.log(`coins earned by minute ${String(m).padStart(2)}: ${median(results.map((r) => r.coins[m - 1] ?? 0))}`);
 const tot = Object.fromEntries(RARITY_ORDER.map((r) => [r, results.reduce((a, x) => a + x.rarities[r], 0) / SESSIONS]));

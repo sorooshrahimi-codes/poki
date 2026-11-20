@@ -146,3 +146,5 @@ canvas#game { position: fixed; inset: 0; display: block; }
 .btn.gold { background: linear-gradient(#ffd24a, #ff9a1f); }
 #baitPill img { height: 24px; }
 @media (max-width: 500px) { .offer img.bi { height: 46px; } .offer .on { font-size: 12px; } .offer .buy { font-size: 14px; } #shop { padding: 12px; } }
+#mapBtn b { font-size: 14px; margin-left: 2px; }
+#mapBtn.armed { animation: pulse 0.8s infinite; box-shadow: 0 0 18px #ffd84a, 0 3px 0 #0d1e45; }

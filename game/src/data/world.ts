@@ -3,8 +3,9 @@ import type { EventDef, MutationDef, Rarity, ZoneDef, ZoneId } from "../core/typ
 export const ZONES: Record<ZoneId, ZoneDef> = {
   lake: { id: "lake", floor: 1650, price: 0, water: ["#5cc6e0", "#2a7f9e", "#123a4f"] },
   ocean: { id: "ocean", floor: 3650, price: 1200, water: ["#3aa7e8", "#14558f", "#060f2b"] },
+  ice: { id: "ice", floor: 2800, price: 6000, water: ["#6fd3ee", "#1f7aa6", "#082238"], ice: true },
 };
-export const ZONE_ORDER: ZoneId[] = ["lake", "ocean"];
+export const ZONE_ORDER: ZoneId[] = ["lake", "ocean", "ice"];
 
 /** spawn weight per rarity (before luck and events) */
 export const RARITY_WEIGHT: Record<Rarity, number> = { common: 70, rare: 12, epic: 5, legendary: 3.2, secret: 2.5 };

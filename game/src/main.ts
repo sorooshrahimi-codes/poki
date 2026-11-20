@@ -92,7 +92,9 @@ async function cast() {
   const floor = ZONES[scene.zone].floor;
   const surprise = forcedSurprise ?? pickSurprise(save.director, playSec, { zone: scene.zone, bottom: Math.min(maxDepth(save.upgrades), floor), floor, capacity: capacity(save.upgrades) }, Math.random);
   if (surprise) noteSurprise(save.director, surprise, playSec);
-  scene.dive = startDive(scene.zone, ctx, surprise);
+  const treasure = treasureNext;
+  if (treasure) { treasureNext = false; save.mapPieces -= 3; }
+  scene.dive = startDive(scene.zone, ctx, treasure ? null : surprise, treasure);
   scene.mode = "dive";
   scene.hint = false;
   sfx.cast();
@@ -134,6 +136,8 @@ function handleFx(d: Dive) {
       toast(`🍾 ${t("map")} ${save.mapPieces + d.mapPieces}/3`); sfx.newFish(); renderer.burst(d.hookX, d.hookY, "#bdf3ff", 20);
     } else if (fx.kind === "chest") {
       toast(`💰 +${fx.coins}`); sfx.reveal("legendary"); renderer.burst(d.hookX, d.hookY, "#ffd84a", 40, 260); renderer.flashIt(0.6); slowmo = 0.4;
+    } else if (fx.kind === "bonk") {
+      sfx.bonk(); renderer.shakeIt(3);
     } else if (fx.kind === "whirlpool") {
       renderer.shakeIt(8); sfx.turn();
     } else if (fx.kind === "surface") {
@@ -147,6 +151,8 @@ function handleFx(d: Dive) {
 const SURPRISE_ICON: Record<string, string> = { golden_school: "✨", shark: "🦈", bottle: "🍾", whirlpool: "🌀", chest: "💰", shadow: "👀" };
 let pendingBonus = 0;
 let activeBait: BaitDef | null = null;
+/** the next cast is a treasure-map dive (costs 3 map pieces) */
+let treasureNext = false;
 /** test hook: force the next dive's surprise */
 let forcedSurprise: Parameters<typeof noteSurprise>[1] | null = null;
 
@@ -424,6 +430,11 @@ function updateUi() {
   $("letgoBtn").textContent = t("letgo");
   $("doubleLbl").textContent = t("double");
   const dock = scene.mode === "dock";
+  const mb = $<HTMLButtonElement>("mapBtn");
+  mb.classList.toggle("hidden", save.mapPieces < 1);
+  mb.disabled = save.mapPieces < 3;
+  $("mapN").textContent = `${Math.min(save.mapPieces, 3)}/3`;
+  mb.classList.toggle("armed", treasureNext);
   $("dock").classList.toggle("hidden", !dock);
   $("diveHud").classList.toggle("hidden", scene.mode !== "dive");
 
@@ -568,6 +579,12 @@ $("doubleBtn").onclick = () => void collect(true);
 $("retryBtn").onclick = () => void snapChoice(true);
 $("letgoBtn").onclick = () => void snapChoice(false);
 $("albumBtn").onclick = () => { if (scene.mode === "dock") showAlbum(); };
+$("mapBtn").onclick = () => {
+  if (scene.mode !== "dock" || save.mapPieces < 3) return;
+  treasureNext = !treasureNext;
+  $("mapBtn").classList.toggle("armed", treasureNext);
+  toast(treasureNext ? "🗺️ 💰 !" : "🗺️", 1500);
+};
 $("shopBtn").onclick = () => { if (scene.mode === "dock") { renderShop(); $("shop").classList.remove("hidden"); } };
 $("shopClose").onclick = () => $("shop").classList.add("hidden");
 $("albumClose").onclick = () => $("album").classList.add("hidden");

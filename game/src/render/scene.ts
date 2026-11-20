@@ -1,4 +1,4 @@
-import { COLUMN, type Dive, type LiveFish } from "../core/dive.ts";
+import { COLUMN, ICE_HOLE, type Dive, type LiveFish } from "../core/dive.ts";
 import type { ActiveEvent } from "../core/events.ts";
 import type { WeatherId } from "../core/weather.ts";
 import { sfx } from "../platform/audio.ts";
@@ -49,7 +49,7 @@ const POSE_GEO: Record<Pose, { hull: [number, number]; tip: [number, number] }> 
 };
 export type Pose = "idle" | "cast" | "reel" | "cheer";
 /** shapes that do not bend when swimming */
-const NO_BEND = new Set(["boot", "can", "duck", "puffer", "jelly"]);
+const NO_BEND = new Set(["boot", "can", "duck", "puffer", "jelly", "crab"]);
 /** fish that light up the dark */
 const LUMINOUS = new Set(["glow_eel", "angler", "jelly", "moon_pike", "star_whale", "grand_marlin"]);
 
@@ -127,7 +127,7 @@ export class Renderer {
   private propsFor(zone: ZoneId): Prop[] {
     let list = this.props.get(zone);
     if (list) return list;
-    const rng = makeRng(zone === "lake" ? 11 : 23);
+    const rng = makeRng(zone === "lake" ? 11 : zone === "ocean" ? 23 : 37);
     const names = propNames(zone);
     list = [];
     const floor = ZONES[zone].floor;
@@ -148,7 +148,7 @@ export class Renderer {
   private ambientFor(zone: ZoneId): Ambient[] {
     let list = this.ambient.get(zone);
     if (list) return list;
-    const rng = makeRng(zone === "lake" ? 5 : 9);
+    const rng = makeRng(zone === "lake" ? 5 : zone === "ocean" ? 9 : 13);
     const pool = FISH.filter((f) => f.zone === zone && !f.junk && (f.rarity === "common" || f.rarity === "rare")).map((f) => f.id);
     list = [];
     for (let y = 120; y < ZONES[zone].floor; y += 160 + rng() * 140) {
@@ -239,6 +239,8 @@ export class Renderer {
     this.drawProps(c, s, 1, top, bottom, left, right);
     this.drawEdges(c, top, bottom, left, right);
     this.drawMarkers(c, top, bottom);
+    if (ZONES[s.zone].ice) this.drawIceSheet(c, s, left, right);
+    if (s.dive) this.drawSlabs(c, s.dive, s.t, top, bottom);
     if (s.dive) this.drawShadow(c, s.dive, s.t);
     if (s.dive) this.drawDiveFish(c, s.dive, s.t, top, bottom);
     if (s.dive) this.drawSurprise(c, s.dive, s.t);
@@ -522,6 +524,37 @@ export class Renderer {
     this.drawFishSprite(c, def, mut, f.size, t + f.uid, def.rarity !== "common" || !!mut, 1, 0.6 + f.speed / 120);
     if (mut === "electric") this.sparks(c, f.size, t);
     c.restore();
+  }
+
+  /** a glossy ice slab: white top, cyan body, little icicles hanging underneath */
+  private slab(c: Ctx, x: number, y: number, w: number, h: number) {
+    const g = c.createLinearGradient(0, y, 0, y + h);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(0.35, "#d4f3ff"); g.addColorStop(1, "#7cc8e8");
+    c.fillStyle = g; c.strokeStyle = "#1c4f7a"; c.lineWidth = 2.5;
+    roundRect(c, x - w / 2, y, w, h, 8); c.fill(); c.stroke();
+    c.fillStyle = "rgba(255,255,255,0.8)"; roundRect(c, x - w / 2 + 8, y + 3, w * 0.45, 3, 2); c.fill();
+    c.fillStyle = "#bfeaff";
+    for (let i = 0; i < Math.floor(w / 22); i++) {
+      const ix = x - w / 2 + 12 + i * 22 + ((i * 7) % 5), len = 6 + ((i * 13) % 9);
+      c.beginPath(); c.moveTo(ix - 4, y + h - 1); c.lineTo(ix + 4, y + h - 1); c.lineTo(ix, y + h + len); c.closePath(); c.fill();
+      c.strokeStyle = "rgba(28,79,122,0.5)"; c.lineWidth = 1; c.stroke();
+    }
+  }
+
+  private drawSlabs(c: Ctx, d: Dive, t: number, top: number, bottom: number) {
+    for (const sl of d.slabs) {
+      if (sl.y < top - 40 || sl.y > bottom + 40) continue;
+      this.slab(c, sl.x, sl.y + Math.sin(t * 0.8 + sl.y) * 1.5, sl.w, sl.h);
+    }
+  }
+
+  /** the frozen surface with a fishing hole under the boat */
+  private drawIceSheet(c: Ctx, s: SceneState, left: number, right: number) {
+    if (this.camY > 40) return;
+    const [h0, h1] = ICE_HOLE;
+    this.slab(c, (left + h0) / 2, -4, h0 - left, 16);
+    this.slab(c, (h1 + right) / 2, -4, right - h1, 16);
+    void s;
   }
 
   /** the "something huge" teaser: a giant dark silhouette gliding far behind everything */

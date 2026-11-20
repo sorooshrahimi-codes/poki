@@ -45,6 +45,9 @@ export interface Fight {
   retried: boolean;
 }
 
+export interface Slab { x: number; y: number; w: number; h: number }
+export const ICE_HOLE: [number, number] = [COLUMN / 2 - 62, COLUMN / 2 + 62];
+
 /** an unexpected event inside a dive (picked by the director, played out by these rules) */
 export interface Surprise {
   kind: SurpriseKind;
@@ -78,6 +81,12 @@ export interface Dive {
   /** events the renderer turns into sound and particles; cleared by the caller */
   fx: DiveFx[];
   surprise: Surprise | null;
+  /** ice zone: slabs that block the hook (x = centre) */
+  slabs: Slab[];
+  /** ice zone: the only way back up through the surface */
+  hole: [number, number] | null;
+  /** a treasure-map dive: the chest is guaranteed and huge */
+  treasure: boolean;
   /** coins found during the dive (chests) and map pieces (bottles) */
   bonusCoins: number;
   mapPieces: number;
@@ -85,7 +94,7 @@ export interface Dive {
 
 export type DiveFx = { kind: "hook"; fish: LiveFish } | { kind: "turn" } | { kind: "fightWon"; fish: LiveFish } | { kind: "snap"; fish: LiveFish } | { kind: "surface" }
   | { kind: "surprise"; surprise: SurpriseKind } | { kind: "stolen"; fish: LiveFish } | { kind: "sharkGone" }
-  | { kind: "bottle" } | { kind: "chest"; coins: number } | { kind: "whirlpool"; extra: number };
+  | { kind: "bottle" } | { kind: "chest"; coins: number } | { kind: "whirlpool"; extra: number } | { kind: "bonk" };
 
 export interface DiveInput {
   /** absolute target x for pointer control (world units), or null */
@@ -150,7 +159,7 @@ function fillFish(zone: ZoneId, from: number, to: number, ctx: DiveContext, into
   }
 }
 
-export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind | null = null): Dive {
+export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind | null = null, treasure = false): Dive {
   const z = ZONES[zone];
   const bottom = Math.min(maxDepth(ctx.upgrades), z.floor);
   const fish: LiveFish[] = [];
@@ -159,8 +168,17 @@ export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind
   const d: Dive = {
     zone, phase: "descend", resume: "descend", hookX: COLUMN / 2, hookY: 0, bottom,
     capacity: capacity(ctx.upgrades), fish, hooked: [], fight: null, t: 0, escaped: null, fx: [],
-    surprise: null, bonusCoins: 0, mapPieces: 0,
+    surprise: null, bonusCoins: 0, mapPieces: 0, slabs: [], hole: null, treasure: false,
   };
+  if (z.ice) {
+    d.hole = ICE_HOLE;
+    for (let y = 170; y < bottom - 60; y += 150 + ctx.rng() * 90) {
+      const w = 90 + ctx.rng() * 80;
+      d.slabs.push({ x: w / 2 + ctx.rng() * (COLUMN - w), y, w, h: 18 });
+    }
+  }
+  d.treasure = treasure;
+  if (treasure) surprise = "chest";
   if (surprise) setupSurprise(d, surprise, ctx);
   return d;
 }
@@ -218,7 +236,7 @@ function stepSurprise(d: Dive, dt: number) {
       if (s.state === "active" && touch(30)) {
         s.state = "done";
         if (s.kind === "bottle") { d.mapPieces++; d.bonusCoins += Math.round(depthValue(d.zone, s.y) * 1.5); d.fx.push({ kind: "bottle" }); }
-        else { const coins = Math.round(depthValue(d.zone, s.y) * 6); d.bonusCoins += coins; d.fx.push({ kind: "chest", coins }); }
+        else { const coins = Math.round(depthValue(d.zone, s.y) * (d.treasure ? 25 : 6)); d.bonusCoins += coins; d.fx.push({ kind: "chest", coins }); }
       }
       break;
     case "whirlpool":
@@ -341,12 +359,26 @@ export function stepDive(d: Dive, dt: number, input: DiveInput, ctx: DiveContext
   if (input.axis) vx = input.axis * HOOK_SPEED * 0.75;
   d.hookX = Math.max(12, Math.min(COLUMN - 12, d.hookX + vx * dt));
 
+  const prevY = d.hookY;
   if (d.phase === "descend") {
     d.hookY += descendSpeed(d.bottom) * dt;
     if (d.hookY >= d.bottom) { d.hookY = d.bottom; d.phase = "ascend"; d.fx.push({ kind: "turn" }); }
   } else if (d.phase === "ascend") {
     d.hookY -= ascendSpeed(d.bottom) * dt;
-    if (d.hookY <= 0) { d.hookY = 0; d.phase = "done"; d.fx.push({ kind: "surface" }); return; }
+  }
+  // ice slabs: the hook rests on (or under) a slab until it is steered around it
+  for (const sl of d.slabs) {
+    if (Math.abs(d.hookX - sl.x) > sl.w / 2 + 6) continue;
+    const topY = sl.y - 9, botY = sl.y + sl.h + 9;
+    if (d.phase === "descend" && prevY <= topY && d.hookY > topY) { if (prevY < topY - 0.5) d.fx.push({ kind: "bonk" }); d.hookY = topY; }
+    if (d.phase === "ascend" && prevY >= botY && d.hookY < botY) { if (prevY > botY + 0.5) d.fx.push({ kind: "bonk" }); d.hookY = botY; }
+  }
+  if (d.phase === "ascend") {
+    // under the ice sheet you can only surface through the hole
+    if (d.hole && d.hookY < 14 && (d.hookX < d.hole[0] + 8 || d.hookX > d.hole[1] - 8)) {
+      if (prevY >= 14) d.fx.push({ kind: "bonk" });
+      d.hookY = 14;
+    } else if (d.hookY <= 0) { d.hookY = 0; d.phase = "done"; d.fx.push({ kind: "surface" }); return; }
   }
 
   if (d.hooked.length >= d.capacity) return;

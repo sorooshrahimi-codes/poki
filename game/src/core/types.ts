@@ -4,9 +4,9 @@
 export type Lang = "en" | "es" | "pt" | "hi" | "ja";
 export type Rarity = "common" | "rare" | "epic" | "legendary" | "secret";
 export type MutationId = "gold" | "rainbow" | "giant" | "ghost" | "electric";
-export type ZoneId = "lake" | "ocean";
+export type ZoneId = "lake" | "ocean" | "ice";
 export type EventId = "blood_moon" | "meteor" | "rainbow_sky" | "golden_hour";
-export type Shape = "fish" | "eel" | "puffer" | "jelly" | "boot" | "can" | "duck";
+export type Shape = "fish" | "eel" | "puffer" | "jelly" | "boot" | "can" | "duck" | "crab";
 
 export interface FishLook {
   shape: Shape;
@@ -47,6 +47,8 @@ export interface ZoneDef {
   price: number;
   /** water colours from surface to floor */
   water: [string, string, string];
+  /** ice zone technique: floating ice slabs block the hook, and the way out is a hole in the ice */
+  ice?: boolean;
 }
 
 export interface EventDef {
