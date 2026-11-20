@@ -1,57 +1,62 @@
 import { COLUMN, type Dive, type LiveFish } from "../core/dive.ts";
 import type { ActiveEvent } from "../core/events.ts";
+import { makeRng } from "../core/rng.ts";
 import type { FishDef, MutationId, ZoneId } from "../core/types.ts";
+import { FISH } from "../data/fish.ts";
 import { RARITY_COLOR, ZONES } from "../data/world.ts";
+import { BG_WATERLINE, SHADOW_PAD, bgBottomColor, bgTopColor, drawGlint, img, propNames, spriteShadowed, spriteTinted } from "./assets.ts";
 import { drawFish } from "./fish.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
-interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number; kind: "dot" | "ring" | "bubble" }
+interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number; kind: "dot" | "ring" | "bubble" | "star" | "mote" }
 
-export interface View {
-  /** css pixels */
-  w: number;
-  h: number;
-  /** world units -> css pixels */
-  scale: number;
-  /** css x of world x = 0 */
-  ox: number;
-  /** world units visible vertically */
-  viewH: number;
-}
+export interface View { w: number; h: number; scale: number; ox: number; viewH: number; dpr: number }
 
 export interface SceneState {
   mode: "dock" | "dive" | "reveal";
   zone: ZoneId;
   dive: Dive | null;
   event: ActiveEvent | null;
-  /** seconds since start, for animation */
   t: number;
-  /** a hint hand pulses over the water when the player has not cast yet */
   hint: boolean;
 }
 
-const BOAT_Y = -8;
+interface Prop { name: string; x: number; y: number; h: number; flip: boolean; layer: 0 | 1 }
+/** decorative far-away fish: depth cue only, never catchable */
+interface Ambient { name: string; x: number; y: number; z: number; dir: 1 | -1; speed: number; size: number; phase: number }
 
-function lerpColor(a: string, b: string, k: number) {
-  const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
-  const ch = (s: number) => Math.round(((pa >> s) & 255) * (1 - k) + ((pb >> s) & 255) * k);
-  return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+/** sprite length relative to the fish's body size in the rules (sprites include fins and tail) */
+const SPRITE_SCALE = 1.35;
+const BOAT_W = 150;
+/** rod tip and waterline inside the boat sprite, as fractions of its size */
+const ROD_TIP = { x: 0.975, y: 0.02 };
+const BOAT_WATERLINE = 0.8;
+/** fish that light up the dark */
+const LUMINOUS = new Set(["glow_eel", "angler", "jelly", "moon_pike", "star_whale", "grand_marlin"]);
+
+function mix(a: string, b: string, k: number) {
+  const pa = toRgb(a), pb = toRgb(b);
+  return `rgb(${Math.round(pa[0] * (1 - k) + pb[0] * k)},${Math.round(pa[1] * (1 - k) + pb[1] * k)},${Math.round(pa[2] * (1 - k) + pb[2] * k)})`;
 }
-
-function waterAt(zone: ZoneId, y: number) {
-  const z = ZONES[zone];
-  const k = Math.max(0, Math.min(1, y / z.floor));
-  return k < 0.5 ? lerpColor(z.water[0], z.water[1], k * 2) : lerpColor(z.water[1], z.water[2], (k - 0.5) * 2);
+function toRgb(c: string): [number, number, number] {
+  if (c.startsWith("#")) { const n = parseInt(c.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  const m = c.match(/\d+/g)!; return [Number(m[0]), Number(m[1]), Number(m[2])];
 }
 
 export class Renderer {
-  view: View = { w: 1, h: 1, scale: 1, ox: 0, viewH: 600 };
+  view: View = { w: 1, h: 1, scale: 1, ox: 0, viewH: 600, dpr: 1 };
   camY = -300;
   private parts: Particle[] = [];
   private shake = 0;
   private ctx: Ctx;
   private canvas: HTMLCanvasElement;
+  private fog = document.createElement("canvas");
+  private props = new Map<ZoneId, Prop[]>();
+  /** visual facing per fish, eased so turning looks like a 2.5D card flip */
+  private facing = new WeakMap<LiveFish, number>();
+  private flash = 0;
+  private ambient = new Map<ZoneId, Ambient[]>();
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -67,292 +72,582 @@ export class Renderer {
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const scale = Math.min(w / COLUMN, h / 560);
-    this.view = { w, h, scale, ox: (w - COLUMN * scale) / 2, viewH: h / scale };
+    this.ctx.imageSmoothingQuality = "high";
+    // landscape zooms in a little more: fish read bigger on desktop and Chromebooks
+    const scale = Math.min(w / COLUMN, h / (w > h ? 470 : 560));
+    this.view = { w, h, scale, ox: (w - COLUMN * scale) / 2, viewH: h / scale, dpr };
+    // the darkness layer works at half resolution: it is all soft gradients
+    this.fog.width = Math.ceil(w / 2); this.fog.height = Math.ceil(h / 2);
   }
 
-  /** css pixel -> world x */
   toWorldX(px: number) { return (px - this.view.ox) / this.view.scale; }
 
   burst(x: number, y: number, color: string, n = 14, speed = 160) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2, v = speed * (0.4 + Math.random() * 0.8);
-      this.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0, max: 0.5 + Math.random() * 0.4, color, size: 2 + Math.random() * 3, kind: "dot" });
+      this.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0, max: 0.6 + Math.random() * 0.4, color, size: 2 + Math.random() * 3, kind: i % 3 === 0 ? "star" : "dot" });
     }
-    this.parts.push({ x, y, vx: 0, vy: 0, life: 0, max: 0.45, color, size: 6, kind: "ring" });
+    this.parts.push({ x, y, vx: 0, vy: 0, life: 0, max: 0.5, color, size: 6, kind: "ring" });
   }
-  splash(x: number) { this.burst(x, 0, "#e9fbff", 18, 120); }
+  splash(x: number) {
+    for (let i = 0; i < 16; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.6, v = 90 + Math.random() * 130;
+      this.parts.push({ x, y: 0, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 0, max: 0.7, color: "#ffffff", size: 2.5 + Math.random() * 2.5, kind: "dot" });
+    }
+    this.parts.push({ x, y: 0, vx: 0, vy: 0, life: 0, max: 0.6, color: "#ffffff", size: 4, kind: "ring" });
+  }
   shakeIt(amount: number) { this.shake = Math.max(this.shake, amount); }
+  flashIt(k = 1) { this.flash = Math.max(this.flash, k); }
+
+  private propsFor(zone: ZoneId): Prop[] {
+    let list = this.props.get(zone);
+    if (list) return list;
+    const rng = makeRng(zone === "lake" ? 11 : 23);
+    const names = propNames(zone);
+    list = [];
+    const floor = ZONES[zone].floor;
+    for (let y = 260; y < floor + 40; y += 120 + rng() * 120) {
+      for (const side of [-1, 1]) {
+        if (rng() < 0.35) continue;
+        const near = rng() < 0.55;
+        const h = near ? 80 + rng() * 70 : 110 + rng() * 90;
+        // x is an inset from the screen edge on that side (negative side = left), resolved at draw time
+        const inset = near ? 6 + rng() * 22 : 40 + rng() * 70;
+        list.push({ name: names[Math.floor(rng() * names.length)], x: side * inset, y, h, flip: side > 0, layer: near ? 1 : 0 });
+      }
+    }
+    this.props.set(zone, list);
+    return list;
+  }
+
+  private ambientFor(zone: ZoneId): Ambient[] {
+    let list = this.ambient.get(zone);
+    if (list) return list;
+    const rng = makeRng(zone === "lake" ? 5 : 9);
+    const pool = FISH.filter((f) => f.zone === zone && !f.junk && (f.rarity === "common" || f.rarity === "rare")).map((f) => f.id);
+    list = [];
+    for (let y = 120; y < ZONES[zone].floor; y += 160 + rng() * 140) {
+      const name = pool[Math.floor(rng() * pool.length)], z = 0.45 + rng() * 0.3, dir: 1 | -1 = rng() < 0.5 ? 1 : -1;
+      const n = 3 + Math.floor(rng() * 4), x = rng() * COLUMN, speed = 14 + rng() * 16;
+      for (let i = 0; i < n; i++) list.push({ name, x: x + (rng() - 0.5) * 70, y: y + (rng() - 0.5) * 40, z, dir, speed, size: 26 + rng() * 8, phase: rng() * 6 });
+    }
+    this.ambient.set(zone, list);
+    return list;
+  }
 
   update(dt: number, s: SceneState) {
+    for (const a of this.ambientFor(s.zone)) {
+      a.x += a.dir * a.speed * dt;
+      if (a.x < -160) a.x = COLUMN + 160; else if (a.x > COLUMN + 160) a.x = -160;
+    }
+    // a trail of tiny bubbles behind the moving hook
+    const d0 = s.dive;
+    if (d0 && s.mode === "dive" && Math.random() < dt * 18) this.parts.push({ x: d0.hookX + (Math.random() - 0.5) * 4, y: d0.hookY - 10, vx: (Math.random() - 0.5) * 10, vy: -25 - Math.random() * 20, life: 0, max: 1.6, color: "rgba(255,255,255,0.6)", size: 1 + Math.random() * 1.6, kind: "bubble" });
     const v = this.view;
-    let target = -v.viewH * 0.42;
+    const bg = img(`bg_${s.zone}`);
+    const skyAbove = bg ? (BG_WATERLINE[s.zone] * ((COLUMN + 2 * v.ox / v.scale) * bg.height)) / bg.width : 300;
+    let target = -Math.min(v.viewH * 0.45, Math.max(skyAbove, v.viewH * 0.3));
     if (s.mode === "dive" && s.dive) {
       const d = s.dive;
-      target = d.hookY - v.viewH * (d.phase === "ascend" ? 0.6 : 0.36);
-      target = Math.min(target, ZONES[s.zone].floor + 60 - v.viewH);
-      target = Math.max(target, -v.viewH * 0.42);
+      target = d.hookY - v.viewH * (d.phase === "ascend" ? 0.62 : 0.36);
+      target = Math.min(target, ZONES[s.zone].floor + 90 - v.viewH);
+      target = Math.max(target, -Math.min(v.viewH * 0.45, Math.max(skyAbove, v.viewH * 0.3)));
     }
     this.camY += (target - this.camY) * Math.min(1, dt * (s.mode === "dive" ? 7 : 3));
-    // ambient bubbles
-    if (Math.random() < dt * 6) {
-      this.parts.push({ x: Math.random() * COLUMN, y: this.camY + v.viewH + 10, vx: 0, vy: -30 - Math.random() * 40, life: 0, max: 6, color: "rgba(255,255,255,0.35)", size: 1.5 + Math.random() * 2.5, kind: "bubble" });
-    }
+    // bubbles rise, motes (plankton) drift: they sell the depth even when nothing else moves
+    if (Math.random() < dt * 5) this.parts.push({ x: Math.random() * COLUMN, y: this.camY + v.viewH + 10, vx: 0, vy: -35 - Math.random() * 45, life: 0, max: 8, color: "rgba(255,255,255,0.5)", size: 1.5 + Math.random() * 3, kind: "bubble" });
+    if (Math.random() < dt * 8) this.parts.push({ x: -40 + Math.random() * (COLUMN + 80), y: this.camY + Math.random() * v.viewH, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6, life: 0, max: 4 + Math.random() * 3, color: "#dff8ff", size: 0.8 + Math.random() * 1.4, kind: "mote" });
     for (const p of this.parts) {
       p.life += dt;
       p.x += p.vx * dt; p.y += p.vy * dt;
-      if (p.kind === "dot") { p.vx *= 0.92; p.vy = p.vy * 0.92 + 120 * dt; }
-      if (p.kind === "bubble") p.x += Math.sin(p.life * 3 + p.y) * 0.3;
+      if (p.kind === "dot" || p.kind === "star") { p.vx *= 0.93; p.vy = p.vy * 0.93 + 140 * dt; }
+      if (p.kind === "bubble") p.x += Math.sin(p.life * 3 + p.y * 0.05) * 0.4;
     }
-    this.parts = this.parts.filter((p) => p.life < p.max && !(p.kind === "bubble" && p.y < 0));
+    this.parts = this.parts.filter((p) => p.life < p.max && !(p.kind === "bubble" && p.y < 2));
+    if (this.parts.length > 400) this.parts.splice(0, this.parts.length - 400);
     this.shake = Math.max(0, this.shake - dt * 30);
+    this.flash = Math.max(0, this.flash - dt * 2.5);
   }
 
   draw(s: SceneState) {
     const c = this.ctx, v = this.view;
     c.save();
+    c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     c.clearRect(0, 0, v.w, v.h);
     const sx = (Math.random() - 0.5) * this.shake, sy = (Math.random() - 0.5) * this.shake;
-    // world transform: x in column units, y in world units relative to the camera
     c.translate(v.ox + sx, sy);
     c.scale(v.scale, v.scale);
     c.translate(0, -this.camY);
     const top = this.camY, bottom = this.camY + v.viewH;
     const left = -v.ox / v.scale, right = COLUMN + v.ox / v.scale;
 
-    this.drawSky(c, s, top, left, right);
-    this.drawWater(c, s, top, bottom, left, right);
-    this.drawFloor(c, s, left, right);
+    this.drawBackdrop(c, s, top, bottom, left, right);
+    this.drawFloor(c, s, left, right, true);
+    this.drawProps(c, s, 0, top, bottom, left, right);
+    this.drawAmbient(c, s, top, bottom);
+    this.drawRays(c, s, top, left, right);
+    this.drawFloor(c, s, left, right, false);
+    this.drawProps(c, s, 1, top, bottom, left, right);
+    this.drawEdges(c, top, bottom, left, right);
     this.drawMarkers(c, top, bottom);
     if (s.dive) this.drawDiveFish(c, s.dive, s.t, top, bottom);
     this.drawBoat(c, s);
     if (s.dive && s.mode === "dive") this.drawHook(c, s.dive, s.t);
     this.drawParticles(c);
-    // darken the area outside the play column on wide screens
-    if (v.ox > 4) {
-      c.fillStyle = "rgba(0,10,25,0.28)";
-      c.fillRect(left, top, -left, v.viewH);
-      c.fillRect(COLUMN, top, right - COLUMN, v.viewH);
-    }
-    if (s.hint && s.mode === "dock") this.drawHint(c, s.t);
     c.restore();
-    if (s.dive?.fight && (s.dive.phase === "fight" || s.dive.phase === "snapped")) this.drawFight(c, s.dive, s.t);
-  }
-
-  private drawSky(c: Ctx, s: SceneState, top: number, left: number, right: number) {
-    if (top > 0) return;
-    const g = c.createLinearGradient(0, top, 0, 0);
-    const ev = s.event?.def;
-    g.addColorStop(0, ev?.id === "blood_moon" ? "#2a0614" : ev?.id === "meteor" ? "#0b1030" : "#7fd3ff");
-    g.addColorStop(1, ev?.id === "blood_moon" ? "#a3243f" : ev?.id === "meteor" ? "#3c3a7a" : ev?.id === "golden_hour" ? "#ffd27a" : "#d6f3ff");
-    c.fillStyle = g;
-    c.fillRect(left, top, right - left, -top);
-    if (ev?.id === "rainbow_sky") {
-      c.lineWidth = 8;
-      ["#ff5b5b", "#ffb347", "#fff275", "#7dff8a", "#5bc8ff", "#a77bff"].forEach((col, i) => {
-        c.strokeStyle = col; c.globalAlpha = 0.55;
-        c.beginPath(); c.arc(COLUMN / 2, 20, 210 - i * 8, Math.PI, 0); c.stroke();
-      });
-      c.globalAlpha = 1;
-    }
-    // sun or moon
-    const moon = ev?.id === "blood_moon" || ev?.id === "meteor";
-    c.fillStyle = ev?.id === "blood_moon" ? "#ff4561" : moon ? "#f3f0ff" : "#fff6c9";
-    c.beginPath(); c.arc(COLUMN * 0.8, top * 0.55, 26, 0, Math.PI * 2); c.fill();
-    if (ev?.id === "meteor") {
-      c.strokeStyle = "#ffe9a8"; c.lineWidth = 2;
-      for (let i = 0; i < 3; i++) {
-        const k = (s.t * 0.6 + i * 0.37) % 1;
-        const x = COLUMN * (1.1 - k * 1.2), y = top * (0.95 - k * 0.6);
-        c.beginPath(); c.moveTo(x, y); c.lineTo(x + 30, y - 18); c.stroke();
-      }
-    }
-  }
-
-  private drawWater(c: Ctx, s: SceneState, top: number, bottom: number, left: number, right: number) {
-    const y0 = Math.max(0, top);
-    if (bottom <= y0) return;
-    const g = c.createLinearGradient(0, y0, 0, bottom);
-    g.addColorStop(0, waterAt(s.zone, y0));
-    g.addColorStop(1, waterAt(s.zone, bottom));
-    c.fillStyle = g;
-    c.fillRect(left, y0, right - left, bottom - y0);
-    if (s.event) {
-      c.fillStyle = s.event.def.tint; c.globalAlpha = 0.08;
-      c.fillRect(left, y0, right - left, bottom - y0);
-      c.globalAlpha = 1;
-    }
-    // light rays near the surface
-    if (top < 420) {
-      c.save();
-      c.globalAlpha = 0.07;
-      c.fillStyle = "#ffffff";
-      for (let i = 0; i < 5; i++) {
-        const x = ((i * 97 + s.t * 8) % (COLUMN + 160)) - 80;
-        c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 40, 0); c.lineTo(x + 120, 420); c.lineTo(x + 60, 420); c.fill();
-      }
+    this.drawDarkness(s);
+    if (s.hint && s.mode === "dock") this.drawHint(s.t);
+    if (s.dive?.fight && (s.dive.phase === "fight" || s.dive.phase === "snapped")) this.drawFight(s.dive, s.t);
+    if (this.flash > 0) {
+      c.save(); c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+      c.fillStyle = `rgba(255,255,255,${this.flash * 0.35})`; c.fillRect(0, 0, v.w, v.h);
       c.restore();
     }
-    // surface line with small waves
-    if (top < 10) {
-      c.strokeStyle = "rgba(255,255,255,0.7)"; c.lineWidth = 2;
-      c.beginPath();
-      for (let x = left; x <= right; x += 8) {
-        const y = Math.sin(x * 0.06 + s.t * 2) * 2;
-        if (x === left) c.moveTo(x, y); else c.lineTo(x, y);
+  }
+
+  // ------------------------------------------------------------- world layers
+  private drawBackdrop(c: Ctx, s: SceneState, top: number, bottom: number, left: number, right: number) {
+    const bg = img(`bg_${s.zone}`);
+    const z = ZONES[s.zone];
+    const width = right - left;
+    let bgBottomY = 0;
+    if (bg) {
+      const h = (width * bg.height) / bg.width;
+      const y0 = -BG_WATERLINE[s.zone] * h;
+      bgBottomY = y0 + h;
+      // sky above the painting (tall portrait screens), then the painting, then a soft fade into the deep
+      if (top < y0) { c.fillStyle = bgTopColor(s.zone); c.fillRect(left, top, width, y0 - top + 2); }
+      if (y0 < bottom && bgBottomY > top) {
+        c.drawImage(bg, left, y0, width, h);
+        // refraction: the band just under the surface wobbles sideways like real water
+        if (top < 110) {
+          const sy0 = Math.max(4, top), sy1 = Math.min(110, bottom);
+          for (let yy = sy0; yy < sy1; yy += 3) {
+            const dx = Math.sin(yy * 0.16 + s.t * 2.4) * 2.6 * (1 - yy / 120);
+            const srcY = ((yy - y0) / h) * bg.height;
+            c.drawImage(bg, 0, srcY, bg.width, (3 / h) * bg.height, left + dx, yy, width, 3.4);
+          }
+        }
+        const fadeTop = y0 + h * 0.72;
+        const fg = c.createLinearGradient(0, fadeTop, 0, bgBottomY);
+        fg.addColorStop(0, "rgba(0,0,0,0)"); fg.addColorStop(1, bgBottomColor(s.zone));
+        c.fillStyle = fg; c.fillRect(left, fadeTop, width, bgBottomY - fadeTop + 1);
       }
-      c.stroke();
+      // event mood over the sky
+      const ev = s.event?.def.id;
+      if (ev && top < 0) {
+        c.save();
+        c.globalCompositeOperation = ev === "golden_hour" ? "soft-light" : "multiply";
+        c.fillStyle = ev === "blood_moon" ? "#ff5a7a" : ev === "meteor" ? "#5b5fc7" : ev === "golden_hour" ? "#ffcf5a" : "#bfe9ff";
+        c.globalAlpha = ev === "rainbow_sky" ? 0.15 : 0.55;
+        c.fillRect(left, y0, width, -y0 + 30);
+        c.restore();
+        if (ev === "rainbow_sky") this.drawRainbow(c, y0);
+        if (ev === "blood_moon" || ev === "meteor") this.drawMoon(c, y0, ev, s.t);
+      }
+    } else {
+      c.fillStyle = "#8fd8ff"; c.fillRect(left, top, width, -top);
+    }
+    // below the painted background: continue its colour down into the deep
+    const from = Math.max(bgBottomY - 2, top);
+    if (bottom > from) {
+      const deep = z.water[2];
+      const k0 = Math.min(1, Math.max(0, (from - bgBottomY) / (z.floor - bgBottomY)));
+      const k1 = Math.min(1, Math.max(0, (bottom - bgBottomY) / (z.floor - bgBottomY)));
+      const g = c.createLinearGradient(0, from, 0, bottom);
+      g.addColorStop(0, mix(bgBottomColor(s.zone), deep, k0));
+      g.addColorStop(1, mix(bgBottomColor(s.zone), deep, k1));
+      c.fillStyle = g;
+      c.fillRect(left, from, width, bottom - from);
+    }
+    if (s.event && bottom > 0) {
+      c.fillStyle = s.event.def.tint; c.globalAlpha = 0.07;
+      c.fillRect(left, Math.max(0, top), width, bottom - Math.max(0, top));
+      c.globalAlpha = 1;
     }
   }
 
-  private drawFloor(c: Ctx, s: SceneState, left: number, right: number) {
-    const floor = ZONES[s.zone].floor;
-    if (this.camY + this.view.viewH < floor - 10) return;
-    c.fillStyle = s.zone === "lake" ? "#3b3324" : "#1c1a2a";
-    c.beginPath();
-    c.moveTo(left, floor + 200);
-    for (let x = left; x <= right; x += 20) c.lineTo(x, floor + 14 + Math.sin(x * 0.05) * 8 + Math.sin(x * 0.13) * 4);
-    c.lineTo(right, floor + 200);
-    c.fill();
-    c.strokeStyle = s.zone === "lake" ? "#3f7a3a" : "#7a3f6e"; c.lineWidth = 3;
-    for (let x = 10; x < COLUMN; x += 37) {
-      c.beginPath(); c.moveTo(x, floor + 16);
-      c.quadraticCurveTo(x + 6, floor - 10, x + Math.sin(x) * 6, floor - 26 - (x % 20));
+  private drawRainbow(c: Ctx, y0: number) {
+    c.save(); c.lineWidth = 7; c.globalAlpha = 0.5;
+    ["#ff6b6b", "#ffb347", "#ffe66d", "#7be495", "#5bc8ff", "#a77bff"].forEach((col, i) => {
+      c.strokeStyle = col; c.beginPath(); c.arc(COLUMN / 2, -10, 230 - i * 7, Math.PI, 0); c.stroke();
+    });
+    c.restore();
+    void y0;
+  }
+
+  private drawMoon(c: Ctx, y0: number, ev: string, t: number) {
+    const x = COLUMN * 0.78, y = y0 * 0.45;
+    const g = c.createRadialGradient(x, y, 4, x, y, 60);
+    g.addColorStop(0, ev === "blood_moon" ? "rgba(255,90,110,0.6)" : "rgba(220,225,255,0.5)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    c.fillStyle = g; c.beginPath(); c.arc(x, y, 60, 0, Math.PI * 2); c.fill();
+    c.fillStyle = ev === "blood_moon" ? "#ff5d73" : "#f4f2ff";
+    c.beginPath(); c.arc(x, y, 22, 0, Math.PI * 2); c.fill();
+    if (ev === "meteor") {
+      c.strokeStyle = "rgba(255,240,190,0.9)"; c.lineWidth = 2; c.lineCap = "round";
+      for (let i = 0; i < 4; i++) {
+        const k = (t * 0.5 + i * 0.29) % 1;
+        const mx = COLUMN * (1.2 - k * 1.4), my = y0 * (0.9 - k * 0.55);
+        c.beginPath(); c.moveTo(mx, my); c.lineTo(mx + 26, my - 14); c.stroke();
+      }
+    }
+  }
+
+  private drawRays(c: Ctx, s: SceneState, top: number, left: number, right: number) {
+    if (top > 520) return;
+    c.save();
+    c.globalCompositeOperation = "lighter";
+    // soft god rays
+    for (let i = 0; i < 6; i++) {
+      const x = left + ((i * 131 + s.t * 6) % (right - left + 200)) - 100;
+      const g = c.createLinearGradient(0, 0, 0, 480);
+      g.addColorStop(0, "rgba(255,255,240,0.07)"); g.addColorStop(1, "rgba(255,255,240,0)");
+      c.fillStyle = g;
+      c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 34, 0); c.lineTo(x + 130, 480); c.lineTo(x + 70, 480); c.fill();
+    }
+    // caustics: wobbly light lines just under the surface
+    c.strokeStyle = "rgba(255,255,255,0.06)"; c.lineWidth = 2;
+    for (let row = 0; row < 7; row++) {
+      const y = 18 + row * 26;
+      c.beginPath();
+      for (let x = left; x <= right; x += 10) {
+        const yy = y + Math.sin(x * 0.05 + s.t * 1.6 + row) * 6 + Math.sin(x * 0.11 - s.t * 1.1) * 3;
+        if (x === left) c.moveTo(x, yy); else c.lineTo(x, yy);
+      }
       c.stroke();
     }
+    c.restore();
+  }
+
+  private drawProps(c: Ctx, s: SceneState, layer: 0 | 1, top: number, bottom: number, left: number, right: number) {
+    const par = layer === 0 ? 0.82 : 1; // far layer lags behind the camera: depth
+    const shift = this.camY * (1 - par);
+    c.save();
+    if (layer === 0) { c.globalAlpha = 0.55; c.filter = "blur(1.2px) saturate(0.7)"; }
+    for (const p of this.propsFor(s.zone)) {
+      if (p.layer !== layer) continue;
+      const y = p.y + shift;
+      if (y < top - 50 || y - p.h > bottom + 50) continue;
+      const im = img(p.name);
+      if (!im) continue;
+      const w = (p.h * im.width) / im.height;
+      const sway = Math.sin(s.t * 0.9 + p.y * 0.01) * 0.04;
+      c.save();
+      const px = p.x < 0 ? left - p.x : right - p.x;
+      c.translate(px, y);
+      c.rotate(sway);
+      if (p.flip) c.scale(-1, 1);
+      c.drawImage(im, -w / 2, -p.h, w, p.h);
+      c.restore();
+    }
+    c.restore();
+  }
+
+  /** far schools: smaller, hazier, bluer and slower to scroll = depth */
+  private drawAmbient(c: Ctx, s: SceneState, top: number, bottom: number) {
+    c.save();
+    c.filter = "blur(1.4px) saturate(0.55) brightness(0.9)";
+    for (const a of this.ambientFor(s.zone)) {
+      const par = 0.55 + a.z * 0.4;
+      const y = a.y + this.camY * (1 - par) + Math.sin(s.t * 1.5 + a.phase) * 3;
+      if (y < top - 40 || y > bottom + 40) continue;
+      const im = img(a.name);
+      if (!im) continue;
+      const w = a.size * a.z * SPRITE_SCALE, h = (w * im.height) / im.width;
+      c.globalAlpha = 0.35 + a.z * 0.3;
+      c.save();
+      c.translate(a.x, y);
+      c.scale(a.dir, 1);
+      c.drawImage(im, -w / 2, -h / 2, w, h);
+      c.restore();
+    }
+    c.restore();
+  }
+
+  /** soft dark falloff at the screen sides: frames the play area and grounds the side plants */
+  private drawEdges(c: Ctx, top: number, bottom: number, left: number, right: number) {
+    const y0 = Math.max(0, top);
+    if (bottom <= y0) return;
+    const w = Math.min(90, (right - left) * 0.18);
+    for (const [x0, x1] of [[left, left + w], [right, right - w]]) {
+      const g = c.createLinearGradient(x0, 0, x1, 0);
+      g.addColorStop(0, "rgba(3,20,45,0.45)"); g.addColorStop(1, "rgba(3,20,45,0)");
+      c.fillStyle = g; c.fillRect(Math.min(x0, x1), y0, w, bottom - y0);
+    }
+  }
+
+  /** two floor rows: the far one smaller, hazier and higher on screen gives the seabed perspective */
+  private drawFloor(c: Ctx, s: SceneState, left: number, right: number, far: boolean) {
+    const floor = ZONES[s.zone].floor;
+    if (this.camY + this.view.viewH < floor - 140) return;
+    const im = img(`floor_${s.zone}`);
+    if (!im) return;
+    c.save();
+    const w = far ? 200 : 300, h = (w * im.height) / im.width;
+    const y = far ? floor - 30 + this.camY * 0.12 - (floor - this.view.viewH) * 0.12 : floor + 50 - h * 0.75;
+    if (far) { c.filter = "blur(1.2px) brightness(0.7) saturate(0.6)"; c.globalAlpha = 0.85; }
+    const off = far ? 90 : 0;
+    for (let x = left - ((((left - off) % w) + w) % w) - w; x < right; x += w) c.drawImage(im, x, y, w, h);
+    c.restore();
   }
 
   private drawMarkers(c: Ctx, top: number, bottom: number) {
-    c.fillStyle = "rgba(255,255,255,0.4)";
-    c.font = "bold 10px system-ui, sans-serif";
+    c.save();
+    c.fillStyle = "rgba(255,255,255,0.5)";
+    c.font = "600 10px Fredoka, system-ui, sans-serif";
     c.textAlign = "left";
     for (let y = Math.max(100, Math.ceil(top / 100) * 100); y < bottom; y += 100) {
-      c.fillRect(0, y, 8, 1.5);
-      c.fillText(`${y / 10}m`, 11, y + 4);
+      c.globalAlpha = 0.5;
+      c.fillRect(2, y, 7, 2);
+      c.fillText(`${y / 10}m`, 12, y + 4);
     }
+    c.restore();
   }
 
-  private drawOneFish(c: Ctx, def: FishDef, mut: MutationId | null, x: number, y: number, size: number, dir: number, t: number) {
-    // value glow: rarer fish shine, so the player can see what is worth chasing
+  // ------------------------------------------------------------- fish
+  private drawFishSprite(c: Ctx, def: FishDef, mut: MutationId | null, size: number, t: number, glint: boolean) {
+    const sp = spriteShadowed(def.id, mut);
+    if (!sp) { drawFish(c, def, mut, size, t); return; }
+    const inner = spriteTinted(def.id, mut ?? "giant")!; // plain copy for the glint mask
+    const w = size * SPRITE_SCALE;
+    const iw = sp.width - SHADOW_PAD * 2, ih = sp.height - SHADOW_PAD * 2;
+    const k = w / iw, h = ih * k, pad = SHADOW_PAD * k;
+    c.drawImage(sp, -w / 2 - pad, -h / 2 - pad, w + pad * 2, h + pad * 2);
+    if (glint) drawGlint(c, mut ? spriteTinted(def.id, mut)! : inner, -w / 2, -h / 2, w, h, t * 0.33 + def.value * 0.01, this.view.scale * this.view.dpr);
+  }
+
+  /** a fish in the water: soft value aura, eased facing (card-flip turn), swim wobble */
+  private drawSwimmer(c: Ctx, f: LiveFish, t: number) {
+    const def = f.def, mut = f.mut;
+    let face = this.facing.get(f) ?? f.dir;
+    face += (f.dir - face) * 0.12;
+    this.facing.set(f, face);
+    const y = f.y + Math.sin(f.bob) * 4;
     if (def.rarity !== "common" || mut) {
-      const col = mut ? (mut === "gold" ? "#ffd84a" : mut === "rainbow" ? `hsl(${(t * 120) % 360},100%,65%)` : mut === "ghost" ? "#bdf0ff" : mut === "electric" ? "#6be4ff" : RARITY_COLOR[def.rarity]) : RARITY_COLOR[def.rarity];
-      const r = size * (def.rarity === "rare" && !mut ? 0.7 : 1.05);
-      const g = c.createRadialGradient(x, y, 0, x, y, r);
-      g.addColorStop(0, col); g.addColorStop(1, "rgba(0,0,0,0)");
-      c.globalAlpha = 0.35 + 0.15 * Math.sin(t * 4 + x);
-      c.fillStyle = g;
-      c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
-      c.globalAlpha = 1;
+      const col = mut === "gold" ? "255,210,80" : mut === "rainbow" ? "200,160,255" : mut === "ghost" ? "190,240,255" : mut === "electric" ? "110,230,255" : hexToTriplet(RARITY_COLOR[def.rarity]);
+      const r = f.size * (def.rarity === "rare" && !mut ? 0.75 : 1.05);
+      const g = c.createRadialGradient(f.x, y, 0, f.x, y, r);
+      g.addColorStop(0, `rgba(${col},${0.22 + 0.08 * Math.sin(t * 3 + f.uid)})`); g.addColorStop(1, `rgba(${col},0)`);
+      c.fillStyle = g; c.beginPath(); c.arc(f.x, y, r, 0, Math.PI * 2); c.fill();
     }
     c.save();
-    c.translate(x, y);
-    c.scale(dir, 1);
-    drawFish(c, def, mut, size, t + x * 0.01);
+    c.translate(f.x, y);
+    c.rotate(Math.sin(t * 3 + f.uid) * 0.06);
+    c.scale(face * (1 + Math.sin(t * 6 + f.uid) * 0.02), 1 - Math.sin(t * 6 + f.uid) * 0.02);
+    this.drawFishSprite(c, def, mut, f.size, t + f.uid, def.rarity !== "common" || !!mut);
+    if (mut === "electric") this.sparks(c, f.size, t);
     c.restore();
+  }
+
+  private sparks(c: Ctx, len: number, t: number) {
+    c.strokeStyle = "#fff36b"; c.lineWidth = 1.6;
+    for (let i = 0; i < 3; i++) {
+      const a = t * 7 + i * 2.1, x = Math.cos(a) * len * 0.55, y = Math.sin(a * 1.3) * len * 0.3;
+      c.beginPath(); c.moveTo(x, y); c.lineTo(x + 5, y - 4); c.lineTo(x + 2, y + 1); c.lineTo(x + 7, y - 2); c.stroke();
+    }
   }
 
   private drawDiveFish(c: Ctx, d: Dive, t: number, top: number, bottom: number) {
     for (const f of d.fish) {
       if (f.hooked || f === d.fight?.fish) continue;
-      if (f.y < top - 80 || f.y > bottom + 80) continue;
-      this.drawOneFish(c, f.def, f.mut, f.x, f.y + Math.sin(f.bob) * 4, f.size, f.dir, t);
+      if (f.y < top - 90 || f.y > bottom + 90) continue;
+      this.drawSwimmer(c, f, t);
     }
   }
 
+  // ------------------------------------------------------------- boat, hook
+  private boatPos(t: number) {
+    const im = img("boat");
+    const h = im ? (BOAT_W * im.height) / im.width : 100;
+    const bob = Math.sin(t * 1.8) * 2.2, tilt = Math.sin(t * 1.3) * 0.03;
+    return { x: COLUMN / 2 - 10, y: -h * BOAT_WATERLINE + bob + 6, h, tilt };
+  }
+
+  private rodTip(t: number) {
+    const b = this.boatPos(t);
+    const lx = -BOAT_W / 2 + ROD_TIP.x * BOAT_W, ly = ROD_TIP.y * b.h;
+    return { x: b.x + lx * Math.cos(b.tilt) - ly * Math.sin(b.tilt), y: b.y + lx * Math.sin(b.tilt) + ly * Math.cos(b.tilt) };
+  }
+
   private drawBoat(c: Ctx, s: SceneState) {
-    const x = COLUMN / 2, bob = Math.sin(s.t * 2) * 2;
+    const im = img("boat");
+    const b = this.boatPos(s.t);
+    // soft water shadow under the hull
     c.save();
-    c.translate(x, BOAT_Y + bob);
-    // rod
-    c.strokeStyle = "#5a3b22"; c.lineWidth = 3;
-    c.beginPath(); c.moveTo(-6, -22); c.lineTo(28, -58); c.stroke();
-    // fisher: a round friendly blob with a cap
-    c.fillStyle = "#ffcf9e"; c.beginPath(); c.arc(-14, -34, 9, 0, Math.PI * 2); c.fill();
-    c.fillStyle = "#ff5a4e"; c.beginPath(); c.arc(-14, -37, 9.5, Math.PI, 0); c.fill(); c.fillRect(-14, -38, 14, 3);
-    c.fillStyle = "#111"; c.beginPath(); c.arc(-10, -33, 1.6, 0, Math.PI * 2); c.fill();
-    c.fillStyle = "#3d7bd9"; c.fillRect(-22, -26, 16, 14);
-    // hull
-    c.fillStyle = "#f4f1e8";
-    c.beginPath(); c.moveTo(-44, -14); c.lineTo(40, -14); c.lineTo(28, 6); c.lineTo(-34, 6); c.closePath(); c.fill();
-    c.fillStyle = "#e0573f"; c.fillRect(-40, -9, 76, 5);
+    c.fillStyle = "rgba(0,40,70,0.18)";
+    c.beginPath(); c.ellipse(b.x, 8, BOAT_W * 0.42, 6, 0, 0, Math.PI * 2); c.fill();
+    c.translate(b.x, b.y);
+    c.rotate(b.tilt);
+    if (im) c.drawImage(im, -BOAT_W / 2, 0, BOAT_W, b.h);
+    c.restore();
+    // ripples around the hull
+    c.save();
+    c.strokeStyle = "rgba(255,255,255,0.55)"; c.lineWidth = 1.5;
+    for (let i = 0; i < 2; i++) {
+      const k = (s.t * 0.5 + i * 0.5) % 1;
+      c.globalAlpha = 1 - k;
+      c.beginPath(); c.ellipse(b.x, 6, BOAT_W * (0.45 + k * 0.35), 4 + k * 3, 0, 0, Math.PI * 2); c.stroke();
+    }
     c.restore();
   }
 
   private drawHook(c: Ctx, d: Dive, t: number) {
-    const tipX = COLUMN / 2 + 28, tipY = BOAT_Y - 58;
-    c.strokeStyle = "rgba(255,255,255,0.85)"; c.lineWidth = 1.2;
-    c.beginPath(); c.moveTo(tipX, tipY); c.quadraticCurveTo(tipX, 0, d.hookX, d.hookY - 8); c.stroke();
-    // hooked fish dangle below the hook, newest on top
+    const tip = this.rodTip(t);
+    c.save();
+    c.strokeStyle = "rgba(255,255,255,0.9)"; c.lineWidth = 1.3;
+    c.beginPath(); c.moveTo(tip.x, tip.y); c.quadraticCurveTo(tip.x + 10, 10, d.hookX, d.hookY - 16); c.stroke();
+    // hooked fish dangle under the hook
     d.hooked.forEach((f: LiveFish, i: number) => {
-      const sway = Math.sin(t * 5 + i) * 6;
       c.save();
-      c.translate(d.hookX + sway, d.hookY + 14 + i * 10);
-      c.rotate(Math.PI / 2 * (d.phase === "ascend" ? 1 : -1) * 0.9);
-      drawFish(c, f.def, f.mut, f.size * 0.9, t);
+      c.translate(d.hookX + Math.sin(t * 5 + i) * 5, d.hookY + 18 + i * 9);
+      c.rotate(Math.PI / 2 + Math.sin(t * 6 + i) * 0.15);
+      this.drawFishSprite(c, f.def, f.mut, f.size * 0.85, t, false);
       c.restore();
     });
-    // the hook
-    c.strokeStyle = "#e8eef2"; c.lineWidth = 2.5; c.lineCap = "round";
-    c.beginPath(); c.moveTo(d.hookX, d.hookY - 10); c.lineTo(d.hookX, d.hookY + 4); c.arc(d.hookX - 5, d.hookY + 4, 5, 0, Math.PI, false); c.stroke();
-    c.fillStyle = "#ff4d4d"; c.beginPath(); c.arc(d.hookX, d.hookY - 12, 4, 0, Math.PI * 2); c.fill();
+    // cute lure: red-white bobber weight + silver hook
+    const lx = d.hookX, ly = d.hookY - 14;
+    const g = c.createRadialGradient(lx - 2, ly - 3, 1, lx, ly, 7);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(0.35, "#ff5a5a"); g.addColorStop(1, "#b81e3a");
+    c.fillStyle = g; c.strokeStyle = "#2a1b3d"; c.lineWidth = 1.6;
+    c.beginPath(); c.arc(lx, ly, 6.5, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.strokeStyle = "#2a1b3d"; c.lineWidth = 4; c.lineCap = "round";
+    c.beginPath(); c.moveTo(lx, ly + 6); c.lineTo(lx, ly + 16); c.arc(lx - 5, ly + 16, 5, 0, Math.PI, false); c.stroke();
+    c.strokeStyle = "#e9f2f7"; c.lineWidth = 2.2;
+    c.beginPath(); c.moveTo(lx, ly + 6); c.lineTo(lx, ly + 16); c.arc(lx - 5, ly + 16, 5, 0, Math.PI, false); c.stroke();
+    c.restore();
   }
 
   private drawParticles(c: Ctx) {
     for (const p of this.parts) {
       const k = 1 - p.life / p.max;
-      c.globalAlpha = Math.max(0, k);
       if (p.kind === "ring") {
-        c.strokeStyle = p.color; c.lineWidth = 3;
-        c.beginPath(); c.arc(p.x, p.y, p.size + (1 - k) * 40, 0, Math.PI * 2); c.stroke();
+        c.globalAlpha = Math.max(0, k); c.strokeStyle = p.color; c.lineWidth = 3;
+        c.beginPath(); c.arc(p.x, p.y, p.size + (1 - k) * 42, 0, Math.PI * 2); c.stroke();
       } else if (p.kind === "bubble") {
-        c.globalAlpha = 1; c.strokeStyle = p.color; c.lineWidth = 1;
+        c.globalAlpha = 0.8;
+        c.strokeStyle = p.color; c.lineWidth = 1;
         c.beginPath(); c.arc(p.x, p.y, p.size, 0, Math.PI * 2); c.stroke();
+        c.fillStyle = "rgba(255,255,255,0.6)";
+        c.beginPath(); c.arc(p.x - p.size * 0.35, p.y - p.size * 0.35, p.size * 0.3, 0, Math.PI * 2); c.fill();
+      } else if (p.kind === "mote") {
+        c.globalAlpha = Math.sin((p.life / p.max) * Math.PI) * 0.35;
+        c.fillStyle = p.color; c.fillRect(p.x, p.y, p.size, p.size);
+      } else if (p.kind === "star") {
+        c.globalAlpha = Math.max(0, k); c.fillStyle = p.color;
+        star(c, p.x, p.y, p.size * 1.6 * k + 1, p.life * 6);
       } else {
-        c.fillStyle = p.color;
+        c.globalAlpha = Math.max(0, k); c.fillStyle = p.color;
         c.beginPath(); c.arc(p.x, p.y, p.size * k + 0.5, 0, Math.PI * 2); c.fill();
       }
     }
     c.globalAlpha = 1;
   }
 
-  private drawHint(c: Ctx, t: number) {
-    // a pulsing hand: "tap the water" without a single word
-    const k = (t % 1.2) / 1.2;
-    const x = COLUMN / 2, y = 120;
-    c.strokeStyle = "rgba(255,255,255,0.8)"; c.lineWidth = 3;
-    c.globalAlpha = 1 - k;
-    c.beginPath(); c.arc(x, y, 10 + k * 26, 0, Math.PI * 2); c.stroke();
-    c.globalAlpha = 1;
-    c.font = "38px system-ui, sans-serif"; c.textAlign = "center";
-    c.fillText("👆", x + 6, y + 34 - Math.sin(k * Math.PI) * 8);
-  }
-
-  /** fight UI in screen space: a tall meter on the right, the fish fighting in the middle */
-  private drawFight(c: Ctx, d: Dive, t: number) {
-    const fg = d.fight!, v = this.view;
-    const H = Math.min(v.h * 0.55, 380), W = 34;
-    const x = v.ox + COLUMN * v.scale - W - 18, y = (v.h - H) / 2;
+  // ------------------------------------------------------------- deep water darkness
+  private drawDarkness(s: SceneState) {
+    const v = this.view;
+    const mid = this.camY + v.viewH * 0.5;
+    const k = Math.max(0, Math.min(1, (mid - 500) / (ZONES[s.zone].floor - 500)));
+    if (k <= 0.02) return;
+    const f = this.fog.getContext("2d")!;
+    const fw = this.fog.width, fh = this.fog.height, sc = 0.5;
+    f.globalCompositeOperation = "source-over";
+    f.clearRect(0, 0, fw, fh);
+    f.fillStyle = `rgba(2,8,22,${0.78 * k})`;
+    f.fillRect(0, 0, fw, fh);
+    f.globalCompositeOperation = "destination-out";
+    const hole = (wx: number, wy: number, r: number, strength: number) => {
+      const x = (v.ox + wx * v.scale) * sc, y = (wy - this.camY) * v.scale * sc, rr = r * v.scale * sc;
+      if (y < -rr || y > fh + rr) return;
+      const g = f.createRadialGradient(x, y, 0, x, y, rr);
+      g.addColorStop(0, `rgba(0,0,0,${strength})`); g.addColorStop(0.55, `rgba(0,0,0,${strength * 0.6})`); g.addColorStop(1, "rgba(0,0,0,0)");
+      f.fillStyle = g; f.beginPath(); f.arc(x, y, rr, 0, Math.PI * 2); f.fill();
+    };
+    const d = s.dive;
+    if (d && s.mode === "dive") {
+      hole(d.hookX, d.hookY, 150, 1);
+      // a lantern beam pointing the way the hook travels
+      const x = (v.ox + d.hookX * v.scale) * sc, y = (d.hookY - this.camY) * v.scale * sc;
+      const dirY = d.phase === "ascend" ? -1 : 1, len = 260 * v.scale * sc, spread = 0.42;
+      const g = f.createLinearGradient(x, y, x, y + dirY * len);
+      g.addColorStop(0, "rgba(0,0,0,0.85)"); g.addColorStop(1, "rgba(0,0,0,0)");
+      f.fillStyle = g;
+      f.beginPath(); f.moveTo(x, y);
+      f.lineTo(x - len * spread, y + dirY * len); f.lineTo(x + len * spread, y + dirY * len); f.closePath(); f.fill();
+    }
+    if (d) for (const fish of d.fish) {
+      if (fish.hooked) continue;
+      if (LUMINOUS.has(fish.def.id) || fish.mut === "electric" || fish.mut === "ghost") hole(fish.x, fish.y, fish.size * 1.1, 0.85);
+      else if (fish.def.rarity !== "common" || fish.mut) hole(fish.x, fish.y, fish.size * 0.8, 0.45);
+    }
+    const c = this.ctx;
     c.save();
-    c.fillStyle = "rgba(0,0,0,0.25)"; c.fillRect(0, 0, v.w, v.h);
-    // meter
-    c.fillStyle = "rgba(10,20,35,0.85)"; roundRect(c, x - 4, y - 4, W + 8, H + 8, 12); c.fill();
-    const zy = y + (1 - fg.zone - fg.zoneHalf) * H, zh = fg.zoneHalf * 2 * H;
-    const inZone = Math.abs(fg.marker - fg.zone) <= fg.zoneHalf;
-    c.fillStyle = inZone ? "#5ef08a" : "#3fbf68"; roundRect(c, x, zy, W, zh, 8); c.fill();
-    const my = y + (1 - fg.marker) * H;
-    c.fillStyle = "#ffffff"; roundRect(c, x - 6, my - 4, W + 12, 8, 4); c.fill();
-    // progress ring around the fish
-    const cx = v.ox + COLUMN * v.scale * 0.42, cy = v.h * 0.45;
-    const R = Math.min(90, v.w * 0.18);
-    c.lineWidth = 10; c.strokeStyle = "rgba(255,255,255,0.18)";
-    c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2); c.stroke();
-    c.strokeStyle = RARITY_COLOR[fg.fish.def.rarity];
-    c.beginPath(); c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, fg.progress)); c.stroke();
-    c.translate(cx + Math.sin(t * 13) * (inZone ? 2 : 8), cy);
-    c.rotate(Math.sin(t * 6) * 0.25);
-    drawFish(c, fg.fish.def, fg.fish.mut, Math.min(R * 1.5, fg.fish.size * 1.6), t);
+    c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+    c.drawImage(this.fog, 0, 0, fw, fh, 0, 0, v.w, v.h);
     c.restore();
   }
+
+  // ------------------------------------------------------------- screen-space overlays
+  private drawHint(t: number) {
+    const c = this.ctx, v = this.view;
+    const k = (t % 1.2) / 1.2;
+    const x = v.ox + (COLUMN / 2) * v.scale, y = (150 - this.camY) * v.scale;
+    c.save();
+    c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+    c.strokeStyle = "rgba(255,255,255,0.9)"; c.lineWidth = 4;
+    c.globalAlpha = 1 - k;
+    c.beginPath(); c.arc(x, y, 12 + k * 34, 0, Math.PI * 2); c.stroke();
+    c.globalAlpha = 1;
+    c.font = "46px system-ui, sans-serif"; c.textAlign = "center";
+    c.fillText("👆", x + 8, y + 44 - Math.sin(k * Math.PI) * 10);
+    c.restore();
+  }
+
+  private drawFight(d: Dive, t: number) {
+    const c = this.ctx, v = this.view, fg = d.fight!;
+    const H = Math.min(v.h * 0.55, 380), W = 38;
+    const x = v.ox + COLUMN * v.scale - W - 18, y = (v.h - H) / 2;
+    const inZone = Math.abs(fg.marker - fg.zone) <= fg.zoneHalf;
+    c.save();
+    c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+    const vg = c.createRadialGradient(v.w / 2, v.h / 2, Math.min(v.w, v.h) * 0.2, v.w / 2, v.h / 2, Math.max(v.w, v.h) * 0.7);
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,20,0.55)");
+    c.fillStyle = vg; c.fillRect(0, 0, v.w, v.h);
+    // meter: a chunky rounded tube
+    c.fillStyle = "#1b2b4a"; c.strokeStyle = "#0d1630"; c.lineWidth = 4;
+    roundRect(c, x - 5, y - 5, W + 10, H + 10, 18); c.fill(); c.stroke();
+    const zy = y + (1 - fg.zone - fg.zoneHalf) * H, zh = fg.zoneHalf * 2 * H;
+    const zg = c.createLinearGradient(x, 0, x + W, 0);
+    zg.addColorStop(0, inZone ? "#7dffa8" : "#4cd17a"); zg.addColorStop(1, inZone ? "#3fdc7c" : "#2fa45d");
+    c.fillStyle = zg; roundRect(c, x, zy, W, zh, 12); c.fill();
+    c.fillStyle = "rgba(255,255,255,0.35)"; roundRect(c, x + 5, zy + 4, 7, Math.max(0, zh - 8), 4); c.fill();
+    const my = y + (1 - fg.marker) * H;
+    c.fillStyle = "#ffffff"; c.strokeStyle = "#0d1630"; c.lineWidth = 3;
+    roundRect(c, x - 9, my - 6, W + 18, 12, 6); c.fill(); c.stroke();
+    // progress ring around the fighting fish
+    const cx = v.ox + COLUMN * v.scale * 0.42, cy = v.h * 0.45, R = Math.min(96, v.w * 0.2);
+    c.lineCap = "round";
+    c.lineWidth = 12; c.strokeStyle = "rgba(255,255,255,0.18)";
+    c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2); c.stroke();
+    c.strokeStyle = RARITY_COLOR[fg.fish.def.rarity];
+    c.beginPath(); c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.001, fg.progress)); c.stroke();
+    c.translate(cx + Math.sin(t * 13) * (inZone ? 2 : 9), cy);
+    c.rotate(Math.sin(t * 6) * 0.25);
+    const size = Math.min(R * 1.25, fg.fish.size * 1.5) / SPRITE_SCALE * 1.2;
+    this.drawFishSprite(c, fg.fish.def, fg.fish.mut, size, t, true);
+    c.restore();
+  }
+}
+
+function hexToTriplet(h: string) { const n = parseInt(h.slice(1), 16); return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`; }
+
+function star(c: Ctx, x: number, y: number, r: number, rot: number) {
+  c.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = rot + (i * Math.PI) / 4, rr = i % 2 ? r * 0.4 : r;
+    c.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  c.closePath(); c.fill();
 }
 
 export function roundRect(c: Ctx, x: number, y: number, w: number, h: number, r: number) {

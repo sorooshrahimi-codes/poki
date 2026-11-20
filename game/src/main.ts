@@ -5,9 +5,13 @@ import type { Catch, UpgradeId, ZoneId } from "./core/types.ts";
 import { FISH, FISH_BY_ID } from "./data/fish.ts";
 import { RARITY_COLOR, RARITY_ORDER, ZONES, ZONE_ORDER } from "./data/world.ts";
 import { LANGS, LANG_LABEL, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tZone } from "./i18n.ts";
-import { setDucked, setMuted, sfx, unlockAudio } from "./platform/audio.ts";
+import { setDucked, setMusicMood, setMuted, sfx, unlockAudio } from "./platform/audio.ts";
 import { commercialBreak, gameplayStart, gameplayStop, initPoki, isAdPlaying, loadingFinished, rewardedBreak } from "./platform/poki.ts";
 import { loadSave, writeSave } from "./platform/storage.ts";
+import "@fontsource/fredoka/latin-500.css";
+import "@fontsource/fredoka/latin-600.css";
+import "@fontsource/fredoka/latin-700.css";
+import { artUrl, img, loadAssets, spriteTinted } from "./render/assets.ts";
 import { drawFish } from "./render/fish.ts";
 import { Renderer, type SceneState } from "./render/scene.ts";
 
@@ -94,6 +98,7 @@ function handleFx(d: Dive) {
       sfx.reveal(fx.fish.def.rarity);
       renderer.burst(d.hookX, d.hookY, RARITY_COLOR[fx.fish.def.rarity], 40, 260);
       renderer.shakeIt(10);
+      renderer.flashIt(1);
     } else if (fx.kind === "snap") {
       sfx.snap();
       renderer.shakeIt(12);
@@ -149,13 +154,24 @@ function fishThumb(id: string, mut: Catch["mut"], w: number, h: number, silhouet
   const c = cv.getContext("2d")!;
   c.scale(dpr, dpr);
   const def = FISH_BY_ID[id];
-  c.translate(w / 2, h / 2);
-  const len = Math.min(w * 0.78, (h * 0.8) / Math.max(0.35, def.look.aspect));
-  drawFish(c, def, mut, len, 0.3);
+  const sp = mut ? null : img(id);
+  if (sp) {
+    const k = Math.min((w * 0.92) / sp.width, (h * 0.92) / sp.height);
+    c.drawImage(sp, (w - sp.width * k) / 2, (h - sp.height * k) / 2, sp.width * k, sp.height * k);
+  } else if (mut && img(id)) {
+    const tint = tintedThumb(id, mut);
+    const k = Math.min((w * 0.92) / tint.width, (h * 0.92) / tint.height);
+    c.drawImage(tint, (w - tint.width * k) / 2, (h - tint.height * k) / 2, tint.width * k, tint.height * k);
+  } else {
+    c.translate(w / 2, h / 2);
+    const len = Math.min(w * 0.78, (h * 0.8) / Math.max(0.35, def.look.aspect));
+    drawFish(c, def, mut, len, 0.3);
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
   if (silhouette) {
     c.globalCompositeOperation = "source-atop";
-    c.fillStyle = "#0a1a2a";
-    c.fillRect(-w, -h, w * 2, h * 2);
+    c.fillStyle = "#123049";
+    c.fillRect(0, 0, w, h);
   }
   return cv;
 }
@@ -178,7 +194,7 @@ function showReveal(list: Catch[]) {
     card.insertAdjacentHTML("beforeend", `<div class="cn">${fishName(def)}</div><div class="cr">${tRarity(def.rarity)}</div><div class="cv">🪙 ${c.value}</div>` +
       (c.mut ? `<div class="cm">${MUT_ICON[c.mut]}</div>` : "") + (isNew ? `<div class="newb">${t("new")}</div>` : ""));
     box.appendChild(card);
-    setTimeout(() => sfx.reveal(def.rarity), i * 180);
+    setTimeout(() => { sfx.reveal(def.rarity); if (isNew) sfx.newFish(); }, i * 180);
     total += c.value;
   });
   $("totalN").textContent = String(total);
@@ -196,9 +212,11 @@ function showSnap(id: string, mut: Catch["mut"], retried: boolean) {
   const cv = $<HTMLCanvasElement>("snapFish");
   const c = cv.getContext("2d")!;
   c.clearRect(0, 0, cv.width, cv.height);
-  c.save(); c.translate(100, 55);
-  drawFish(c, FISH_BY_ID[id], mut, 150, 0);
-  c.restore();
+  const sp = mut ? tintedThumb(id, mut) : img(id);
+  if (sp) {
+    const k = Math.min(180 / sp.width, 100 / sp.height);
+    c.drawImage(sp, 100 - (sp.width * k) / 2, 55 - (sp.height * k) / 2, sp.width * k, sp.height * k);
+  } else { c.save(); c.translate(100, 55); drawFish(c, FISH_BY_ID[id], mut, 150, 0); c.restore(); }
   $("snap").classList.remove("hidden");
 }
 
@@ -302,7 +320,7 @@ function updateUi() {
     b.className = "btn up" + (can ? " can" : "");
     b.disabled = cost === null;
     const lvl = id === "line" ? `${(400 + 120 * save.upgrades.line) / 10}m` : id === "capacity" ? `×${capacity(save.upgrades)}` : `+${save.upgrades.luck * 12}%`;
-    b.innerHTML = `<span class="ui">${UPGRADES[id].icon}</span><span class="ul">${tUpgrade(id)} ${lvl}</span><span class="uc">${cost === null ? t("max") : "🪙" + cost.toLocaleString()}</span>`;
+    b.innerHTML = `<span class="ui"><img src="${artUrl(UP_ICON[id])}" alt="" onerror="this.replaceWith('${UPGRADES[id].icon}')"></span><span class="ul">${tUpgrade(id)} ${lvl}</span><span class="uc">${cost === null ? t("max") : "🪙" + cost.toLocaleString()}</span>`;
     b.onclick = () => buy(id);
     ups.appendChild(b);
   }
@@ -348,6 +366,7 @@ function updateEvent(now: number) {
 
 // ------------------------------------------------------------------ main loop
 let last = performance.now();
+let reelTick = 0;
 let uiTick = 0;
 function frame(now: number) {
   const dt = Math.min(0.05, (now - last) / 1000);
@@ -360,6 +379,8 @@ function frame(now: number) {
       const ctx = { upgrades: save.upgrades, event: scene.event, night: false, rng: Math.random };
       stepDive(d, dt, input, ctx);
       handleFx(d);
+      reelTick -= dt;
+      if (d.phase === "ascend" && reelTick <= 0) { reelTick = 0.11; sfx.reel(); }
       if (d.phase === "done") finishDive(d);
       $("depthN").textContent = `${Math.round(d.hookY / 10)}m`;
       $("slots").textContent = "●".repeat(d.hooked.length) + "○".repeat(Math.max(0, d.capacity - d.hooked.length));
@@ -367,6 +388,7 @@ function frame(now: number) {
       if (d.phase === "fight") $("reelHint").textContent = "👇 " + t("reel");
     } else $("reelHint").classList.add("hidden");
     renderer.update(dt, scene);
+    setMusicMood(scene.zone, scene.dive && scene.mode === "dive" ? scene.dive.hookY : 0, !!scene.event);
     save.playMs += dt * 1000;
   }
   uiTick -= dt;
@@ -376,6 +398,11 @@ function frame(now: number) {
 }
 
 // ------------------------------------------------------------------ wiring
+const UP_ICON: Record<UpgradeId, string> = { line: "i_line", capacity: "i_hooks", luck: "i_luck" };
+function tintedThumb(id: string, mut: NonNullable<Catch["mut"]>) {
+  return spriteTinted(id, mut) ?? (img(id) as unknown as HTMLCanvasElement);
+}
+document.querySelectorAll<HTMLButtonElement>("#ui button").forEach((b) => b.addEventListener("click", () => sfx.tap()));
 $("collectBtn").onclick = () => void collect(false);
 $("doubleBtn").onclick = () => void collect(true);
 $("retryBtn").onclick = () => void snapChoice(true);
@@ -393,7 +420,17 @@ window.addEventListener("resize", () => renderer.resize());
 document.addEventListener("visibilitychange", () => { if (document.hidden && scene.mode === "dive") togglePause(true); writeSave(save); });
 setInterval(() => writeSave(save), 10_000);
 
-void initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(false) }).then(() => loadingFinished());
+const bar = $("loadBar");
+Promise.all([
+  initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(false) }),
+  loadAssets((k) => { bar.style.width = `${Math.round(k * 100)}%`; }),
+  document.fonts?.ready,
+]).then(() => {
+  loadingFinished();
+  $("loading").classList.add("gone");
+  $("coinIco").innerHTML = `<img src="${artUrl("i_coin")}" alt="">`;
+  updateUi();
+});
 updateUi();
 requestAnimationFrame(frame);
 
