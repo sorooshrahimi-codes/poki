@@ -389,36 +389,17 @@ export class Renderer {
   /** depth above water: two cloud layers drifting at different speeds, far birds and a horizon haze */
   private drawSkyLayers(c: Ctx, s: SceneState, y0: number, left: number, right: number) {
     const w = right - left, t = s.t;
-    const horizon = -6;
-    for (const [layer, speed, alpha, scale, yk] of [[0, 4, 0.35, 0.7, 0.55], [1, 11, 0.55, 1, 0.75]] as const) {
-      for (let i = 0; i < 4; i++) {
-        const span = w + 260;
-        const x = left - 130 + ((((i * 211 + layer * 97) + t * speed) % span) + span) % span;
-        const y = y0 * (yk - i * 0.07) + Math.sin(i * 1.7) * 10;
-        const r = (26 + (i % 3) * 10) * scale;
-        c.fillStyle = `rgba(255,255,255,${alpha})`;
-        c.beginPath();
-        c.ellipse(x, y, r * 1.6, r * 0.55, 0, 0, Math.PI * 2);
-        c.ellipse(x - r * 0.7, y + 2, r * 0.8, r * 0.45, 0, 0, Math.PI * 2);
-        c.ellipse(x + r * 0.5, y - r * 0.25, r * 0.9, r * 0.55, 0, 0, Math.PI * 2);
-        c.fill();
-      }
-    }
     // far birds: tiny gliding Vs
     if (s.zone !== "volcano") {
       c.strokeStyle = "rgba(40,60,90,0.55)"; c.lineWidth = 1.6; c.lineCap = "round";
       for (let i = 0; i < 3; i++) {
         const span = w + 120;
         const x = left - 60 + ((i * 157 + t * (14 + i * 3)) % span);
-        const y = y0 * (0.45 - i * 0.06) + Math.sin(t * 0.7 + i) * 6;
+        const y = y0 * (0.82 - i * 0.05) + Math.sin(t * 0.7 + i) * 4; // high in the open sky, above the treeline
         const f = Math.sin(t * 7 + i * 2) * 3;
         c.beginPath(); c.moveTo(x - 6, y - f); c.lineTo(x, y); c.lineTo(x + 6, y - f); c.stroke();
       }
     }
-    // horizon haze: far things fade into the sky (atmospheric perspective)
-    const hz = c.createLinearGradient(0, horizon - 70, 0, horizon);
-    hz.addColorStop(0, "rgba(255,255,255,0)"); hz.addColorStop(1, s.zone === "volcano" ? "rgba(255,170,120,0.28)" : "rgba(230,245,255,0.3)");
-    c.fillStyle = hz; c.fillRect(left, horizon - 70, w, 70);
   }
 
   /** depth under water: three layers of rocky walls along the sides, farther ones slower and hazier */
@@ -481,16 +462,16 @@ export class Renderer {
     c.save();
     c.globalCompositeOperation = "lighter";
     // soft god rays
-    for (let i = 0; i < 6; i++) {
-      const x = left + ((i * 131 + s.t * 6) % (right - left + 200)) - 100;
-      const g = c.createLinearGradient(0, 0, 0, 480);
-      g.addColorStop(0, "rgba(255,255,240,0.07)"); g.addColorStop(1, "rgba(255,255,240,0)");
+    for (let i = 0; i < 4; i++) {
+      const x = left + ((i * 173 + s.t * 5) % (right - left + 200)) - 100;
+      const g = c.createLinearGradient(0, 0, 0, 380);
+      g.addColorStop(0, "rgba(255,255,240,0.03)"); g.addColorStop(1, "rgba(255,255,240,0)");
       c.fillStyle = g;
-      c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 34, 0); c.lineTo(x + 130, 480); c.lineTo(x + 70, 480); c.fill();
+      c.beginPath(); c.moveTo(x, 0); c.lineTo(x + 34, 0); c.lineTo(x + 110, 380); c.lineTo(x + 60, 380); c.fill();
     }
     // caustics: wobbly light lines just under the surface
-    c.strokeStyle = "rgba(255,255,255,0.06)"; c.lineWidth = 2;
-    for (let row = 0; row < 7; row++) {
+    c.strokeStyle = "rgba(255,255,255,0.04)"; c.lineWidth = 2;
+    for (let row = 0; row < 4; row++) {
       const y = 18 + row * 26;
       c.beginPath();
       for (let x = left; x <= right; x += 10) {
@@ -585,8 +566,8 @@ export class Renderer {
     for (let i = 0; i < 6; i++) {
       const bx = left + ((i * 173 + s.t * (8 + i * 3)) % (right - left + 200)) - 100;
       const by = top + ((i * 211 - s.t * (22 + i * 6)) % (bottom - top + 200) + (bottom - top + 200)) % (bottom - top + 200) - 100;
-      if (by < 0) continue;
-      const r = 14 + (i % 3) * 9;
+      const r = 8 + (i % 3) * 5;
+      if (by < r + 40) continue; // never above the surface
       const g = c.createRadialGradient(bx - r * 0.3, by - r * 0.3, 1, bx, by, r);
       g.addColorStop(0, "rgba(255,255,255,0.28)"); g.addColorStop(0.7, "rgba(255,255,255,0.06)"); g.addColorStop(1, "rgba(255,255,255,0.12)");
       c.fillStyle = g; c.beginPath(); c.arc(bx, by, r, 0, Math.PI * 2); c.fill();
