@@ -63,7 +63,7 @@ window.addEventListener("keydown", (e) => {
   if (e.repeat) return;
   keys.add(e.key.toLowerCase());
   if ((e.key === " " || e.key === "Enter") && scene.mode === "dock" && !anyPanelOpen()) void cast();
-  if ((e.key === " " || e.key === "Enter") && scene.mode === "reveal") void collect(false);
+  if ((e.key === " " || e.key === "Enter") && scene.mode === "reveal" && !$("reveal").classList.contains("hidden")) void collect(false);
 });
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 window.addEventListener("blur", () => { keys.clear(); pointerDown = false; });
@@ -175,7 +175,8 @@ function finishDive(d: Dive) {
 }
 
 async function collect(double: boolean) {
-  if (busy || scene.mode !== "reveal") return;
+  if (scene.mode !== "reveal") { $("reveal").classList.add("hidden"); return; } // never leave a stray panel stuck
+  if (busy || $("reveal").classList.contains("hidden")) return;
   if (double) {
     busy = true;
     const ok = await rewardedBreak();
@@ -235,6 +236,7 @@ function fishThumb(id: string, mut: Catch["mut"], w: number, h: number, silhouet
 }
 
 function showReveal(list: Catch[]) {
+  if (scene.mode !== "reveal") return;
   const box = $("cards");
   box.innerHTML = "";
   const order = [...list].sort((a, b) => RARITY_ORDER.indexOf(FISH_BY_ID[a.fish].rarity) - RARITY_ORDER.indexOf(FISH_BY_ID[b.fish].rarity));
@@ -277,7 +279,16 @@ function showLegend(c: Catch, done: () => void) {
   sfx.reveal(def.rarity);
   setTimeout(() => sfx.event(), 350);
   let closed = false;
-  const close = () => { if (closed) return; closed = true; el.classList.add("hidden"); done(); };
+  const dive = save.dives;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    el.classList.add("hidden");
+    window.removeEventListener("keydown", onKey, true);
+    if (scene.mode === "reveal" && save.dives === dive) done();
+  };
+  const onKey = (e: KeyboardEvent) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); e.stopImmediatePropagation(); close(); } };
+  window.addEventListener("keydown", onKey, true);
   el.onclick = close;
   setTimeout(close, 2600);
 }
