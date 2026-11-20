@@ -196,5 +196,5 @@ export function setRain(level: number) {
     rainGain = ctx.createGain(); rainGain.gain.value = 0;
     src.connect(f).connect(rainGain).connect(master); src.start();
   }
-  rainGain.gain.setTargetAtTime(level * 0.16, ctx.currentTime, 0.8);
+  rainGain.gain.setTargetAtTime(level * 0.1, ctx.currentTime, level < 0.2 ? 2.5 : 0.8);
 }

@@ -1,4 +1,5 @@
 import { EYES } from "../data/eyes.ts";
+import { drawHarbor, type HarborView } from "./harbor.ts";
 import { COLUMN, CRAB_TAPS, CRAB_TIME, FIGHT_GRACE, FOLLOW_WIN, ICE_HOLE, pufferInflated, VENT_ERUPT, VENT_WARN, ventCycle, type Dive, type LiveFish } from "../core/dive.ts";
 import type { ActiveEvent } from "../core/events.ts";
 import type { WeatherId } from "../core/weather.ts";
@@ -41,6 +42,10 @@ export interface SceneState {
   outfitId: string | null;
   paint: Tint | null;
   paintId: string | null;
+  /** the harbor next to the boat: what is built and what to show */
+  harbor?: HarborView | null;
+  /** after a line upgrade: the old bottom, marked in the next dive until the hook passes it */
+  newDepth?: number | null;
   /** boat extra (sail, flag, motor, lantern, duck) */
   deco: string | null;
   /** seconds since the pose changed: drives the squash-and-stretch pop */
@@ -279,6 +284,7 @@ export class Renderer {
 
     this.drawBackdrop(c, s, top, bottom, left, right);
     this.drawDepthLayers(c, s, top, bottom, left, right);
+    if (s.harbor && top < 80) drawHarbor(c, s.harbor, s.t, left, right);
     this.drawFloor(c, s, left, right, true);
     this.drawProps(c, s, 0, top, bottom, left, right);
     this.drawAmbient(c, s, top, bottom);
@@ -287,6 +293,7 @@ export class Renderer {
     this.drawProps(c, s, 1, top, bottom, left, right);
     this.drawEdges(c, top, bottom, left, right);
     this.drawMarkers(c, top, bottom);
+    if (s.newDepth && s.dive) this.drawNewDepth(c, s.newDepth, s.t, left, right);
     if (ZONES[s.zone].ice) this.drawIceSheet(c, s, left, right);
     if (s.dive) this.drawSlabs(c, s.dive, s.t, top, bottom);
     if (s.dive) this.drawCurrents(c, s.dive, s.t, top, bottom, left, right);
@@ -646,6 +653,23 @@ export class Renderer {
     if (far) { c.filter = "blur(1.2px) brightness(0.7) saturate(0.6)"; c.globalAlpha = 0.85; }
     const off = far ? 90 : 0;
     for (let x = left - ((((left - off) % w) + w) % w) - w; x < right; x += w) c.drawImage(im, x, y, w, h);
+    c.restore();
+  }
+
+  /** a glowing dashed line where your old line ended: everything below it is new water */
+  private drawNewDepth(c: Ctx, y: number, t: number, left: number, right: number) {
+    c.save();
+    const g = c.createLinearGradient(0, y - 30, 0, y + 30);
+    g.addColorStop(0, "rgba(255,224,102,0)"); g.addColorStop(0.5, `rgba(255,224,102,${0.18 + 0.08 * Math.sin(t * 4)})`); g.addColorStop(1, "rgba(255,224,102,0)");
+    c.fillStyle = g; c.fillRect(left, y - 30, right - left, 60);
+    c.setLineDash([14, 10]); c.lineDashOffset = -t * 30; c.lineWidth = 3; c.strokeStyle = "rgba(255,230,120,0.9)";
+    c.beginPath(); c.moveTo(left, y); c.lineTo(right, y); c.stroke();
+    c.setLineDash([]);
+    c.font = "bold 15px Fredoka, system-ui"; c.textAlign = "center"; c.textBaseline = "middle";
+    const label = "⬇ NEW ⬇", w = c.measureText(label).width + 20, x = (left + right) / 2;
+    c.fillStyle = "#ffe066"; c.strokeStyle = "#16345e"; c.lineWidth = 3;
+    c.beginPath(); c.roundRect(x - w / 2, y - 13, w, 26, 13); c.fill(); c.stroke();
+    c.fillStyle = "#16345e"; c.fillText(label, x, y + 1);
     c.restore();
   }
 

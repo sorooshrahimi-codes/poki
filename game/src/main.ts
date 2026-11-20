@@ -7,6 +7,8 @@ import { FISH, FISH_BY_ID } from "./data/fish.ts";
 import { COSMETICS, TRY_DIVES, aquariumEarned, aquariumFish, aquariumRate, milestoneMet, type CosmeticDef } from "./data/cosmetics.ts";
 import { MERGE_COUNT, ORDER_SLOTS, canFill, fill, keep, matching, merge, newOrder, tankPower, type Order } from "./core/tank.ts";
 import { MISSIONS } from "./data/missions.ts";
+import { HARBOR, bestCatches, harborBuilt, harborNext, statueFish, tankFish, type HarborId } from "./data/harbor.ts";
+import type { HarborView } from "./render/harbor.ts";
 import { CREW, TRIPS, WHEEL, WHEEL_AD_SPINS, WHEEL_FREE_MS, spinWheel, tripCoins, wheelCoins, type WheelPrize } from "./core/extras.ts";
 import { EYES } from "./data/eyes.ts";
 import { SPOT_BY_ID, kindsCaught, spotsOf, type SpotDef } from "./data/spots.ts";
@@ -170,6 +172,7 @@ function handleFx(d: Dive) {
       void 0;
       save.stats.fightsWon++;
       sfx.reveal(fx.fish.def.rarity);
+      harborCheer = 1;
       renderer.burst(d.hookX, d.hookY, RARITY_COLOR[fx.fish.def.rarity], 40, 260);
       renderer.shakeIt(10);
       renderer.flashIt(1);
@@ -820,6 +823,36 @@ function addEyelids(port: HTMLElement, name: string) {
 }
 addEyelids($("guidePort"), "npc_captain");
 
+// ------------------------------------------------------------------ the harbor grows with you
+let harborCheer = 0, harborFresh: HarborId | null = null, harborFreshT = 0, harborCheck = 0;
+const harborView: HarborView = { built: new Set(), best: [], tank: [], statue: null, daylight: 1, cheer: 0, fresh: null, freshT: 0 };
+scene.harbor = harborView;
+function updateHarbor(dt: number) {
+  harborCheer = Math.max(0, harborCheer - dt * 0.6);
+  harborFreshT += dt;
+  harborView.cheer = harborCheer; harborView.fresh = harborFresh; harborView.freshT = harborFreshT; harborView.daylight = scene.daylight;
+  // rebuilding the lists is cheap but needless every frame
+  harborCheck -= dt;
+  if (harborCheck > 0) return;
+  harborCheck = 0.5;
+  const built = harborBuilt(save);
+  for (const id of built) {
+    if (save.harbor?.includes(id)) continue;
+    (save.harbor ??= []).push(id);
+    // something new appears next to your boat: only celebrate when you can see it
+    if (save.dives > 0) {
+      harborFresh = id; harborFreshT = 0;
+      const st = HARBOR.find((h) => h.id === id)!;
+      setTimeout(() => { toast(`🏗️ ${st.icon} ${t(`hb.${id}`)}!`, 2600); sfx.reveal("epic"); }, 300);
+    }
+    writeSave(save);
+  }
+  harborView.built = new Set(built);
+  harborView.best = bestCatches(save);
+  harborView.tank = tankFish(save);
+  harborView.statue = statueFish(save);
+}
+
 // ------------------------------------------------------------------ lucky wheel and crew trips
 function wheelState() {
   const today = dayOf(Date.now());
@@ -1253,8 +1286,16 @@ function checkMission() {
 function renderMission() {
   const el = $("mission");
   const m = MISSIONS[save.mission];
-  el.classList.toggle("hidden", !m || scene.mode !== "dock");
-  if (!m) return;
+  if (!m) {
+    // starter missions done: the goal line shows the next thing your harbor will get
+    const nx = harborNext(save);
+    el.classList.toggle("hidden", !nx || scene.mode !== "dock");
+    if (!nx) return;
+    const [cur, goal] = nx.progress(save);
+    el.innerHTML = `🏗️ ${nx.icon} ${t(`hb.${nx.id}`)} <b>${cur}/${goal}</b><i style="width:${Math.round((cur / goal) * 100)}%"></i>`;
+    return;
+  }
+  el.classList.toggle("hidden", scene.mode !== "dock");
   const [cur, goal] = m.progress(save);
   el.innerHTML = `🎯 ${m.text[getLang()] ?? m.text.en} <b>${Math.floor(cur)}/${goal}</b> <span class="mr">🪙${m.reward}</span><i style="width:${Math.round((cur / goal) * 100)}%"></i>`;
 }
@@ -1272,6 +1313,8 @@ function buy(id: UpgradeId) {
   const cost = upgradeCost(save.upgrades, id);
   if (cost === null || cost > save.coins || scene.mode !== "dock") return;
   save.coins -= cost;
+  // the next dive marks where the old line ended (only once: the first time new water is reached)
+  if (id === "line" && scene.newDepth == null) scene.newDepth = Math.min(maxDepth(save.upgrades), ZONES[scene.zone].floor);
   save.upgrades[id]++;
   sfx.buy();
   writeSave(save);
@@ -1451,6 +1494,7 @@ function toast(text: string, ms = 2200) {
 }
 
 let lastWeather = "";
+let rainSince = 0;
 let forcedWeather: WeatherId | null = null;
 function updateWeather(now: number) {
   const w = weatherAt(now);
@@ -1461,7 +1505,10 @@ function updateWeather(now: number) {
   const left = Math.max(0, Math.ceil((w.endsAt - now) / 1000));
   pill.textContent = `${w.def.icon} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
   pill.title = tWeather(w.def.id);
-  setRain(w.def.id === "storm" ? 1 : w.def.id === "rain" ? 0.6 : 0);
+  // rain is heard when it starts, then settles to a faint background so it never nags
+  if (w.def.id !== lastWeather) rainSince = now;
+  const wet = w.def.id === "storm" ? 1 : w.def.id === "rain" ? 0.6 : 0;
+  setRain(wet * (now - rainSince < 9000 ? 1 : 0.12));
   if (lastWeather && lastWeather !== w.def.id) { toast(`${w.def.icon} ${tWeather(w.def.id)}`, 2400); sfx.event(); if (w.def.id !== "sunny") guide("weather"); }
   lastWeather = w.def.id;
 }
@@ -1547,6 +1594,12 @@ function frame(now: number) {
     scene.outfitId = oid; scene.outfit = oid ? COSMETICS.find((c) => c.id === oid)?.tint ?? null : null;
     scene.paintId = pid; scene.paint = pid ? COSMETICS.find((c) => c.id === pid)?.tint ?? null : null;
     scene.deco = tr?.kind === "deco" ? tr.id : save.wear.deco ?? null;
+    updateHarbor(dt);
+    if (scene.newDepth != null && scene.dive && scene.mode === "dive" && scene.dive.hookY > scene.newDepth) {
+      const gain = Math.round((Math.min(maxDepth(save.upgrades), ZONES[scene.zone].floor) - scene.newDepth) / 10);
+      if (gain > 0) { renderer.floatText(scene.dive.hookX, scene.newDepth + 30, `⬇ +${gain} m!`, "#ffe066", 1.5); renderer.burst(scene.dive.hookX, scene.newDepth, "#ffe066", 24, 220); sfx.newFish(); }
+      scene.newDepth = null;
+    }
     scene.sonar = sonarRange(save.gear.sonar);
     renderer.update(dt, scene);
     setMusicMood(scene.zone, scene.dive && scene.mode === "dive" ? scene.dive.hookY : 0, !!scene.event);
@@ -1657,4 +1710,4 @@ updateUi();
 requestAnimationFrame(frame);
 
 // debug handle for automated checks (harmless in production)
-(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, worldMap, blinkTest, catchValue, updateUi, FISH_BY_ID, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };
+(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, renderer, worldMap, blinkTest, catchValue, updateUi, FISH_BY_ID, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };

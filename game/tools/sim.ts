@@ -92,7 +92,7 @@ function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; 
   return { targetX: best, axis: 0, hold: false };
 }
 
-interface Result { ice: number; surprises: number; firstSurprise: number; stolen: number; firstUpgrade: number; ocean: number; coins: number[]; rarities: Record<Rarity, number>; fights: number; won: number; dives: number; legFights: number; firstLegendary: number }
+interface Result { buys: number[]; gaps: number[]; ice: number; surprises: number; firstSurprise: number; stolen: number; firstUpgrade: number; ocean: number; coins: number[]; rarities: Record<Rarity, number>; fights: number; won: number; dives: number; legFights: number; firstLegendary: number }
 
 const KSTAT: Record<string, [number, number]> = {};
 let curKind = "";
@@ -101,6 +101,7 @@ function session(seed: number): Result {
   const skill = 0.45 + rng() * 0.45; // from distracted kid to focused player
   const s = newSave();
   let t = 0, firstUpgrade = -1, ocean = -1, ice = -1;
+  const buyTimes: number[] = [];
   const coins: number[] = [];
   const rarities = Object.fromEntries(RARITY_ORDER.map((r) => [r, 0])) as Record<Rarity, number>;
   let fights = 0, won = 0, dives = 0, earned = 0, legFights = 0, firstLegendary = -1, surprises = 0, firstSurprise = -1, stolen = 0;
@@ -146,11 +147,17 @@ function session(seed: number): Result {
       if (!o || o.cost > s.coins) break;
       if (!s.zones.includes("ocean") && s.coins - o.cost < ZONES.ocean.price * 0.5 && o.cost > ZONES.ocean.price * 0.3) break;
       s.coins -= o.cost; s.upgrades[o.id]++;
+      buyTimes.push(t);
       if (firstUpgrade < 0) firstUpgrade = t;
     }
     while (coins.length < Math.floor(t / 60)) coins.push(earned);
   }
-  return { ice, firstUpgrade, ocean, coins, rarities, fights, won, dives, legFights, firstLegendary, surprises, firstSurprise, stolen };
+  const buys = [120, 300, 600].map((m) => buyTimes.filter((x) => x <= m).length);
+  // the longest wait between two purchases in the first 5 minutes: the "nothing to buy" dead time
+  const early = [0, ...buyTimes.filter((x) => x <= 300), 300];
+  const mid = [300, ...buyTimes.filter((x) => x > 300 && x <= 900), 900];
+  const gaps = [Math.max(...early.slice(1).map((x, i) => x - early[i])), Math.max(...mid.slice(1).map((x, i) => x - mid[i]))];
+  return { buys, gaps, ice, firstUpgrade, ocean, coins, rarities, fights, won, dives, legFights, firstLegendary, surprises, firstSurprise, stolen };
 }
 
 const median = (a: number[]) => { const b = a.filter((x) => x >= 0).sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : NaN; };
@@ -163,6 +170,7 @@ const reachedOcean = results.filter((r) => r.ocean >= 0).length / SESSIONS;
 console.log(`Deep Luck economy sim: ${SESSIONS} sessions x ${MINUTES} min, ${FISH.length} fish`);
 console.log(`first upgrade   median ${fmt(first)}   (target 0:30-1:00)`);
 console.log(`ocean unlocked  median ${fmt(ocean)}   (target 4:30-8:00), ${(reachedOcean * 100).toFixed(0)}% of sessions`);
+console.log(`upgrades bought  by 2 min ${median(results.map((r) => r.buys[0]))}, by 5 min ${median(results.map((r) => r.buys[1]))}, by 10 min ${median(results.map((r) => r.buys[2]))}; longest wait in first 5 min median ${fmt(median(results.map((r) => r.gaps[0])))}, in 5-15 min ${fmt(median(results.map((r) => r.gaps[1])))}`);
 console.log(`third zone       median ${fmt(median(results.map((r) => r.ice)))}, ${(results.filter((r) => r.ice >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions`);
 console.log(`dives per minute ${(median(results.map((r) => r.dives)) / MINUTES).toFixed(1)}`);
 for (const m of [1, 3, 5, 10, 15].filter((m) => m <= MINUTES)) console.log(`coins earned by minute ${String(m).padStart(2)}: ${median(results.map((r) => r.coins[m - 1] ?? 0))}`);

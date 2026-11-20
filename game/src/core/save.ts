@@ -48,6 +48,8 @@ export interface SaveData {
   avg: { value: number; count: number; kg: number };
   /** dock buttons the player has already been introduced to */
   seenBtns: string[];
+  /** harbor stages already built (they never disappear) */
+  harbor?: string[];
   /** lucky wheel: next free spin time, rewarded spins used today */
   wheel?: { next: number; ads: number; day: number };
   /** crew trips in progress, by crew member */
