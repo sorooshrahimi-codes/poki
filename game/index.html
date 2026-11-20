@@ -14,7 +14,7 @@
     <div id="ui">
       <div id="top">
         <div class="pill" id="coins"><span class="ico" id="coinIco">🪙</span><b id="coinsN">0</b></div>
-        <button class="pill btn" id="lvlPill"><span class="ico">⭐</span><b id="lvlN">1</b><span id="voyN"></span><span class="xpbar"><i id="lvlBar"></i></span></button>
+        <button class="pill btn" id="lvlPill"><span class="lvring" id="lvlBar"><span>⭐</span></span><b id="lvlN">1</b><span id="voyN"></span></button>
         <button class="pill btn" id="albumBtn"><span class="ico">📖</span><b id="albumN">0/0</b></button>
         <div class="spacer"></div>
         <button class="pill btn round" id="langBtn"></button>
@@ -74,7 +74,7 @@
           <div id="cmpDaily" class="ccard small"><div class="ch">🌅</div><div class="cd"></div><button class="btn big gold" id="dailyBtn">▶</button></div>
         </div>
         <div class="crow">
-          <div id="cmpDuel" class="ccard small"><div class="ch">👥</div><div class="cd">P1 vs P2 · 3×</div><button class="btn big ok" id="duelBtn">▶</button></div>
+          <div id="cmpDuel" class="ccard small"><div class="ch">🤝</div><div class="cd" id="chDesc"></div><button class="btn big ok" id="chBtn">▶</button></div>
           <div id="cmpVoyage" class="ccard small"><div class="ch">⛵</div><div class="cd"></div><button class="btn big gold" id="voyBtn">⛵</button></div>
         </div>
         <button class="btn big plain" id="competeClose">✕</button>
@@ -83,6 +83,8 @@
         <div class="title" id="resultTitle"></div>
         <div id="resultBody"></div>
         <div id="resultFoot"></div>
+        <button class="btn big ok hidden" id="resultPlay">▶</button>
+        <button class="btn big gold hidden" id="resultAct">📤</button>
         <button class="btn big ok" id="resultClose">OK</button>
       </div>
       <div id="orders" class="panel hidden">
@@ -112,6 +114,8 @@
         <button class="btn big ok" id="resumeBtn"></button>
       </div>
       <div id="legend" class="hidden"><div class="rays"></div><div class="lr" id="legendRarity"></div><div id="legendFish"></div><div class="ln" id="legendName"></div></div>
+      <div id="langPanel" class="panel hidden"><div class="title">🌐</div><div id="langList"></div><button class="btn big plain" id="langClose">✕</button></div>
+      <div id="guide" class="hidden"><img src="./art/npc_captain.webp" alt=""><div id="guideText"></div></div>
       <div id="toast" class="hidden"></div>
       <div id="reelHint" class="hidden"></div>
     </div>

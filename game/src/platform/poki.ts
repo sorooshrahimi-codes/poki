@@ -8,6 +8,8 @@ interface PokiSDKApi {
   gameplayStop(): void;
   commercialBreak(onStart?: () => void): Promise<void>;
   rewardedBreak(opts?: { size?: "small" | "medium" | "large"; onStart?: () => void } | (() => void)): Promise<boolean>;
+  shareableURL?(params: Record<string, string>): Promise<string>;
+  getURLParam?(key: string): string;
 }
 
 declare global {
@@ -67,4 +69,20 @@ export async function rewardedBreak(): Promise<boolean> {
   const ok = await sdk.rewardedBreak({ size: "medium", onStart: () => { adPlaying = true; onAdStart(); } });
   if (adPlaying) { adPlaying = false; onAdEnd(); }
   return ok;
+}
+
+/** a link to this game that carries `params` (on Poki: a poki.com link; elsewhere: this page) */
+export async function shareURL(params: Record<string, string>): Promise<string> {
+  if (sdk?.shareableURL) { try { return await sdk.shareableURL(params); } catch { /* fall through */ } }
+  const u = new URL(location.href);
+  u.search = "";
+  for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  return u.toString();
+}
+
+/** a parameter of the link this player arrived with ("" when missing) */
+export function urlParam(key: string): string {
+  const fromSdk = sdk?.getURLParam?.(key);
+  if (fromSdk) return fromSdk;
+  return new URLSearchParams(location.search).get(key) ?? "";
 }

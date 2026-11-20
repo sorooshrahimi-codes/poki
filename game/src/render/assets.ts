@@ -34,19 +34,43 @@ const bgTop = new Map<string, string>();
 export const img = (name: string) => raw.get(name) ?? null;
 export const artUrl = (name: string) => `./art/${name}.webp`;
 
-export function loadAssets(onProgress: (k: number) => void): Promise<void> {
-  let done = 0;
-  return Promise.all(NAMES.map((n) => new Promise<void>((resolve) => {
-    const im = new Image();
-    im.onload = () => { raw.set(n, im); onProgress(++done / NAMES.length); resolve(); };
-    im.onerror = () => { onProgress(++done / NAMES.length); resolve(); }; // missing art falls back to drawn shapes
-    im.src = artUrl(n);
-  }))).then(() => {
+/** what the first minute needs: the lake, the fisher, the UI. The rest streams in afterwards. */
+function isCore(n: string) {
+  const f = FISH.find((x) => x.id === n);
+  if (f) return f.zone === "lake";
+  if (n.startsWith("kid_")) return n.startsWith("kid_cap_");
+  if (/^(bg|floor)_/.test(n)) return n.endsWith("_lake");
+  if (n.startsWith("p_")) return PROPS.lake.includes(n);
+  return !/^(pet_|hat_|npc_|b_|bg_aquarium)/.test(n);
+}
+
+export function loadRest(): Promise<void> {
+  return loadList(NAMES.filter((n) => !isCore(n) && !raw.has(n)), () => {}).then(() => {
+    for (const z of ["lake", "ocean", "ice", "reef"] as const) {
+      const im = raw.get(`bg_${z}`);
+      if (im && !bgBottom.has(z)) { bgBottom.set(z, sampleRow(im, im.height - 8)); bgTop.set(z, sampleRow(im, 0)); }
+    }
+  });
+}
+
+export function loadAssets(onProgress: (k: number) => void, extra: string[] = []): Promise<void> {
+  return loadList(NAMES.filter((n) => isCore(n) || extra.includes(n)), onProgress).then(() => {
     for (const z of ["lake", "ocean", "ice", "reef"] as const) {
       const im = raw.get(`bg_${z}`);
       if (im) { bgBottom.set(z, sampleRow(im, im.height - 8)); bgTop.set(z, sampleRow(im, 0)); }
     }
   });
+}
+
+function loadList(list: string[], onProgress: (k: number) => void): Promise<void> {
+  let done = 0;
+  const NAMES = list;
+  return Promise.all(NAMES.map((n) => new Promise<void>((resolve) => {
+    const im = new Image();
+    im.onload = () => { raw.set(n, im); onProgress(++done / NAMES.length); resolve(); };
+    im.onerror = () => { onProgress(++done / NAMES.length); resolve(); }; // missing art falls back to drawn shapes
+    im.src = artUrl(n);
+  }))).then(() => undefined);
 }
 
 function sampleRow(im: HTMLImageElement, y: number) {

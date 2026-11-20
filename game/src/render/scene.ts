@@ -199,12 +199,15 @@ export class Renderer {
     const v = this.view;
     const bg = img(`bg_${s.zone}`);
     const skyAbove = bg ? (BG_WATERLINE[s.zone] * ((COLUMN + 2 * v.ox / v.scale) * bg.height)) / bg.width : 300;
-    let target = -Math.min(v.viewH * 0.45, Math.max(skyAbove, v.viewH * 0.3));
+    // frame the boat BELOW the top bar (about 110 px of HUD): the HUD must never sit on the fisher
+    const dockY = -Math.min(v.viewH * 0.55, Math.max(110 / v.scale + 135, v.viewH * 0.3));
+    void skyAbove;
+    let target = dockY;
     if (s.mode === "dive" && s.dive) {
       const d = s.dive;
       target = d.hookY - v.viewH * (d.phase === "ascend" ? 0.62 : 0.36);
       target = Math.min(target, ZONES[s.zone].floor + 90 - v.viewH);
-      target = Math.max(target, -Math.min(v.viewH * 0.45, Math.max(skyAbove, v.viewH * 0.3)));
+      target = Math.max(target, dockY);
     }
     this.camY += (target - this.camY) * Math.min(1, dt * (s.mode === "dive" ? 7 : 3));
     // bubbles rise, motes (plankton) drift: they sell the depth even when nothing else moves
@@ -356,7 +359,7 @@ export class Renderer {
         c.fillRect(left, y0, width, -y0 + 30);
         c.restore();
         if (ev === "rainbow_sky") this.drawRainbow(c, y0);
-        if (ev === "blood_moon" || ev === "meteor") this.drawMoon(c, y0, ev, s.t);
+        if (ev === "meteor") this.drawMoon(c, y0, ev, s.t); // shooting stars only: a flat painted-on moon looked like a stray red dot
       }
     } else {
       c.fillStyle = "#8fd8ff"; c.fillRect(left, top, width, -top);
@@ -391,11 +394,8 @@ export class Renderer {
 
   private drawMoon(c: Ctx, y0: number, ev: string, t: number) {
     const x = COLUMN * 0.78, y = y0 * 0.45;
-    const g = c.createRadialGradient(x, y, 4, x, y, 60);
-    g.addColorStop(0, ev === "blood_moon" ? "rgba(255,90,110,0.6)" : "rgba(220,225,255,0.5)"); g.addColorStop(1, "rgba(0,0,0,0)");
-    c.fillStyle = g; c.beginPath(); c.arc(x, y, 60, 0, Math.PI * 2); c.fill();
-    c.fillStyle = ev === "blood_moon" ? "#ff5d73" : "#f4f2ff";
-    c.beginPath(); c.arc(x, y, 22, 0, Math.PI * 2); c.fill();
+    void x; void y;
+
     if (ev === "meteor") {
       c.strokeStyle = "rgba(255,240,190,0.9)"; c.lineWidth = 2; c.lineCap = "round";
       for (let i = 0; i < 4; i++) {
@@ -813,9 +813,11 @@ export class Renderer {
     c.beginPath(); c.ellipse(b.cx, 8, BOAT_W * 0.42, 6, 0, 0, Math.PI * 2); c.fill();
     // squash and stretch when the pose changes: the character "pops" into it
     const pop = s.poseT < 0.35 ? Math.sin((s.poseT / 0.35) * Math.PI) * 0.08 : 0;
+    // alive, not stiff: gentle breathing and a small lean back and forth
+    const breathe = Math.sin(s.t * 2.4) * 0.012;
     c.translate(b.cx, b.bottomY);
-    c.rotate(b.tilt);
-    c.scale(1 - pop * 0.6, 1 + pop);
+    c.rotate(b.tilt + Math.sin(s.t * 0.9) * 0.012);
+    c.scale(1 - pop * 0.6 - breathe * 0.4, 1 + pop + breathe);
     if (b.im) c.drawImage(this.dressed(b.p, b.im), b.left, -b.h, b.w, b.h);
     // cosmetics: a hat over the cap, a pet on the bow
     // no hat chosen = the classic red cap
@@ -872,11 +874,15 @@ export class Renderer {
     c.strokeStyle = "rgba(255,255,255,0.9)"; c.lineWidth = 1.3;
     c.beginPath(); c.moveTo(tip.x, tip.y); c.quadraticCurveTo(tip.x + 10, 10, d.hookX, d.hookY - 16); c.stroke();
     // hooked fish dangle under the hook
-    d.hooked.forEach((f: LiveFish, i: number) => {
+    // the latest catches hang from the hook, fanned out a little; the rest are counted in the HUD dots
+    const shown = d.hooked.slice(-3);
+    shown.forEach((f: LiveFish, i: number) => {
+      const fan = (i - (shown.length - 1) / 2) * 0.45;
       c.save();
-      c.translate(d.hookX + Math.sin(t * 5 + i) * 5, d.hookY + 18 + i * 9);
-      c.rotate(Math.PI / 2 + Math.sin(t * 6 + i) * 0.15);
-      this.drawFishSprite(c, f.def, f.mut, f.size * 0.85, t + i, false, 2.2, 1.6); // hooked fish wriggle hard
+      c.translate(d.hookX + Math.sin(t * 5 + i) * 3, d.hookY + 14);
+      c.rotate(Math.PI / 2 + fan + Math.sin(t * 6 + i) * 0.12);
+      c.translate(Math.min(26, f.size * 0.35), 0);
+      this.drawFishSprite(c, f.def, f.mut, Math.min(f.size, 46) * 0.8, t + i, false, 2.2, 1.6); // hooked fish wriggle hard
       c.restore();
     });
     // cute lure: red-white bobber weight + silver hook
@@ -980,6 +986,7 @@ export class Renderer {
     const top = this.camY, bottom = this.camY + v.viewH;
     c.save();
     c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+    const used: number[] = [];
     for (const f of d.fish) {
       if (f.hooked || (f.def.rarity === "common" || f.def.rarity === "rare") && !f.mut) continue;
       const dy = f.y - d.hookY;
@@ -987,7 +994,10 @@ export class Renderer {
       if (f.y > top + 30 && f.y < bottom - 30) continue; // on screen: no arrow needed
       const below = f.y >= bottom - 30;
       const sx = Math.max(24, Math.min(v.w - 24, v.ox + f.x * v.scale));
-      const sy = below ? v.h - 30 : 140;
+      const sy = below ? v.h - 30 : 178; // under the top HUD rows, never on them
+      const key = (below ? 1 : -1) * Math.round(sx / 44);
+      if (used.includes(key)) continue; // one arrow per spot: no stacked labels
+      used.push(key);
       const pulse = 1 + Math.sin(s.t * 6 + f.uid) * 0.15;
       c.fillStyle = f.mut === "gold" ? "#ffd84a" : RARITY_COLOR[f.def.rarity];
       c.strokeStyle = "#0d1e45"; c.lineWidth = 3;

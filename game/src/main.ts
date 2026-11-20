@@ -11,15 +11,15 @@ import { DERBY_COOLDOWN_MS, DERBY_MS, DERBY_RULES, LEAGUE_SIZE, PROMOTE, DEMOTE,
 import { makeRng } from "./core/rng.ts";
 import { BAIT_BY_ID, GEAR, lanternRadius, shopOffers, sonarRange, type BaitDef } from "./data/gear.ts";
 import { RARITY_COLOR, RARITY_ORDER, ZONES, ZONE_ORDER } from "./data/world.ts";
-import { LANGS, LANG_LABEL, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tWeather, tZone } from "./i18n.ts";
+import { LANGS, LANG_FLAG, LANG_NAME, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tWeather, tZone } from "./i18n.ts";
 import { setDucked, setMusicMood, setMuted, setRain, sfx, unlockAudio } from "./platform/audio.ts";
 import { WEATHER, weatherAt, type WeatherId } from "./core/weather.ts";
-import { commercialBreak, gameplayStart, gameplayStop, initPoki, isAdPlaying, loadingFinished, rewardedBreak } from "./platform/poki.ts";
+import { commercialBreak, gameplayStart, gameplayStop, initPoki, isAdPlaying, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
 import { loadSave, writeSave } from "./platform/storage.ts";
 import "@fontsource/fredoka/latin-500.css";
 import "@fontsource/fredoka/latin-600.css";
 import "@fontsource/fredoka/latin-700.css";
-import { artUrl, img, loadAssets, spriteTinted } from "./render/assets.ts";
+import { artUrl, img, loadAssets, loadRest, spriteTinted } from "./render/assets.ts";
 import { drawFish } from "./render/fish.ts";
 import { recolor } from "./render/recolor.ts";
 import { Renderer, type SceneState } from "./render/scene.ts";
@@ -87,7 +87,7 @@ function readInput() {
   input.hold = pointerDown || keys.has(" ") || keys.has("arrowup") || keys.has("w");
 }
 
-const anyPanelOpen = () => ["album", "pause", "shop", "map", "wardrobe", "aquarium", "orders", "compete", "result"].some((id) => !$(id).classList.contains("hidden"));
+const anyPanelOpen = () => ["album", "pause", "shop", "map", "wardrobe", "aquarium", "orders", "compete", "result", "langPanel"].some((id) => !$(id).classList.contains("hidden"));
 
 // ------------------------------------------------------------------ dive flow
 async function cast() {
@@ -102,20 +102,25 @@ async function cast() {
   if (save.bait) { save.bait.uses--; if (save.bait.uses <= 0) save.bait = null; }
   activeBait = bait;
   if (save.trial) { save.trial.dives--; if (save.trial.dives < 0) save.trial = null; }
-  const dailyRng = play.kind === "daily" ? makeRng(dayOf(Date.now()) * 99991 + 7) : null;
-  const ctx = { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: dailyRng ?? Math.random, weather: weatherAt(Date.now()).def, bait };
+  const ch = play.kind === "challenge" ? play : null;
+  const dailyRng = play.kind === "daily" ? makeRng(dayOf(Date.now()) * 99991 + 7) : ch ? makeRng(ch.seed * 977 + ch.dive * 131) : null;
+  // a friend challenge is fair: the same sea, the same rod and clear sky for both players
+  const ctx = ch
+    ? { upgrades: CH_UPGRADES, event: null, night: false, rng: dailyRng!, weather: WEATHER.sunny, bait: null }
+    : { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: dailyRng ?? Math.random, weather: weatherAt(Date.now()).def, bait };
   const playSec = save.playMs / 1000;
   const floor = ZONES[scene.zone].floor;
-  const surprise = forcedSurprise ?? pickSurprise(save.director, playSec, { zone: scene.zone, bottom: Math.min(maxDepth(save.upgrades), floor), floor, capacity: capacity(save.upgrades) }, Math.random);
+  const surprise = ch ? null : forcedSurprise ?? pickSurprise(save.director, playSec, { zone: scene.zone, bottom: Math.min(maxDepth(save.upgrades), floor), floor, capacity: capacity(save.upgrades) }, Math.random);
   if (surprise) noteSurprise(save.director, surprise, playSec);
-  const treasure = treasureNext;
+  const treasure = !ch && treasureNext;
   if (treasure) { treasureNext = false; save.mapPieces -= 3; }
   // first-minute pacing: a rare is guaranteed in rounds 2-3, and round 6 teases a legend below
   const hasRare = Object.keys(save.album).some((id) => FISH_BY_ID[id] && FISH_BY_ID[id].rarity !== "common" && !FISH_BY_ID[id].junk);
-  const guarantee = (save.dives === 1 || save.dives === 2) && !hasRare;
+  const guarantee = !ch && (save.dives === 1 || save.dives === 2) && !hasRare;
   let sur = treasure ? null : surprise;
-  if (!sur && !save.seenGlimpse && save.dives === 5) { sur = "glimpse"; save.seenGlimpse = true; }
+  if (!ch && !sur && !save.seenGlimpse && save.dives === 5) { sur = "glimpse"; save.seenGlimpse = true; }
   scene.dive = startDive(scene.zone, ctx, sur, treasure, guarantee);
+  if (save.dives === 1) guide("dodge");
   scene.mode = "dive";
   scene.hint = false;
   sfx.cast();
@@ -156,6 +161,7 @@ function handleFx(d: Dive) {
       }
     }
     else if (fx.kind === "fightWon") {
+      void 0;
       save.stats.fightsWon++;
       sfx.reveal(fx.fish.def.rarity);
       renderer.burst(d.hookX, d.hookY, RARITY_COLOR[fx.fish.def.rarity], 40, 260);
@@ -233,7 +239,7 @@ async function collect(double: boolean) {
     save.stats.catches++;
     if (c.mut && !e.muts.includes(c.mut)) e.muts.push(c.mut);
   }
-  total = Math.round(total * voyageCoinMult(save.voyage));
+  total = play.kind === "challenge" ? 0 : Math.round(total * voyageCoinMult(save.voyage));
   total += pendingBonus;
   pendingBonus = 0;
   // progression: every catch (kept or sold) gives XP and league points
@@ -304,6 +310,7 @@ function updateRevealTotal() {
 
 function showReveal(list: Catch[]) {
   if (scene.mode !== "reveal") return;
+  setTimeout(() => guide("reveal"), 900);
   keepSet.clear();
   $("keepHint").textContent = t("tank.tap");
   $("keepN").textContent = "";
@@ -348,7 +355,7 @@ function showReveal(list: Catch[]) {
   $("bonusN").textContent = pendingBonus ? `💰 +${pendingBonus}` : "";
   $("collectBtn").textContent = list.length ? t("collect") : "OK";
   // the x2 offer only when there is something worth doubling
-  $("doubleBtn").classList.toggle("hidden", total < 40);
+  $("doubleBtn").classList.toggle("hidden", total < 40 || play.kind === "challenge");
   $("reveal").classList.remove("hidden");
 }
 
@@ -749,14 +756,45 @@ function renderOrders() {
 }
 
 
-// ------------------------------------------------------------------ meta game: level, league, derby, duel, daily, voyage
+
+// ------------------------------------------------------------------ guide: Captain Bo tells the story and explains each idea once
+type TipId = "start" | "reveal" | "dodge" | "upgrade" | "fight" | "shopBtn" | "aquaBtn" | "ordersBtn" | "wardBtn" | "competeBtn" | "zone" | "weather" | "event";
+const tipQueue: TipId[] = [];
+let tipShowing = false;
+function guide(id: TipId) {
+  if (save.tips.includes(id) || tipQueue.includes(id)) return;
+  tipQueue.push(id);
+  if (!tipShowing) nextTip();
+}
+function nextTip() {
+  // a tip never covers an open panel: wait until it closes
+  if (tipQueue.length && anyPanelOpen()) { $("guide").classList.add("hidden"); tipShowing = true; clearTimeout(tipTimer); tipTimer = window.setTimeout(nextTip, 700); return; }
+  const id = tipQueue.shift();
+  if (!id) { tipShowing = false; $("guide").classList.add("hidden"); return; }
+  tipShowing = true;
+  save.tips.push(id);
+  writeSave(save);
+  $("guideText").textContent = t(`tip.${id}` as Parameters<typeof t>[0]);
+  const el = $("guide");
+  el.classList.remove("hidden");
+  el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
+  sfx.tap();
+  clearTimeout(tipTimer);
+  tipTimer = window.setTimeout(nextTip, Math.max(4500, $("guideText").textContent!.length * 70));
+}
+let tipTimer = 0;
+
+// ------------------------------------------------------------------ meta game: level, league, derby, friend challenge, daily, voyage
 type Play =
   | { kind: "normal" }
   | { kind: "derby"; rule: DerbyRule; endsAt: number; score: number; rivals: { name: string; npc: number; score: number }[] }
-  | { kind: "duel"; turn: 0 | 1; dives: number; scores: [number, number] }
+  | { kind: "challenge"; seed: number; zone: ZoneId; back: ZoneId; dive: number; score: number; target: number | null }
   | { kind: "daily" };
 let play: Play = { kind: "normal" };
-const DUEL_ROUNDS = 3;
+/** friend challenge: 3 casts in the same seeded sea with the same rod */
+const CH_DIVES = 3;
+const CH_UPGRADES = { line: 8, capacity: 5, luck: 3 };
+const CH_ZONES: ZoneId[] = ["lake", "ocean", "reef", "ice"];
 const dayOf = (now: number) => Math.floor(now / 86_400_000);
 const titleText = () => t(`lv.t${titleIndex(save.prog.level)}` as Parameters<typeof t>[0]);
 const tierName = (tr: string) => t(`tier.${tr}` as Parameters<typeof t>[0]);
@@ -799,9 +837,9 @@ function scorePlay(list: Catch[]) {
     if (play.rule === "value") play.score += list.reduce((a, c) => a + c.value, 0);
     else if (play.rule === "count") play.score += list.filter((c) => !FISH_BY_ID[c.fish].junk).length;
     else play.score = Math.max(play.score, ...list.map((c) => c.kg ?? 0));
-  } else if (play.kind === "duel") {
-    play.scores[play.turn] += list.reduce((a, c) => a + c.value, 0);
-    play.dives++;
+  } else if (play.kind === "challenge") {
+    play.score += list.reduce((a, c) => a + c.value, 0);
+    play.dive++;
   } else if (play.kind === "daily") {
     const v = list.reduce((a, c) => a + c.value, 0);
     const today = dayOf(Date.now());
@@ -822,10 +860,7 @@ function scorePlay(list: Catch[]) {
 
 function afterPlayCollect() {
   if (play.kind === "derby" && Date.now() >= play.endsAt) endDerby();
-  else if (play.kind === "duel") {
-    if (play.dives >= DUEL_ROUNDS * 2) endDuel();
-    else { play.turn = play.turn === 0 ? 1 : 0; toast(`👥 ${t("duel.p")} ${play.turn + 1} 🎣`, 2000); }
-  }
+  else if (play.kind === "challenge" && play.dive >= CH_DIVES) endChallenge();
   updatePlayPill();
 }
 
@@ -863,19 +898,57 @@ function endDerby() {
 }
 const fmtScore = (rule: DerbyRule, v: number) => (rule === "heaviest" ? fmtKg(v) : Math.round(v).toLocaleString());
 
-function startDuel() {
-  play = { kind: "duel", turn: 0, dives: 0, scores: [0, 0] };
-  $("compete").classList.add("hidden");
-  toast(`👥 ${t("duel.p")} 1 🎣`, 2200);
-  updatePlayPill();
+function startChallenge(seed: number, target: number | null) {
+  if (play.kind !== "normal" || scene.mode !== "dock") return;
+  const zone = CH_ZONES[seed % CH_ZONES.length];
+  play = { kind: "challenge", seed, zone, back: scene.zone, dive: 0, score: 0, target };
+  scene.zone = zone;
+  ["compete", "result"].forEach((id) => $(id).classList.add("hidden"));
+  toast(`🤝 ${t("ch.title")} · ${tZone(zone)} · 🎣×${CH_DIVES}${target ? ` · 🎯 🪙${target.toLocaleString()}` : ""}`, 3000);
+  sfx.event();
+  updateUi();
 }
 
-function endDuel() {
-  if (play.kind !== "duel") return;
-  const [a, b] = play.scores;
+function endChallenge() {
+  if (play.kind !== "challenge") return;
+  const p = play;
   play = { kind: "normal" };
-  const head = a === b ? t("duel.draw") : `${t("duel.p")} ${a > b ? 1 : 2} ${t("duel.win")}`;
-  showResult(`👥 ${t("cmp.duel")}`, [`${t("duel.p")} 1 · 🪙 ${a.toLocaleString()}`, `${t("duel.p")} 2 · 🪙 ${b.toLocaleString()}`], head, true);
+  scene.zone = p.back;
+  const won = p.target === null || p.score > p.target;
+  const prize = p.target === null ? 150 : won ? 500 : 150;
+  save.coins += prize;
+  writeSave(save); updateUi();
+  const lines = [`🎣 ${t("cmp.you")} · 🪙 <b>${p.score.toLocaleString()}</b>`];
+  if (p.target !== null) lines.push(`🤝 ${t("ch.friend")} · 🪙 ${p.target.toLocaleString()}`);
+  lines.push(`<small>${t("ch.send")}</small>`);
+  showResult(`🤝 ${t("ch.title")}`, lines, p.target === null ? `🪙+${prize}` : `${won ? t("ch.won") : t("ch.lost")} · 🪙+${prize}`, won);
+  shareFor = { seed: p.seed, score: p.score };
+  $("resultAct").textContent = `📤 ${t("ch.share")}`;
+  $("resultAct").classList.remove("hidden");
+}
+
+/** the challenge the result panel can send on: same sea, the score to beat */
+let shareFor: { seed: number; score: number } | null = null;
+async function shareChallenge() {
+  if (!shareFor) return;
+  const url = await shareURL({ dlc: String(shareFor.seed), dls: String(shareFor.score) });
+  const text = `🎣 Deep Luck: ${t("ch.beat")} 🪙${shareFor.score.toLocaleString()}!`;
+  try {
+    if (navigator.share) { await navigator.share({ text, url }); return; }
+  } catch { /* cancelled: fall back to copying */ }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); toast(`📋 ${t("ch.copied")}`, 2200); }
+  catch { toast(url, 6000); }
+}
+
+/** arriving from a friend's link: offer their challenge */
+function offerChallenge() {
+  const seed = parseInt(urlParam("dlc"), 10), score = parseInt(urlParam("dls"), 10);
+  if (!(seed > 0) || !(score >= 0)) return;
+  shareFor = null;
+  $("resultAct").classList.add("hidden");
+  showResult(`🤝 ${t("ch.title")}`, [`${t("ch.got")}`, `🎯 🪙 <b>${score.toLocaleString()}</b>`, `<small>${t("ch.desc")}</small>`], "", false);
+  $("resultPlay").classList.remove("hidden");
+  $("resultPlay").onclick = () => { $("resultPlay").classList.add("hidden"); startChallenge(seed, score); };
 }
 
 function startDaily() {
@@ -917,15 +990,15 @@ function updatePlayPill() {
     const rows = derbyStandings(play);
     const rank = rows.findIndex((r) => r.you) + 1;
     el.textContent = `🏆 ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} · ${RULE_ICON[play.rule]} ${fmtScore(play.rule, play.score)} · #${rank}`;
-  } else if (play.kind === "duel") {
-    el.textContent = `👥 P${play.turn + 1} · ${play.scores[0].toLocaleString()} : ${play.scores[1].toLocaleString()} · ${Math.min(DUEL_ROUNDS, Math.floor(play.dives / 2) + 1)}/${DUEL_ROUNDS}`;
+  } else if (play.kind === "challenge") {
+    el.textContent = `🤝 ${Math.min(CH_DIVES, play.dive + 1)}/${CH_DIVES} · 🪙 ${play.score.toLocaleString()}${play.target !== null ? ` / 🎯 ${play.target.toLocaleString()}` : ""}`;
   } else el.textContent = `🌅 ${t("cmp.daily")}`;
 }
 
 function renderLevelPill() {
   const need = xpNeed(save.prog.level);
   $("lvlN").textContent = String(save.prog.level);
-  $("lvlBar").style.width = `${Math.round((save.prog.xp / need) * 100)}%`;
+  $("lvlBar").style.setProperty("--p", `${Math.round((save.prog.xp / need) * 100)}%`);
   $("voyN").textContent = save.voyage ? `⛵${save.voyage}` : "";
 }
 
@@ -963,7 +1036,8 @@ function renderCompete() {
   const doneToday = save.daily.lastDay === dayOf(now);
   $("cmpDaily").querySelector(".cd")!.innerHTML = `🔥 ${t("daily.streak")}: ${save.daily.streak} · ${t("daily.best")}: 🪙${save.daily.best.toLocaleString()}${doneToday ? `<br><small>${t("daily.done")}</small>` : ""}`;
   ($("dailyBtn") as HTMLButtonElement).disabled = doneToday || play.kind !== "normal";
-  ($("duelBtn") as HTMLButtonElement).disabled = play.kind !== "normal";
+  ($("chBtn") as HTMLButtonElement).disabled = play.kind !== "normal";
+  $("chDesc").innerHTML = `${t("ch.title")}<br><small>${t("ch.desc")}</small>`;
   // voyage
   $("cmpVoyage").querySelector(".cd")!.textContent = canVoyage() ? t("voy.desc") : `🔒 ${t("voy.need")}`;
   ($("voyBtn") as HTMLButtonElement).disabled = !canVoyage();
@@ -1026,6 +1100,7 @@ function buy(id: UpgradeId) {
   checkMission();
 }
 
+
 const zoneReachable = (z: ZoneId) => !ZONES[z].after || save.zones.includes(ZONES[z].after!);
 
 /** world map: lake -> ocean -> fork (Frozen North | Coral Reef) */
@@ -1054,13 +1129,14 @@ function renderMap() {
 }
 
 function pickZone(z: ZoneId) {
-  if (scene.mode !== "dock") return;
+  if (scene.mode !== "dock" || play.kind === "challenge") return;
   if (!save.zones.includes(z)) {
     if (save.coins < ZONES[z].price || !zoneReachable(z)) return;
     save.coins -= ZONES[z].price;
     save.zones.push(z);
     sfx.event();
     toast(`🗺️ ${tZone(z)}!`);
+    guide("zone");
   }
   save.zone = z;
   scene.zone = z;
@@ -1074,7 +1150,7 @@ function updateUi() {
   updatePlayPill();
   $("coinsN").textContent = save.coins.toLocaleString();
   $("albumN").textContent = albumText();
-  $("langBtn").textContent = LANG_LABEL[getLang()];
+  $("langBtn").innerHTML = `<img class="flag" src="${LANG_FLAG[getLang()]}" alt="">`;
   $("muteBtn").textContent = save.muted ? "🔇" : "🔊";
   $("resumeBtn").textContent = "▶ " + t("resume");
   $("retryLbl").textContent = t("retry");
@@ -1095,7 +1171,7 @@ function updateUi() {
     el.classList.toggle("hidden", !open);
     if (open && !save.seenBtns.includes(id)) {
       save.seenBtns.push(id);
-      if (save.dives > 0) { el.classList.add("newbtn"); setTimeout(() => el.classList.remove("newbtn"), 6000); toast(`✨ ${el.textContent?.trim() || "🛒"} !`, 1800); }
+      if (save.dives > 0) { guide(id as TipId); el.classList.add("newbtn"); setTimeout(() => el.classList.remove("newbtn"), 6000); toast(`✨ ${el.textContent?.trim() || "🛒"} !`, 1800); }
     }
   }
   $("lvlPill").classList.toggle("hidden", save.dives < 3);
@@ -1127,6 +1203,7 @@ function updateUi() {
     const cost = upgradeCost(save.upgrades, id);
     const b = document.createElement("button");
     const can = cost !== null && cost <= save.coins;
+    if (can && scene.mode === "dock") setTimeout(() => guide("upgrade"), 1200);
     b.className = "btn up" + (can ? " can" : "");
     b.disabled = cost === null;
     const valAt = (l: number) => id === "line" ? `${(400 + 120 * l) / 10}m` : id === "capacity" ? `×${3 + l}` : `+${l * 12}%`;
@@ -1164,7 +1241,7 @@ function updateWeather(now: number) {
   pill.textContent = `${w.def.icon} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
   pill.title = tWeather(w.def.id);
   setRain(w.def.id === "storm" ? 1 : w.def.id === "rain" ? 0.6 : 0);
-  if (lastWeather && lastWeather !== w.def.id) { toast(`${w.def.icon} ${tWeather(w.def.id)}`, 2400); sfx.event(); }
+  if (lastWeather && lastWeather !== w.def.id) { toast(`${w.def.icon} ${tWeather(w.def.id)}`, 2400); sfx.event(); if (w.def.id !== "sunny") guide("weather"); }
   lastWeather = w.def.id;
 }
 
@@ -1204,7 +1281,7 @@ function updateEvent(now: number) {
   }
   const id = ev ? ev.def.id + ev.endsAt : null;
   if (id !== lastEventId) {
-    if (ev) { sfx.event(); toast(`${ev.def.icon} ${tEvent(ev.def.id)}!`, 3000); save.seenEvent = true; }
+    if (ev) { sfx.event(); toast(`${ev.def.icon} ${tEvent(ev.def.id)}!`, 3000); save.seenEvent = true; if (save.dives > 0) guide("event"); }
     lastEventId = id;
   }
 }
@@ -1233,6 +1310,7 @@ function frame(now: number) {
       $("depthN").textContent = `${Math.round(d.hookY / 10)}m`;
       $("slots").textContent = "●".repeat(d.hooked.length) + "○".repeat(Math.max(0, d.capacity - d.hooked.length));
       $("reelHint").classList.toggle("hidden", d.phase !== "fight");
+      if (d.phase === "fight" && d.fight && d.fight.t < 0.1) guide("fight");
       if (d.phase === "fight" && d.fight) {
         const fg = d.fight, left = Math.ceil(2.6 - fg.t);
         const how = fg.kind === "hold" ? "👇 " + t("reel") : fg.kind === "timing" ? "👆 " + t("fight.tap") : "↔️ " + t("fight.follow");
@@ -1284,15 +1362,17 @@ $("aquaClose").onclick = () => $("aquarium").classList.add("hidden");
 $("aquaCollect").onclick = () => void collectAquarium(false);
 $("aquaDouble").onclick = () => void collectAquarium(true);
 $("baitPill").onclick = () => { const b = save.bait ? BAIT_BY_ID[save.bait.id] : null; if (b) toast(`${baitName(b)}: ${baitEffect(b).replace(/<br>/g, " · ")}`, 2600); };
+$("guide").onclick = () => { clearTimeout(tipTimer); nextTip(); };
 $("lvlPill").onclick = () => { if (scene.mode === "dock") { renderCompete(); $("compete").classList.remove("hidden"); } };
 $("competeBtn").onclick = () => { if (scene.mode === "dock") { renderCompete(); $("compete").classList.remove("hidden"); } };
 $("competeClose").onclick = () => $("compete").classList.add("hidden");
 $("derbyBtn").onclick = () => startDerby();
 $("derbySkip").onclick = async () => { busy = true; const ok = await rewardedBreak(); busy = false; if (ok) { save.derby.lastAt = 0; renderCompete(); } };
 $("dailyBtn").onclick = () => startDaily();
-$("duelBtn").onclick = () => startDuel();
+$("chBtn").onclick = () => startChallenge(1 + Math.floor(Math.random() * 999_983), null);
+$("resultAct").onclick = () => void shareChallenge();
 $("voyBtn").onclick = () => newVoyage();
-$("resultClose").onclick = () => $("result").classList.add("hidden");
+$("resultClose").onclick = () => { $("result").classList.add("hidden"); $("resultAct").classList.add("hidden"); $("resultPlay").classList.add("hidden"); };
 $("mapClose").onclick = () => $("map").classList.add("hidden");
 $("shopBtn").onclick = () => { if (scene.mode === "dock") { renderShop(); $("shop").classList.remove("hidden"); } };
 $("shopClose").onclick = () => $("shop").classList.add("hidden");
@@ -1301,9 +1381,18 @@ $("pauseBtn").onclick = () => togglePause(true);
 $("resumeBtn").onclick = () => togglePause(false);
 $("muteBtn").onclick = () => { save.muted = !save.muted; setMuted(save.muted); writeSave(save); updateUi(); };
 $("langBtn").onclick = () => {
-  const next = LANGS[(LANGS.indexOf(getLang()) + 1) % LANGS.length];
-  setLang(next); save.lang = next; writeSave(save); updateUi();
+  const box = $("langList");
+  box.innerHTML = "";
+  for (const l of LANGS) {
+    const b = document.createElement("button");
+    b.className = "btn lrowb" + (l === getLang() ? " on" : "");
+    b.innerHTML = `<img class="flag" src="${LANG_FLAG[l]}" alt=""><span>${LANG_NAME[l]}</span>`;
+    b.onclick = () => { setLang(l); save.lang = l; writeSave(save); updateUi(); $("langPanel").classList.add("hidden"); };
+    box.appendChild(b);
+  }
+  $("langPanel").classList.remove("hidden");
 };
+$("langClose").onclick = () => $("langPanel").classList.add("hidden");
 window.addEventListener("resize", () => renderer.resize());
 document.addEventListener("visibilitychange", () => { if (document.hidden && scene.mode === "dive") togglePause(true); writeSave(save); });
 setInterval(() => writeSave(save), 10_000);
@@ -1311,10 +1400,17 @@ setInterval(() => writeSave(save), 10_000);
 const bar = $("loadBar");
 Promise.all([
   initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(false) }),
-  loadAssets((k) => { bar.style.width = `${Math.round(k * 100)}%`; }),
+  // the zone and hat this player uses load first; everything else streams in after the game starts
+  loadAssets((k) => { bar.style.width = `${Math.round(k * 100)}%`; }, [
+    `bg_${save.zone}`, `floor_${save.zone}`, ...FISH.filter((f) => f.zone === save.zone).map((f) => f.id),
+    ...["idle", "cast", "reel", "cheer"].map((p) => `kid_${(save.wear.hat ?? "hat_cap").replace("hat_", "")}_${p}`),
+  ]),
   document.fonts?.ready,
 ]).then(() => {
   loadingFinished();
+  void loadRest();
+  setTimeout(() => { if (save.dives === 0) guide("start"); }, 600);
+  setTimeout(offerChallenge, 900);
   $("loading").classList.add("gone");
   if (save.aquariumAt && aquariumEarned(save.tank, save.aquariumAt, Date.now()) >= 25) openAquarium(true);
   else if (!save.aquariumAt) save.aquariumAt = Date.now();

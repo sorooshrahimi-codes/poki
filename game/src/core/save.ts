@@ -46,6 +46,8 @@ export interface SaveData {
   avg: { value: number; count: number; kg: number };
   /** dock buttons the player has already been introduced to */
   seenBtns: string[];
+  /** Captain Bo's tips already shown */
+  tips: string[];
 }
 
 export const newSave = (): SaveData => ({
@@ -62,6 +64,7 @@ export const newSave = (): SaveData => ({
   voyage: 0,
   avg: { value: 30, count: 3, kg: 1 },
   seenBtns: [],
+  tips: [],
 });
 
 /** parse anything (old, partial or broken) into a valid save */
