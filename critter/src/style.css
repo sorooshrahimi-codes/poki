@@ -82,3 +82,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #2a6b3a; fon
 }
 #jarBox.shake { animation: jarshake 0.12s linear infinite; border-color: #ff4d6d; }
 @keyframes jarshake { 0% { transform: translate(-2px, 0) rotate(-2deg); } 50% { transform: translate(2px, 1px) rotate(2deg); } 100% { transform: translate(-2px, 0) rotate(-2deg); } }
+#tools { position: absolute; left: 50%; translate: -50% 0; bottom: 14px; display: flex; gap: 8px; pointer-events: auto; }
+.btn.tool { width: 52px; height: 52px; border-radius: 50%; font-size: 26px; padding: 0; background: linear-gradient(#2c4f86, #1b345f); position: relative; }
+.btn.tool.on { background: linear-gradient(#ffcf5a, #ff9a1f); transform: scale(1.1); }
+.btn.tool small { position: absolute; right: -4px; bottom: -4px; font-size: 12px; background: #0d1e45; border-radius: 8px; padding: 0 5px; }

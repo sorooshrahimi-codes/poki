@@ -32,10 +32,14 @@ let jar: { id: string; mut: string | null }[] = [];
 let busy = false, t = 0, combo = 0, lastCatch = -9;
 
 // ------------------------------------------------------------------ input: hold anywhere to suck, aim with the finger
-const input = { on: false, x: view.W * 0.6, y: view.H * 0.7 };
+const input: { on: boolean; x: number; y: number; tap?: boolean } = { on: false, x: view.W * 0.6, y: view.H * 0.7 };
 const canvas = $("game");
 const aimAt = (e: PointerEvent) => { const p = view.toWorld(e.clientX, e.clientY); input.x = p.x; input.y = p.y; };
-canvas.addEventListener("pointerdown", (e) => { unlockAudio(); aimAt(e); if (mode === "field" || mode === "rush") { input.on = true; firstTouch(); } });
+canvas.addEventListener("pointerdown", (e) => {
+  unlockAudio(); aimAt(e);
+  if (mode === "field" || mode === "rush") { input.on = true; input.tap = true; firstTouch(); }
+  else if (mode === "park") pickCompanion();
+});
 window.addEventListener("pointermove", (e) => { if (input.on || e.pointerType === "mouse") aimAt(e); });
 window.addEventListener("pointerup", () => { input.on = false; });
 window.addEventListener("pointercancel", () => { input.on = false; });
@@ -114,6 +118,11 @@ function handleEvents() {
       else if (e.s === "boss" && e.c) { toast(tf("boss", { name: critterName(e.c.def) }), 3200); view.shake = 10; sfx.snap(); }
       else if (e.s === "golden_rain") toast(tr("goldenRain"), 2400);
       else toast(tr("stampede"), 2400);
+    } else if (e.kind === "bubbled") {
+      sfx.boing(); view.text(e.c.x, e.c.y - 80, tr("bubbled"), "#bfefff", 15);
+    } else if (e.kind === "ability") {
+      sfx.event(); view.text(field.left + 40, field.nearY - 90, tr(e.id === "sunpup" ? "abHerd" : "abFreeze"), "#ffe066", 17);
+      if (e.id === "frostking") view.burst(field.nozzle.x + 120, field.nearY - 60, "#bfefff", 30, 260);
     } else if (e.kind === "split") {
       view.burst(e.c.x, e.c.y - 30, "#7fd3ff", 14, 140); view.text(e.c.x, e.c.y - 70, tr("split"), "#9be7ff", 15); sfx.boing();
     } else if (e.kind === "hide") {
@@ -130,6 +139,46 @@ function handleEvents() {
     }
   }
   field.ev.length = 0;
+}
+
+// ------------------------------------------------------------------ tools and companions
+type Tool = Field["tool"];
+const TOOL_ICON: Record<Tool, string> = { vac: "🌀", bubble: "🫧", flute: "🎵" };
+/** tools grow with you: the bubble wand after 15 catches, the flute with the forest */
+const toolsOwned = (): Tool[] => ["vac", ...(save.catches >= 15 ? ["bubble" as Tool] : []), ...(save.biomes.includes("forest") ? ["flute" as Tool] : [])];
+let toolsKey = "";
+function renderTools() {
+  const own = toolsOwned();
+  for (const tl of own) {
+    if (tl === "vac" || save.tips.includes("tool_" + tl)) continue;
+    save.tips.push("tool_" + tl);
+    setTimeout(() => { toast(`${tf("toolNew", { x: TOOL_ICON[tl] })} ${tr(tl === "bubble" ? "tipBubble" : "tipFlute")}`, 4200); sfx.reveal("epic"); }, 600);
+  }
+  const key = own.join() + field.tool + Math.floor(field.charges);
+  if (key === toolsKey) return;
+  toolsKey = key;
+  const box = $("tools");
+  box.classList.toggle("hidden", own.length < 2 || mode !== "field");
+  box.innerHTML = "";
+  for (const tl of own) {
+    const b = document.createElement("button");
+    b.className = "btn tool" + (field.tool === tl ? " on" : "");
+    b.innerHTML = TOOL_ICON[tl] + (tl === "bubble" ? `<small>${Math.floor(field.charges)}</small>` : "");
+    b.onpointerdown = (ev) => { ev.stopPropagation(); field.tool = tl; sfx.tap(); toolsKey = ""; renderTools(); };
+    box.appendChild(b);
+  }
+}
+/** in the park, tapping a legend's pedestal takes it along on the hunt */
+function pickCompanion() {
+  const slots = view.parkSlots(parkBiome);
+  for (const s2 of slots) {
+    if (s2.def.rarity !== "legendary" || !save.index[s2.def.id]) continue;
+    if (Math.hypot(input.x - s2.x, input.y - (s2.y - 30)) > 48) continue;
+    save.companion = save.companion === s2.def.id ? null : s2.def.id;
+    if (save.companion) { toast(tf("compJoin", { name: critterName(s2.def) }), 2400); sfx.reveal("legendary"); view.burst(s2.x, s2.y - 40, "#ffe066", 24, 180); }
+    writeSave(save);
+    return;
+  }
 }
 
 // ------------------------------------------------------------------ rush: the 60-second race you can send to a friend
@@ -358,6 +407,9 @@ function updateUi() {
   $("incomeN").textContent = `🪙 ${short(incomePerSec())}/s`;
   renderBiomes();
   renderNest();
+  renderTools();
+  // the first legend you own: tell the player it can come along
+  if (mode === "park" && !save.tips.includes("comp") && CRITTERS.some((d) => d.rarity === "legendary" && save.index[d.id])) { save.tips.push("comp"); toast(tr("compTip"), 3600); }
   // landscape phones: the park buttons sit in a right-hand column, the pedestals take the rest
   const side = innerWidth > innerHeight && innerHeight < 600;
   view.parkRight = side ? 330 / view.scale : 0;
@@ -404,6 +456,8 @@ function frame(now: number) {
   // the park pays every second, wherever you are
   coinAcc += incomePerSec() * dt;
   if (coinAcc >= 1) { const n = Math.floor(coinAcc); coinAcc -= n; save.coins += n; save.lastSeen = Date.now(); }
+  view.fluting = input.on && field.tool === "flute";
+  field.companion = (save.companion as Field["companion"]) ?? null;
   if (mode === "rush" && rush) {
     rush.left -= dt;
     stepField(field, dt, input, RUSH_UP, rushRng);
@@ -426,6 +480,7 @@ function frame(now: number) {
     }
     view.drawPark(save, parkBiome, t, dt);
   }
+  input.tap = false;
   // a full jar that is still being fed rattles: time to go to the park
   const over = mode === "field" && input.on && field.jar >= field.cap;
   $("jarBox").classList.toggle("shake", over);

@@ -18,6 +18,8 @@ export interface SaveData {
   biomes: BiomeId[];
   /** eggs waiting in the nest */
   nest: Egg[];
+  /** the legend that comes along on the hunt */
+  companion?: string | null;
   /** best 60-second rush score */
   rushBest?: number;
   /** language the player picked; unset means follow the browser */

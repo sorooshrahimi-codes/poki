@@ -104,8 +104,29 @@ export class View {
     for (const cr of list) this.shadow(f, cr);
     if (f.beam) this.cone(f, up, t);
     for (const cr of list) this.critter(f, cr, t);
+    // bubbles flying from the wand
+    for (const b of f.bubbles) this.bubble(b.x, b.y, 12, t);
+    // the flute: notes drifting out over the meadow
+    if (f.tool === "flute" && this.fluting) {
+      for (let i = 0; i < 6; i++) {
+        const p = (t * 0.7 + i / 6) % 1;
+        c.globalAlpha = 1 - p; c.font = "bold 20px system-ui"; c.textAlign = "center";
+        c.fillText(i % 2 ? "🎵" : "🎶", f.nozzle.x + p * 260, f.nozzle.y - 20 - Math.sin(p * 8 + i) * 18 - p * 40);
+      }
+      c.globalAlpha = 1;
+    }
     c.fillStyle = "rgba(0,40,30,0.18)"; c.beginPath(); c.ellipse(kx + kw * 0.45, f.nearY + 4, kw * 0.32, 6, 0, 0, Math.PI * 2); c.fill();
     if (kid) c.drawImage(kid, kx, ky, kw, kh);
+    // the companion trots beside the kid
+    if (f.companion) {
+      const im = img(f.companion);
+      if (im) {
+        const w = 52, h = (w * im.height) / im.width, hop = Math.abs(Math.sin(t * 4)) * 6;
+        c.fillStyle = "rgba(0,40,20,0.2)"; c.beginPath(); c.ellipse(f.left + 148, f.nearY + 6, 20, 5, 0, 0, Math.PI * 2); c.fill();
+        c.drawImage(im, f.left + 148 - w / 2, f.nearY + 8 - h - hop, w, h);
+        blink(c, f.companion, f.left + 148 - w / 2, f.nearY + 8 - h - hop, w, h, t, 77);
+      }
+    }
     this.particles(dt);
   }
 
@@ -174,6 +195,12 @@ export class View {
       c.beginPath(); c.arc(bx, by + s * 0.05, s * 0.5, 0, Math.PI * 2); c.fill(); c.stroke();
       c.font = "14px system-ui"; c.textAlign = "center"; c.fillText("💤", bx + s * 0.4, by - s * 0.45);
     }
+    if (cr.bubbled > 0) this.bubble(bx, by, s * 0.62 + Math.sin(t * 5 + cr.uid) * 2, t);
+    if (cr.frozen > 0) {
+      c.save(); c.globalAlpha = 0.45; c.fillStyle = "#bfefff"; c.strokeStyle = "#ffffff"; c.lineWidth = 2;
+      c.beginPath(); c.roundRect(bx - s * 0.45, by - s * 0.45, s * 0.9, s * 0.9, 8); c.fill(); c.stroke(); c.restore();
+      c.font = "14px system-ui"; c.textAlign = "center"; c.fillText("❄️", bx + s * 0.35, by - s * 0.4);
+    }
     if (cr.fleeT > 0) { c.font = "bold 18px system-ui"; c.textAlign = "center"; c.fillText("❗", bx, by - s * 0.7 - Math.abs(Math.sin(t * 14)) * 4); }
     if (cr.boss > 0) {
       // the boss: a crown and its remaining phases
@@ -190,6 +217,17 @@ export class View {
       c.font = "bold 13px Fredoka, system-ui"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillStyle = "#fff"; c.fillText("💪", bx, ry + 1);
     }
   }
+
+  /** a soap bubble: rainbow sheen and a highlight */
+  private bubble(x: number, y: number, r: number, t: number) {
+    const c = this.c;
+    const g = c.createRadialGradient(x - r * 0.3, y - r * 0.35, r * 0.1, x, y, r);
+    g.addColorStop(0, "rgba(255,255,255,0.75)"); g.addColorStop(0.55, "rgba(190,230,255,0.18)"); g.addColorStop(1, `hsla(${(t * 90) % 360},90%,75%,0.55)`);
+    c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = "rgba(255,255,255,0.8)"; c.lineWidth = 1.5; c.stroke();
+  }
+  /** true while the flute is being played (set by the controller) */
+  fluting = false;
 
   private cone(f: Field, up: Upgrades, t: number) {
     const c = this.c, R = range(up), ang = Math.atan2(f.aim.y - f.nozzle.y, f.aim.x - f.nozzle.x);
@@ -273,6 +311,12 @@ export class View {
         c.font = "bold 14px Fredoka, system-ui"; c.textAlign = "center"; c.fillStyle = "#ffe066"; c.strokeStyle = "#0d1e45"; c.lineWidth = 4;
         const lbl = "★".repeat(star) + ` ${Math.round(s.def.income * STAR_MULT[star])}/s`;
         c.strokeText(lbl, s.x, s.y + ph * 0.22); c.fillText(lbl, s.x, s.y + ph * 0.22);
+        // legends can come along on the hunt: a paw badge, ticked for the one that does
+        if (s.def.rarity === "legendary") {
+          const on = save.companion === s.def.id;
+          c.font = "bold 16px system-ui"; c.fillStyle = on ? "#7cf29a" : "#ffffff";
+          c.strokeText(on ? "✔🐾" : "🐾", s.x + 30, s.y - 52); c.fillText(on ? "✔🐾" : "🐾", s.x + 30, s.y - 52);
+        }
       } else {
         // not caught yet: a dark silhouette with a question mark, something to chase
         c.save(); c.globalAlpha = 0.85; c.filter = "brightness(0) opacity(0.55)";
