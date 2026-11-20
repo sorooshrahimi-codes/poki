@@ -29,7 +29,7 @@ export interface SaveData {
   bait: { id: string; uses: number } | null;
   gear: { lantern: number; sonar: number };
   owned: string[];
-  wear: { pet: string | null; hat: string | null; outfit?: string | null; boat?: string | null };
+  wear: { pet: string | null; hat: string | null; outfit?: string | null; boat?: string | null; deco?: string | null };
   /** a rewarded-ad trial: cosmetic id and dives left */
   trial: { id: string; dives: number } | null;
   aquariumAt: number;
@@ -48,6 +48,10 @@ export interface SaveData {
   avg: { value: number; count: number; kg: number };
   /** dock buttons the player has already been introduced to */
   seenBtns: string[];
+  /** lucky wheel: next free spin time, rewarded spins used today */
+  wheel?: { next: number; ads: number; day: number };
+  /** crew trips in progress, by crew member */
+  crew?: Record<string, { endsAt: number; trip: number; rushed?: boolean }>;
   /** Captain Bo's tips already shown */
   tips: string[];
 }

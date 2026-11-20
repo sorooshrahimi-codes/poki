@@ -1,7 +1,7 @@
 // Shared types. Everything under src/core and src/data is pure (no DOM): the game, the
 // economy simulator (tools/sim.ts) and the AI content studio all use the same rules.
 
-export type Lang = "en" | "es" | "pt" | "hi" | "ja";
+export type Lang = "en" | "fr" | "de" | "es" | "it" | "pt" | "tr" | "hi" | "ja";
 export type Rarity = "common" | "rare" | "epic" | "legendary" | "secret";
 export type MutationId = "gold" | "rainbow" | "giant" | "ghost" | "electric";
 export type ZoneId = "lake" | "ocean" | "ice" | "reef" | "volcano";

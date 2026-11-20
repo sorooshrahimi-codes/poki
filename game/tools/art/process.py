@@ -72,7 +72,11 @@ def trim(im):
     bb = im.getchannel("A").point(lambda v: 255 if v > 40 else 0).getbbox()
     return im.crop(bb) if bb else im
 
+# made by earlier pipeline versions, no longer used by the game
+UNUSED = {"b_bobber", "kid_idle", "kid_cast", "kid_reel", "kid_cheer", "boat", "boat_cast", "boat_reel", "boat_cheer"}
+
 def save(im, name):
+    if name in UNUSED: return
     m = max_for(name)
     im.thumbnail((m, m), Image.LANCZOS)
     im.save(os.path.join(OUT, name + ".webp"), "WEBP", quality=86, method=6)

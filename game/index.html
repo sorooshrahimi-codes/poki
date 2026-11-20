@@ -28,7 +28,7 @@
       </div>
       <div id="dock">
         <div id="mission" class="hidden"></div>
-        <div id="dockRow"><div id="zones"></div><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb round2" id="aquaBtn">🐠</button><button class="btn zone shopb round2" id="competeBtn">🏆</button><button class="btn zone shopb round2" id="ordersBtn">📋<span id="ordersBadge" class="hidden"></span></button><button class="btn zone shopb round2" id="wardBtn">🎩</button><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
+        <div id="dockRow"><div id="zones"></div><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb round2" id="aquaBtn">🐠</button><button class="btn zone shopb round2" id="competeBtn">🏆</button><button class="btn zone shopb round2" id="ordersBtn">📋<span id="ordersBadge" class="hidden"></span></button><button class="btn zone shopb round2" id="wardBtn">🎩</button><button class="btn zone shopb round2" id="wheelBtn">🎡<span id="wheelBadge" class="badge hidden">!</span></button><button class="btn zone shopb round2" id="crewBtn">🧭<span id="crewBadge" class="badge hidden">!</span></button><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
         <div id="upgrades"></div>
       </div>
       <div id="reveal" class="panel hidden">
@@ -86,6 +86,19 @@
         <button class="btn big ok hidden" id="resultPlay">▶</button>
         <button class="btn big gold hidden" id="resultAct">📤</button>
         <button class="btn big ok" id="resultClose">OK</button>
+      </div>
+      <div id="wheel" class="panel hidden">
+        <div class="title">🎡</div>
+        <div id="wheelWrap"><canvas id="wheelCv" width="560" height="560"></canvas><div id="wheelPtr">▼</div></div>
+        <div id="wheelNote"></div>
+        <div class="row"><button class="btn big gold" id="wheelSpin"></button><button class="btn big ad" id="wheelAd">🎬 🎡</button></div>
+        <button class="btn big ok" id="wheelClose">✕</button>
+      </div>
+      <div id="crew" class="panel hidden">
+        <div class="title">🧭</div>
+        <div id="crewNote"></div>
+        <div id="crewList"></div>
+        <button class="btn big ok" id="crewClose">✕</button>
       </div>
       <div id="orders" class="panel hidden">
         <div class="title">📋</div>

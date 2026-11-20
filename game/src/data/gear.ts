@@ -19,26 +19,26 @@ export interface BaitDef {
   attracts?: string[];
   /** allows event-only (secret) fish to spawn without their event */
   unlocksSecret?: boolean;
-  names: Record<"en" | "es" | "pt" | "hi" | "ja", string>;
+  names: Record<"en" | "es" | "pt" | "hi" | "ja" | "fr" | "de" | "it" | "tr", string>;
 }
 
 export const BAITS: BaitDef[] = [
   { id: "worm", art: "b_worm", icon: "🪱", tier: "basic", price: 40, uses: 5, rarity: { rare: 1.35 },
-    names: { en: "Wiggly Worm", es: "Gusano", pt: "Minhoca", hi: "केंचुआ", ja: "ミミズ" } },
+    names: { en: "Wiggly Worm", es: "Gusano", pt: "Minhoca", hi: "केंचुआ", ja: "ミミズ", fr: "Ver frétillant", de: "Zappelwurm", it: "Verme guizzante", tr: "Kıpır Solucan" } },
   { id: "shrimp", art: "b_shrimp", icon: "🦐", tier: "basic", price: 90, uses: 5, rarity: { rare: 1.6, epic: 1.2 },
-    names: { en: "Juicy Shrimp", es: "Camarón", pt: "Camarão", hi: "झींगा", ja: "エビ" } },
+    names: { en: "Juicy Shrimp", es: "Camarón", pt: "Camarão", hi: "झींगा", ja: "エビ", fr: "Crevette juteuse", de: "Saftige Garnele", it: "Gamberetto succoso", tr: "Sulu Karides" } },
   { id: "firefly", art: "b_firefly", icon: "✨", tier: "fine", price: 220, uses: 4, mutation: { ghost: 3 },
     attracts: ["glow_eel", "angler", "jelly", "frost_jelly"],
-    names: { en: "Firefly Lure", es: "Señuelo luciérnaga", pt: "Isca vaga-lume", hi: "जुगनू चारा", ja: "ホタルルアー" } },
+    names: { en: "Firefly Lure", es: "Señuelo luciérnaga", pt: "Isca vaga-lume", hi: "जुगनू चारा", ja: "ホタルルアー", fr: "Leurre luciole", de: "Glühwurm-Köder", it: "Esca lucciola", tr: "Ateşböceği Yemi" } },
   { id: "golden", art: "b_golden", icon: "🥇", tier: "fine", price: 350, uses: 4, mutation: { gold: 4 },
-    names: { en: "Golden Lure", es: "Señuelo dorado", pt: "Isca dourada", hi: "सुनहरा चारा", ja: "金のルアー" } },
+    names: { en: "Golden Lure", es: "Señuelo dorado", pt: "Isca dourada", hi: "सुनहरा चारा", ja: "金のルアー", fr: "Leurre doré", de: "Goldköder", it: "Esca dorata", tr: "Altın Yem" } },
   { id: "rainbow", art: "b_rainbow", icon: "🌈", tier: "magic", price: 700, uses: 3, mutation: { rainbow: 5 },
-    names: { en: "Rainbow Jelly", es: "Gelatina arcoíris", pt: "Geleia arco-íris", hi: "इंद्रधनुष जेली", ja: "虹のゼリー" } },
+    names: { en: "Rainbow Jelly", es: "Gelatina arcoíris", pt: "Geleia arco-íris", hi: "इंद्रधनुष जेली", ja: "虹のゼリー", fr: "Gelée arc-en-ciel", de: "Regenbogen-Gelee", it: "Gelatina arcobaleno", tr: "Gökkuşağı Jöle" } },
   { id: "ice", art: "b_ice", icon: "❄️", tier: "magic", price: 600, uses: 4, rarity: { epic: 1.8 },
     attracts: ["crystal_trout", "beluga", "narwhal_king"],
-    names: { en: "Frost Drop", es: "Gota helada", pt: "Gota gelada", hi: "बर्फ़ की बूँद", ja: "氷のしずく" } },
+    names: { en: "Frost Drop", es: "Gota helada", pt: "Gota gelada", hi: "बर्फ़ की बूँद", ja: "氷のしずく", fr: "Goutte de givre", de: "Frosttropfen", it: "Goccia di brina", tr: "Buz Damlası" } },
   { id: "moon", art: "b_moon", icon: "🌙", tier: "legend", price: 2500, uses: 2, rarity: { legendary: 2.5 }, unlocksSecret: true,
-    names: { en: "Moon Lure", es: "Señuelo lunar", pt: "Isca lunar", hi: "चंद्र चारा", ja: "月のルアー" } },
+    names: { en: "Moon Lure", es: "Señuelo lunar", pt: "Isca lunar", hi: "चंद्र चारा", ja: "月のルアー", fr: "Leurre lunaire", de: "Mondköder", it: "Esca lunare", tr: "Ay Yemi" } },
 ];
 export const BAIT_BY_ID: Record<string, BaitDef> = Object.fromEntries(BAITS.map((b) => [b.id, b]));
 

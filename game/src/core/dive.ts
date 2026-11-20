@@ -151,6 +151,8 @@ export interface DiveContext {
   rng: Rng;
   weather?: WeatherDef | null;
   bait?: BaitDef | null;
+  /** the player has never won a fight: the first one is gentler */
+  easyFight?: boolean;
   /** the fishing spot on the world map: its creatures turn up more often */
   spot?: { attracts: string[]; rare?: number } | null;
 }
@@ -203,7 +205,10 @@ function fillFish(zone: ZoneId, from: number, to: number, ctx: DiveContext, into
   }
 }
 
-export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind | null = null, treasure = false, guaranteeRare = false): Dive {
+/** scripted first-minute moments: a golden fish (mutations!), an epic fighter (fights!), a rare (dodge for it) */
+export type Intro = "gold" | "epic" | "rare" | null;
+
+export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind | null = null, treasure = false, intro: Intro = null): Dive {
   const z = ZONES[zone];
   const bottom = Math.min(maxDepth(ctx.upgrades), z.floor);
   const fish: LiveFish[] = [];
@@ -239,14 +244,22 @@ export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind
       d.slabs.push({ x: w / 2 + ctx.rng() * (COLUMN - w), y, w, h: 18 });
     }
   }
-  if (guaranteeRare) {
-    // early game: one rare swims right across the hook's path, deep enough to need a dodge on the way down
-    const y = Math.max(140, bottom * 0.75);
-    const pool = FISH.filter((f) => f.zone === zone && f.rarity === "rare" && !f.junk && y >= f.depth[0] - 250 && y <= f.depth[1]);
+  if (intro) {
+    // early game: something special swims slowly right across the middle of the hook's path,
+    // deep enough that you dodge the small fry on the way down to save a hook for it
+    const y = Math.max(140, bottom * (intro === "gold" ? 0.7 : 0.78));
+    const rarity = intro === "epic" ? "epic" : intro === "rare" ? "rare" : "common";
+    const all = FISH.filter((f) => f.zone === zone && f.rarity === rarity && !f.junk);
+    const near = all.filter((f) => y >= f.depth[0] - 250 && y <= f.depth[1]);
+    let pool = near.length ? near : all; // a scripted moment may break the depth rules a little
+    // the very first fight should be the simplest kind (hold the bar), not a fast eel to follow
+    if (intro === "epic") { const calm = all.filter((f) => f.look.shape !== "eel" && f.speed < 95); if (calm.length) pool = calm; }
     const def = pool[Math.floor(ctx.rng() * pool.length)];
     if (def) {
       d.fish = d.fish.filter((f) => Math.abs(f.y - y) > 40);
-      d.fish.push({ uid: uidCounter++, def, mut: null, x: COLUMN * (0.25 + ctx.rng() * 0.5), y, dir: ctx.rng() < 0.5 ? 1 : -1, speed: def.speed * 0.5, size: def.size * 1.1, scale: 1.1, bob: 0, hooked: false });
+      const big = intro === "epic" ? 1 : 1.1;
+      d.fish.push({ uid: uidCounter++, def, mut: intro === "gold" ? "gold" : null, x: COLUMN * (0.35 + ctx.rng() * 0.3), y, dir: ctx.rng() < 0.5 ? 1 : -1,
+        speed: def.speed * 0.4, size: def.size * big, scale: big, bob: 0, hooked: false });
     }
   }
   d.treasure = treasure;
@@ -444,7 +457,7 @@ function startFight(d: Dive, f: LiveFish, ctx: DiveContext) {
   const shape = f.def.look.shape;
   const kind: FightKind = shape === "eel" || f.def.speed >= 95 ? "follow" : shape === "puffer" || shape === "jelly" || shape === "crab" ? "timing" : "hold";
   const need = f.def.rarity === "epic" ? 3 : f.def.rarity === "legendary" ? 4 : 5;
-  d.fight = { kind, hits: 0, need, ring: 1, fishPos: 0.5, flash: 0, fish: f, zone: 0.5, zoneHalf: cfg.half, speed: cfg.speed * (ctx.weather?.fight ?? 1),
+  d.fight = { kind, hits: 0, need, ring: 1, fishPos: 0.5, flash: 0, fish: f, zone: 0.5, zoneHalf: cfg.half * (ctx.easyFight ? 1.35 : 1), speed: cfg.speed * (ctx.weather?.fight ?? 1) * (ctx.easyFight ? 0.8 : 1),
     marker: 0.5, vel: 0, progress: kind === "timing" ? 1 : 0.3, t: 0, seed: ctx.rng() * 100, retried: false };
 }
 

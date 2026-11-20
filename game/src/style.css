@@ -381,3 +381,80 @@ body:has(.panel:not(.hidden):not(#reveal)) #guide { display: none; }
 /* the treasure map while still collecting pieces: visibly "in progress", but tappable for an explanation */
 #mapBtn.dim { filter: saturate(0.45) brightness(0.92); }
 #mapBtn.dim #mapN { color: #ffe066; }
+#wardGrid .swatch.deco { background: radial-gradient(circle at 35% 30%, #5f9bea, #24508f); font-size: 28px; }
+/* ---------------------------------------------------------------- lucky wheel and crew */
+.badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; border-radius: 9px; background: #ff4d6d; color: #fff; font-size: 12px; line-height: 18px; text-align: center; border: 2px solid #0d1e45; animation: pulse 1s infinite; }
+#wheelBtn, #crewBtn { position: relative; }
+#wheelWrap { position: relative; width: min(70vw, 280px, 46vh); aspect-ratio: 1; }
+#wheelCv { width: 100%; height: 100%; display: block; filter: drop-shadow(0 6px 0 rgba(13,30,69,.5)); }
+#wheelPtr { position: absolute; top: -14px; left: 50%; translate: -50% 0; font-size: 34px; color: #ff4d6d; text-shadow: 0 3px 0 #0d1e45; }
+#wheelNote, #crewNote { color: #cfe3ff; font-size: 14px; text-align: center; max-width: 320px; }
+#wheel .row { display: flex; gap: 8px; }
+#crewList { display: flex; flex-direction: column; gap: 8px; width: min(88vw, 480px); }
+.crow2 { display: flex; align-items: center; gap: 8px; background: rgba(5,15,40,.35); border-radius: 16px; padding: 6px 8px; }
+.crow2 .port { position: relative; display: inline-block; line-height: 0; animation: idlebob 2.4s ease-in-out infinite; }
+.crow2 .port img { height: 56px; }
+.crow2 .cinfo { flex: 1; min-width: 0; color: #fff; }
+.crow2 .cinfo b { font-size: 16px; }
+.crow2 .cstat { font-size: 14px; color: #ffe066; }
+.crow2 .cbtns { display: flex; gap: 4px; }
+.crow2 .cbtns .btn.big { font-size: 13px; padding: 4px 8px; line-height: 1.15; }
+.crow2 .cbtns small { font-size: 11px; }
+@media (orientation: landscape) and (max-height: 600px) { #wheelWrap { width: min(42vh, 220px); } .crow2 .port img { height: 44px; } }
+
+/* ---------------------------------------------------------------- phones in portrait: a light, compact HUD
+   The scene (fisher, water, fish) is the star; the UI hugs the top and bottom edges and stays small. */
+@media (orientation: portrait) and (max-width: 520px) {
+  #top { top: 6px; gap: 4px; left: 6px; right: 6px; }
+  .pill { font-size: 15px; padding: 2px 9px 2px 4px; gap: 4px; }
+  .pill.round { width: 36px; height: 36px; font-size: 16px; }
+  .ico img { width: 24px; height: 24px; }
+  .lvring { width: 26px; height: 26px; } .lvring span { width: 20px; height: 20px; font-size: 12px; }
+  #status { top: 48px; gap: 4px; }
+  #status .pill { font-size: 13px; padding: 2px 9px; }
+  #dock { bottom: 6px; gap: 5px; }
+  #mission { font-size: 13px; padding: 3px 10px; border-width: 2px; border-radius: 12px; }
+  #mission .mr { font-size: 12px; }
+  #dockRow { gap: 4px; }
+  .shopb, .zone { padding: 1px 7px; font-size: 14px; border-width: 2px; border-radius: 12px; min-height: 34px; }
+  .shopb img { height: 24px; }
+  .round2 { font-size: 18px; padding: 1px 7px; }
+  /* upgrade cards: one slim row, icon beside the numbers */
+  #upgrades { gap: 5px; }
+  #upgrades .up { width: auto; flex: 1; min-width: 0; max-width: 132px; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 4px; row-gap: 0;
+    padding: 3px 6px 4px; border-radius: 14px; border-width: 2px; text-align: left; align-items: center; }
+  #upgrades .up .ui { grid-row: 1 / span 2; height: 28px; font-size: 22px; }
+  #upgrades .up .ui img { height: 26px; }
+  #upgrades .up .ul { display: none; }
+  #upgrades .up .ul2 { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #upgrades .up .uc { font-size: 13px; white-space: nowrap; }
+  #upgrades .up .tease { top: -9px; right: -5px; }
+  /* messages: small, and never on top of the fisher */
+  #toast { font-size: 15px; padding: 5px 14px; border-radius: 14px; max-width: 86vw; top: auto; bottom: 190px; }
+  body.diving #toast { top: 96px; bottom: auto; }
+  #guide { bottom: 150px; }
+  #guide img { height: 60px; }
+  #guideText { font-size: 14px; }
+}
+@media (orientation: portrait) and (max-width: 520px) {
+  #upgrades .up .ul2 .cur { display: none; }
+  #upgrades .up .ul2::before { content: "⬆"; font-size: 10px; margin-right: 1px; }
+  #upgrades .up .ul2 { font-size: 12px; }
+  #dockRow { gap: 3px; flex-wrap: nowrap; max-width: 98vw; }
+  .round2 { padding: 1px 5px; font-size: 17px; }
+  .shopb img { height: 22px; }
+  #zones .zone { max-width: 112px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+}
+@media (orientation: portrait) and (max-width: 370px) { #dockRow { flex-wrap: wrap; } }
+/* crew rows: the name on top, the three trip buttons as an even row underneath */
+.crow2 { flex-wrap: wrap; }
+.crow2 .cinfo { flex: 1 1 60%; }
+.crow2 .cbtns { flex: 1 1 100%; }
+.crow2 .cbtns .btn { flex: 1; }
+.crow2 .port img { height: 46px; }
+@media (orientation: portrait) and (max-width: 520px) {
+  #upgrades .up { grid-template-columns: auto auto; justify-content: center; }
+  #upgrades .up .ul2 { overflow: visible; text-overflow: clip; }
+}
+.crow2 .cbtns .btn.big { min-width: 0; padding: 4px 4px; } .crow2 .cbtns { gap: 5px; } #crewList { width: min(84vw, 460px); }
+body:has(#reveal:not(.hidden)) #guide { bottom: auto; top: 92px; }

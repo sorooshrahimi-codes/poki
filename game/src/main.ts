@@ -1,4 +1,4 @@
-import { catchValue, diveCatches, resolveSnap, startDive, stepDive, type Dive, type DiveInput } from "./core/dive.ts";
+import { catchValue, diveCatches, resolveSnap, startDive, stepDive, type Dive, type DiveInput, type Intro } from "./core/dive.ts";
 import { noteDive, noteSurprise, pickSurprise } from "./core/director.ts";
 import { UPGRADES, UPGRADE_ORDER, capacity, maxDepth, upgradeCost } from "./core/economy.ts";
 import { currentEvent, daylightAt, isNight, nextWorldEvent, personalEventDue, type ActiveEvent } from "./core/events.ts";
@@ -7,21 +7,22 @@ import { FISH, FISH_BY_ID } from "./data/fish.ts";
 import { COSMETICS, TRY_DIVES, aquariumEarned, aquariumFish, aquariumRate, milestoneMet, type CosmeticDef } from "./data/cosmetics.ts";
 import { MERGE_COUNT, ORDER_SLOTS, canFill, fill, keep, matching, merge, newOrder, tankPower, type Order } from "./core/tank.ts";
 import { MISSIONS } from "./data/missions.ts";
+import { CREW, TRIPS, WHEEL, WHEEL_AD_SPINS, WHEEL_FREE_MS, spinWheel, tripCoins, wheelCoins, type WheelPrize } from "./core/extras.ts";
 import { EYES } from "./data/eyes.ts";
 import { SPOT_BY_ID, kindsCaught, spotsOf, type SpotDef } from "./data/spots.ts";
 import { WorldMap } from "./ui/worldmap.ts";
 import { DERBY_COOLDOWN_MS, DERBY_MS, DERBY_RULES, LEAGUE_SIZE, PROMOTE, DEMOTE, TIERS, TIER_ICON, addXp, derbyRivals, leaguePoints, leagueReward, leagueTable, levelReward, rankOf, titleIndex, voyageCoinMult, weekEndsAt, weekOf, xpForCatch, xpNeed, type DerbyRule, type Tier } from "./core/progress.ts";
 import { makeRng } from "./core/rng.ts";
-import { BAIT_BY_ID, GEAR, lanternRadius, shopOffers, sonarRange, type BaitDef } from "./data/gear.ts";
+import { BAIT_BY_ID, BAITS, GEAR, lanternRadius, shopOffers, sonarRange, type BaitDef } from "./data/gear.ts";
 import { RARITY_COLOR, RARITY_ORDER, ZONES, ZONE_ORDER } from "./data/world.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tWeather, tZone } from "./i18n.ts";
 import { setDucked, setMusicMood, setMuted, setRain, sfx, unlockAudio } from "./platform/audio.ts";
 import { WEATHER, weatherAt, type WeatherId } from "./core/weather.ts";
 import { commercialBreak, gameplayStart, gameplayStop, initPoki, isAdPlaying, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
 import { loadSave, writeSave } from "./platform/storage.ts";
-import "@fontsource/fredoka/latin-500.css";
-import "@fontsource/fredoka/latin-600.css";
-import "@fontsource/fredoka/latin-700.css";
+import "@fontsource/fredoka/500.css";
+import "@fontsource/fredoka/600.css";
+import "@fontsource/fredoka/700.css";
 import { artUrl, img, loadAssets, loadRest, spriteTinted } from "./render/assets.ts";
 import { drawFish } from "./render/fish.ts";
 import { recolor } from "./render/recolor.ts";
@@ -37,7 +38,7 @@ setMuted(save.muted);
 
 const canvas = $<HTMLCanvasElement>("game");
 const renderer = new Renderer(canvas);
-const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id, daylight: daylightAt(Date.now()), light: 150, sonar: 0, pet: null, hat: null, outfit: null, outfitId: null, paint: null, paintId: null };
+const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id, daylight: daylightAt(Date.now()), light: 150, sonar: 0, pet: null, hat: null, outfit: null, outfitId: null, paint: null, paintId: null, deco: null };
 function setPose(p: SceneState["pose"]) { if (scene.pose !== p) { scene.pose = p; scene.poseT = 0; } }
 /** slow motion: remaining real seconds and the time scale while it lasts */
 let slowmo = 0;
@@ -90,7 +91,7 @@ function readInput() {
   input.hold = pointerDown || keys.has(" ") || keys.has("arrowup") || keys.has("w");
 }
 
-const anyPanelOpen = () => ["album", "pause", "shop", "map", "wardrobe", "aquarium", "orders", "compete", "result", "langPanel"].some((id) => !$(id).classList.contains("hidden"));
+const anyPanelOpen = () => ["album", "pause", "shop", "map", "wardrobe", "aquarium", "orders", "compete", "result", "langPanel", "wheel", "crew"].some((id) => !$(id).classList.contains("hidden"));
 
 // ------------------------------------------------------------------ dive flow
 async function cast() {
@@ -110,7 +111,7 @@ async function cast() {
   // a friend challenge is fair: the same sea, the same rod and clear sky for both players
   const ctx = ch
     ? { upgrades: CH_UPGRADES, event: null, night: false, rng: dailyRng!, weather: WEATHER.sunny, bait: null }
-    : { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: dailyRng ?? Math.random, weather: weatherAt(Date.now()).def, bait, spot: play.kind === "daily" ? null : currentSpot() };
+    : { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: dailyRng ?? Math.random, weather: weatherAt(Date.now()).def, bait, spot: play.kind === "daily" ? null : currentSpot(), easyFight: save.stats.fightsWon === 0 };
   const playSec = save.playMs / 1000;
   const floor = ZONES[scene.zone].floor;
   const surprise = ch ? null : forcedSurprise ?? pickSurprise(save.director, playSec, { zone: scene.zone, bottom: Math.min(maxDepth(save.upgrades), floor), floor, capacity: capacity(save.upgrades) }, Math.random);
@@ -119,7 +120,9 @@ async function cast() {
   if (treasure) { treasureNext = false; save.mapPieces -= 3; }
   // first-minute pacing: a rare is guaranteed in rounds 2-3, and round 6 teases a legend below
   const hasRare = Object.keys(save.album).some((id) => FISH_BY_ID[id] && FISH_BY_ID[id].rarity !== "common" && !FISH_BY_ID[id].junk);
-  const guarantee = !ch && (save.dives === 1 || save.dives === 2) && !hasRare;
+  // the first casts show what makes this game different: cast 1 a golden fish (mutations), cast 2 an epic fighter,
+  // cast 3 a rare if none yet
+  const guarantee: Intro = ch ? null : save.dives === 0 ? "gold" : save.dives === 1 ? "epic" : save.dives === 2 && !hasRare ? "rare" : null;
   let sur = treasure ? null : surprise;
   if (!ch && !sur && !save.seenGlimpse && save.dives === 5) { sur = "glimpse"; save.seenGlimpse = true; }
   scene.dive = startDive(scene.zone, ctx, sur, treasure, guarantee);
@@ -567,8 +570,8 @@ function renderWardrobe() {
   renderWardPreview();
   const box = $("wardGrid");
   box.innerHTML = "";
-  const KIND_LABEL: Record<string, string> = { hat: "🎩", outfit: "🦺", boat: "🚤", pet: "🐾" };
-  const order = ["hat", "outfit", "boat", "pet"];
+  const KIND_LABEL: Record<string, string> = { hat: "🎩", outfit: "🦺", boat: "🚤", deco: "⛵", pet: "🐾" };
+  const order = ["hat", "outfit", "boat", "deco", "pet"];
   let lastKind = "";
   for (const c of [...COSMETICS].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))) {
     if (c.kind !== lastKind) { lastKind = c.kind; box.insertAdjacentHTML("beforeend", `<div class="wkind">${KIND_LABEL[c.kind]}</div>`); }
@@ -578,7 +581,9 @@ function renderWardrobe() {
     const el = document.createElement("div");
     el.className = "offer" + (worn ? " worn" : "");
     el.style.setProperty("--tc", worn ? "#ffe066" : owned ? "#7be495" : "#7f93b5");
-    if (c.tint) {
+    if (c.icon) {
+      el.innerHTML = `<div class="swatch deco${owned || c.price ? "" : " lockedimg"}">${c.icon}</div><div class="eff">🚣 ✨</div>`;
+    } else if (c.tint) {
       // outfit / paint: a swatch of the real recoloured boat
       const sw = document.createElement("div");
       sw.className = "swatch" + (owned || c.price ? "" : " lockedimg");
@@ -778,7 +783,7 @@ function renderOrders() {
 
 
 // ------------------------------------------------------------------ guide: Captain Bo tells the story and explains each idea once
-type TipId = "start" | "reveal" | "dodge" | "upgrade" | "fight" | "shopBtn" | "aquaBtn" | "ordersBtn" | "wardBtn" | "competeBtn" | "zone" | "weather" | "event" | "vent";
+type TipId = "start" | "reveal" | "dodge" | "upgrade" | "fight" | "shopBtn" | "aquaBtn" | "ordersBtn" | "wardBtn" | "competeBtn" | "wheelBtn" | "crewBtn" | "zone" | "weather" | "event" | "vent";
 const tipQueue: TipId[] = [];
 let tipShowing = false;
 function guide(id: TipId) {
@@ -814,6 +819,150 @@ function addEyelids(port: HTMLElement, name: string) {
   }
 }
 addEyelids($("guidePort"), "npc_captain");
+
+// ------------------------------------------------------------------ lucky wheel and crew trips
+function wheelState() {
+  const today = dayOf(Date.now());
+  const w = (save.wheel ??= { next: 0, ads: 0, day: today });
+  if (w.day !== today) { w.day = today; w.ads = 0; }
+  return w;
+}
+let wheelAngle = 0, wheelSpinning = false;
+function drawWheel() {
+  const cv = $<HTMLCanvasElement>("wheelCv"), c = cv.getContext("2d")!, R = cv.width / 2;
+  c.clearRect(0, 0, cv.width, cv.height);
+  c.save(); c.translate(R, R); c.rotate(wheelAngle);
+  const n = WHEEL.length, a = (Math.PI * 2) / n;
+  for (let i = 0; i < n; i++) {
+    const s0 = -Math.PI / 2 - a / 2 + i * a;
+    const g = c.createRadialGradient(0, 0, 20, 0, 0, R - 10);
+    g.addColorStop(0, "#ffffff"); g.addColorStop(0.25, WHEEL[i].color); g.addColorStop(1, WHEEL[i].color);
+    c.fillStyle = g; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R - 12, s0, s0 + a); c.closePath(); c.fill();
+    c.strokeStyle = "#16345e"; c.lineWidth = 6; c.stroke();
+    c.save(); c.rotate(i * a); c.font = "64px system-ui"; c.textAlign = "center"; c.textBaseline = "middle"; c.fillText(WHEEL[i].icon, 0, -R * 0.62); c.restore();
+  }
+  c.lineWidth = 12; c.strokeStyle = "#16345e"; c.beginPath(); c.arc(0, 0, R - 10, 0, Math.PI * 2); c.stroke();
+  for (let i = 0; i < n; i++) { c.fillStyle = "#ffe066"; c.beginPath(); c.arc(Math.cos(i * a - Math.PI / 2 - a / 2) * (R - 10), Math.sin(i * a - Math.PI / 2 - a / 2) * (R - 10), 8, 0, Math.PI * 2); c.fill(); }
+  c.fillStyle = "#ffe066"; c.beginPath(); c.arc(0, 0, 40, 0, Math.PI * 2); c.fill(); c.stroke();
+  c.restore();
+}
+function renderWheel() {
+  const w = wheelState(), left = w.next - Date.now();
+  const sb = $<HTMLButtonElement>("wheelSpin"), ab = $<HTMLButtonElement>("wheelAd");
+  sb.disabled = wheelSpinning || left > 0;
+  sb.textContent = left > 0 ? `⏳ ${Math.floor(left / 3600_000)}h ${Math.ceil((left % 3600_000) / 60_000)}m` : `🎡 ${t("wheel.free")}`;
+  ab.disabled = wheelSpinning || w.ads >= WHEEL_AD_SPINS;
+  ab.textContent = `🎬 🎡 ${WHEEL_AD_SPINS - w.ads}/${WHEEL_AD_SPINS}`;
+  $("wheelNote").textContent = t("wheel.note");
+  drawWheel();
+}
+function openWheel() { renderWheel(); $("wheel").classList.remove("hidden"); }
+async function doSpin() {
+  if (wheelSpinning) return;
+  wheelSpinning = true; renderWheel();
+  const idx = spinWheel(Math.random), n = WHEEL.length, a = (Math.PI * 2) / n;
+  // land the chosen slice under the pointer at the top, after a few full turns
+  const start = wheelAngle, target = start - (start % (Math.PI * 2)) + Math.PI * 2 * 5 + (Math.PI * 2 - idx * a) + (Math.random() - 0.5) * a * 0.6;
+  const t0 = performance.now(), dur = 3600;
+  let lastTick = 0;
+  await new Promise<void>((done) => {
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 4);
+      wheelAngle = start + (target - start) * e;
+      const tick = Math.floor(wheelAngle / a);
+      if (tick !== lastTick) { lastTick = tick; sfx.tap(); }
+      drawWheel();
+      if (k < 1) requestAnimationFrame(step); else done();
+    };
+    requestAnimationFrame(step);
+  });
+  wheelSpinning = false;
+  givePrize(WHEEL[idx].id);
+  writeSave(save); updateUi(); renderWheel();
+}
+function givePrize(p: WheelPrize) {
+  const coins = wheelCoins(p, save.avg.value);
+  if (coins) { save.coins += coins; sfx.reveal(p === "jackpot" ? "legendary" : p === "coins_l" ? "epic" : "rare"); toast(`${p === "jackpot" ? "👑 JACKPOT! " : ""}🪙+${coins.toLocaleString()}`, 2600); renderer.flashIt(p === "jackpot" ? 1 : 0.3); return; }
+  if (p === "bait") {
+    const pool = BAITS.filter((b) => b.tier === "basic" || b.tier === "fine");
+    const b = pool[Math.floor(Math.random() * pool.length)];
+    save.bait = save.bait?.id === b.id ? { id: b.id, uses: save.bait.uses + b.uses } : { id: b.id, uses: b.uses };
+    sfx.buy(); toast(`${b.icon} ×${b.uses}`, 2200);
+  } else if (p === "map") {
+    save.mapPieces++; sfx.newFish(); toast(`🗺️ ${Math.min(3, save.mapPieces)}/3`, 2200);
+  } else if (p === "trial") {
+    const pool = COSMETICS.filter((c) => !c.free && !isOwned(c));
+    const c = pool[Math.floor(Math.random() * pool.length)];
+    if (!c) { save.coins += 300; toast("🪙+300", 2000); return; }
+    save.trial = { id: c.id, dives: TRY_DIVES }; sfx.reveal("rare");
+    toast(`${c.icon ?? "🎩"} ${t("wheel.trial").replace("{n}", String(TRY_DIVES))}`, 2600);
+  }
+}
+
+function renderCrew() {
+  const box = $("crewList"), now = Date.now();
+  $("crewNote").textContent = t("crew.note");
+  box.innerHTML = "";
+  const trips = (save.crew ??= {});
+  for (const m of CREW) {
+    const tr = trips[m.id];
+    const row = document.createElement("div");
+    row.className = "crow2";
+    row.innerHTML = `<span class="port"><img src="${artUrl(m.npc)}" alt=""></span><div class="cinfo"><b>${t(`crew.${m.id}` as Parameters<typeof t>[0])}</b><div class="cstat"></div></div><div class="cbtns"></div>`;
+    addEyelids(row.querySelector(".port") as HTMLElement, m.npc);
+    const stat = row.querySelector(".cstat")!, btns = row.querySelector(".cbtns")!;
+    if (!tr) {
+      stat.textContent = `💤 ${t("crew.idle")}`;
+      TRIPS.forEach((tp, i) => {
+        const b = document.createElement("button");
+        b.className = "btn big gold"; b.innerHTML = `⏱️${tp.min}m<br><small>🪙${tripCoins(i, save.avg.value).toLocaleString()} 🐟${tp.fish}</small>`;
+        b.onclick = () => { trips[m.id] = { endsAt: Date.now() + tp.min * 60_000, trip: i }; sfx.cast(); writeSave(save); renderCrew(); };
+        btns.appendChild(b);
+      });
+    } else if (now < tr.endsAt) {
+      const left = tr.endsAt - now;
+      stat.textContent = `⛵ ${Math.floor(left / 60_000)}:${String(Math.floor((left % 60_000) / 1000)).padStart(2, "0")}`;
+      if (!tr.rushed) {
+        const b = document.createElement("button");
+        b.className = "btn big ad"; b.textContent = "🎬 ⏩";
+        b.onclick = async () => { const ok = await rewardedBreak(); if (!ok) return; tr.endsAt = Date.now(); tr.rushed = true; writeSave(save); renderCrew(); };
+        btns.appendChild(b);
+      }
+    } else {
+      stat.textContent = `🎉 ${t("crew.back")}`;
+      const b = document.createElement("button");
+      b.className = "btn big ok"; b.textContent = `🪙 ${tripCoins(tr.trip, save.avg.value).toLocaleString()} + 🐟${TRIPS[tr.trip].fish}`;
+      b.onclick = () => collectTrip(m.id);
+      btns.appendChild(b);
+    }
+    box.appendChild(row);
+  }
+}
+function collectTrip(id: string) {
+  const tr = save.crew?.[id];
+  if (!tr || Date.now() < tr.endsAt) return;
+  const coins = tripCoins(tr.trip, save.avg.value);
+  save.coins += coins;
+  // they bring back fish from the places you have opened, straight into the aquarium
+  const pool = FISH.filter((f) => save.zones.includes(f.zone) && !f.junk && (f.rarity === "common" || f.rarity === "rare"));
+  const got: string[] = [];
+  for (let i = 0; i < TRIPS[tr.trip].fish; i++) { const f = pool[Math.floor(Math.random() * pool.length)]; if (f) { keep(save.tank, f.id); got.push(f.id); } }
+  delete save.crew![id];
+  sfx.reveal("rare");
+  toast(`🧭 🪙+${coins.toLocaleString()} · 🐠+${got.length}`, 2600);
+  writeSave(save); updateUi(); renderCrew();
+}
+/** badges: a free spin is ready / someone is back from a trip */
+function updateExtrasBadges() {
+  const now = Date.now();
+  $("wheelBadge").classList.toggle("hidden", !(save.wheel === undefined || now >= (save.wheel?.next ?? 0)));
+  $("crewBadge").classList.toggle("hidden", !Object.values(save.crew ?? {}).some((tr) => now >= tr.endsAt));
+}
+setInterval(() => {
+  updateExtrasBadges();
+  if (!$("crew").classList.contains("hidden")) renderCrew();
+  if (!$("wheel").classList.contains("hidden") && !wheelSpinning) renderWheel();
+}, 1000);
 
 // ------------------------------------------------------------------ meta game: level, league, derby, friend challenge, daily, voyage
 type Play =
@@ -1224,6 +1373,7 @@ function updateUi() {
   $("letgoBtn").textContent = t("letgo");
   $("doubleLbl").textContent = t("double");
   const dock = scene.mode === "dock";
+  document.body.classList.toggle("diving", !dock);
   renderMission();
   // new players see only the essentials; each button arrives when it starts to matter
   const gates: [string, boolean][] = [
@@ -1232,6 +1382,8 @@ function updateUi() {
     ["ordersBtn", save.dives >= 8],
     ["wardBtn", save.dives >= 10 || save.prog.level >= 3],
     ["competeBtn", save.prog.level >= 3 || save.dives >= 14],
+    ["wheelBtn", save.dives >= 3],
+    ["crewBtn", save.dives >= 12],
   ];
   for (const [id, open] of gates) {
     const el = $(id);
@@ -1277,7 +1429,7 @@ function updateUi() {
     const valAt = (l: number) => id === "line" ? `${(400 + 120 * l) / 10}m` : id === "capacity" ? `×${3 + l}` : `+${l * 12}%`;
     const lv = save.upgrades[id];
     const lvl = cost === null ? valAt(lv) : `${valAt(lv)}→${valAt(lv + 1)}`;
-    b.innerHTML = `<span class="ui"><img src="${artUrl(UP_ICON[id])}" alt="" onerror="this.replaceWith('${UPGRADES[id].icon}')"></span><span class="ul">${tUpgrade(id)}</span><span class="ul2">${lvl}</span><span class="uc">${cost === null ? t("max") : "🪙" + cost.toLocaleString()}</span>`;
+    b.innerHTML = `<span class="ui"><img src="${artUrl(UP_ICON[id])}" alt="" onerror="this.replaceWith('${UPGRADES[id].icon}')"></span><span class="ul">${tUpgrade(id)}</span><span class="ul2">${String(lvl).includes("→") ? `<i class="cur">${String(lvl).split("→")[0]}→</i>${String(lvl).split("→")[1]}` : lvl}</span><span class="uc">${cost === null ? t("max") : "🪙" + cost.toLocaleString()}</span>`;
     b.title = t(`fx.${id}` as Parameters<typeof t>[0]);
     b.onclick = () => buy(id);
     if (id === "line" && cost !== null) {
@@ -1394,6 +1546,7 @@ function frame(now: number) {
     const pid = tr?.kind === "boat" ? tr.id : save.wear.boat ?? null;
     scene.outfitId = oid; scene.outfit = oid ? COSMETICS.find((c) => c.id === oid)?.tint ?? null : null;
     scene.paintId = pid; scene.paint = pid ? COSMETICS.find((c) => c.id === pid)?.tint ?? null : null;
+    scene.deco = tr?.kind === "deco" ? tr.id : save.wear.deco ?? null;
     scene.sonar = sonarRange(save.gear.sonar);
     renderer.update(dt, scene);
     setMusicMood(scene.zone, scene.dive && scene.mode === "dive" ? scene.dive.hookY : 0, !!scene.event);
@@ -1426,6 +1579,19 @@ $("mapBtn").onclick = () => {
 $("wardBtn").onclick = () => { if (scene.mode === "dock") { renderWardrobe(); $("wardrobe").classList.remove("hidden"); } };
 $("wardClose").onclick = () => $("wardrobe").classList.add("hidden");
 $("aquaBtn").onclick = () => { if (scene.mode === "dock") openAquarium(false); };
+$("wheelBtn").onclick = () => { if (scene.mode === "dock") openWheel(); };
+$("wheelClose").onclick = () => { if (!wheelSpinning) $("wheel").classList.add("hidden"); };
+$("wheelSpin").onclick = () => { const w = wheelState(); if (Date.now() >= w.next) { w.next = Date.now() + WHEEL_FREE_MS; void doSpin(); } };
+$("wheelAd").onclick = async () => {
+  const w = wheelState();
+  if (wheelSpinning || w.ads >= WHEEL_AD_SPINS) return;
+  const ok = await rewardedBreak();
+  if (!ok) return;
+  w.ads++;
+  void doSpin();
+};
+$("crewBtn").onclick = () => { if (scene.mode === "dock") { renderCrew(); $("crew").classList.remove("hidden"); } };
+$("crewClose").onclick = () => $("crew").classList.add("hidden");
 $("ordersBtn").onclick = () => { if (scene.mode === "dock") { renderOrders(); $("orders").classList.remove("hidden"); } };
 $("ordersClose").onclick = () => $("orders").classList.add("hidden");
 $("aquaClose").onclick = () => $("aquarium").classList.add("hidden");

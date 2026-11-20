@@ -3,7 +3,7 @@ import { FISH } from "./fish.ts";
 // Cosmetics: pure show-off. No stats, so nothing is pay-to-win; they come from coins,
 // from collection milestones, or a rewarded-ad "try it" that lasts a few dives.
 
-export type CosmeticKind = "pet" | "hat" | "outfit" | "boat";
+export type CosmeticKind = "pet" | "hat" | "outfit" | "boat" | "deco";
 
 export interface CosmeticDef {
   id: string;
@@ -19,6 +19,8 @@ export interface CosmeticDef {
   rarity?: "legendary" | "secret";
   /** everyone owns it from the start */
   free?: boolean;
+  /** boat extras drawn in code: the icon shown in the wardrobe */
+  icon?: string;
   /** outfit / boat paint: target hue (degrees) and saturation/brightness tweaks */
   tint?: { hue: number; sat?: number; light?: number };
 }
@@ -45,6 +47,12 @@ export const COSMETICS: CosmeticDef[] = [
   { id: "paint_green", kind: "boat", art: "", price: 800, tint: { hue: 135 } },
   { id: "paint_purple", kind: "boat", art: "", price: 1200, tint: { hue: 280 } },
   { id: "paint_gold", kind: "boat", art: "", rarity: "legendary", tint: { hue: 45, sat: 1.1, light: 1.3 } },
+  // boat extras: drawn in code, each with its own little animation
+  { id: "deco_flag", kind: "deco", art: "", icon: "🏴‍☠️", album: 8 },
+  { id: "deco_lantern", kind: "deco", art: "", icon: "🏮", price: 1000 },
+  { id: "deco_sail", kind: "deco", art: "", icon: "⛵", price: 1600 },
+  { id: "deco_duck", kind: "deco", art: "", icon: "🦆", fish: "rubber_duck" },
+  { id: "deco_motor", kind: "deco", art: "", icon: "🚤", price: 2800 },
   { id: "pet_cat", kind: "pet", art: "pet_cat", price: 800 },
   { id: "pet_dog", kind: "pet", art: "pet_dog", price: 1500 },
   { id: "pet_parrot", kind: "pet", art: "pet_parrot", album: 15 },

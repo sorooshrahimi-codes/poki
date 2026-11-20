@@ -41,6 +41,8 @@ export interface SceneState {
   outfitId: string | null;
   paint: Tint | null;
   paintId: string | null;
+  /** boat extra (sail, flag, motor, lantern, duck) */
+  deco: string | null;
   /** seconds since the pose changed: drives the squash-and-stretch pop */
   poseT: number;
 }
@@ -317,20 +319,24 @@ export class Renderer {
     const width = right - left;
     let bgBottomY = 0;
     if (bg) {
-      const h = (width * bg.height) / bg.width;
+      // the painting always reaches the top of the screen: on tall screens it is scaled up (cropped at the sides)
+      // instead of leaving a band of flat sky above it
+      let h = (width * bg.height) / bg.width, pw = width;
+      if (-BG_WATERLINE[s.zone] * h > top - 2) { h = (-top + 4) / BG_WATERLINE[s.zone]; pw = (h * bg.width) / bg.height; }
+      const px = left - (pw - width) / 2;
       const y0 = -BG_WATERLINE[s.zone] * h;
       bgBottomY = y0 + h;
       // sky above the painting (tall portrait screens), then the painting, then a soft fade into the deep
       if (top < y0) { c.fillStyle = bgTopColor(s.zone); c.fillRect(left, top, width, y0 - top + 2); }
       if (y0 < bottom && bgBottomY > top) {
-        c.drawImage(bg, left, y0, width, h);
+        c.drawImage(bg, px, y0, pw, h);
         // refraction: the band just under the surface wobbles sideways like real water
         if (top < 110) {
           const sy0 = Math.max(4, top), sy1 = Math.min(110, bottom);
           for (let yy = sy0; yy < sy1; yy += 3) {
             const dx = Math.sin(yy * 0.16 + s.t * 2.4) * 2.6 * (1 - yy / 120);
             const srcY = ((yy - y0) / h) * bg.height;
-            c.drawImage(bg, 0, srcY, bg.width, (3 / h) * bg.height, left + dx, yy, width, 3.4);
+            c.drawImage(bg, ((left - px) / pw) * bg.width, srcY, (width / pw) * bg.width, (3 / h) * bg.height, left + dx, yy, width, 3.4);
           }
         }
         const fadeTop = y0 + h * 0.72;
@@ -1038,6 +1044,74 @@ export class Renderer {
     return { x: b.cx + lx * Math.cos(b.tilt) - ly * Math.sin(b.tilt), y: b.bottomY + lx * Math.sin(b.tilt) + ly * Math.cos(b.tilt) };
   }
 
+  /** boat extras, drawn in code in the same glossy outlined style; `behind` = the layer behind the fisher */
+  private drawDeco(c: Ctx, s: SceneState, stern: number, bow: number, deck: number, behind: boolean) {
+    const t = s.t, ol = "#16345e";
+    c.save();
+    c.lineJoin = "round"; c.lineCap = "round";
+    if (s.deco === "deco_sail" && behind) {
+      // a mast near the stern and a striped sail that fills and sags with the wind
+      const mx = stern + 26, top = deck - 128, fill = 1 + Math.sin(t * 1.3) * 0.12;
+      c.strokeStyle = ol; c.lineWidth = 7; c.beginPath(); c.moveTo(mx, deck + 4); c.lineTo(mx, top); c.stroke();
+      c.strokeStyle = "#a0683a"; c.lineWidth = 4; c.beginPath(); c.moveTo(mx, deck + 4); c.lineTo(mx, top); c.stroke();
+      c.beginPath(); c.moveTo(mx + 3, top + 6); c.quadraticCurveTo(mx + 70 * fill, top + 60, mx + 3, deck - 12); c.closePath();
+      const g = c.createLinearGradient(mx, 0, mx + 60, 0); g.addColorStop(0, "#ffffff"); g.addColorStop(1, "#dcecff");
+      c.fillStyle = g; c.fill(); c.strokeStyle = ol; c.lineWidth = 3; c.stroke();
+      c.save(); c.clip();
+      c.fillStyle = "#ff5a6a"; for (let i = 0; i < 3; i++) c.fillRect(mx, top + 22 + i * 30, 80, 10);
+      c.restore();
+      c.fillStyle = "#ffe066"; c.strokeStyle = ol; c.lineWidth = 2; c.beginPath(); c.moveTo(mx, top); c.lineTo(mx - 16 - Math.sin(t * 6) * 3, top + 5); c.lineTo(mx, top + 10); c.closePath(); c.fill(); c.stroke();
+    }
+    if (s.deco === "deco_flag" && !behind) {
+      // a pirate flag at the stern, waving
+      const px = stern + 8, top = deck - 70;
+      c.strokeStyle = ol; c.lineWidth = 5; c.beginPath(); c.moveTo(px, deck + 6); c.lineTo(px, top); c.stroke();
+      c.strokeStyle = "#c9a26a"; c.lineWidth = 2.5; c.beginPath(); c.moveTo(px, deck + 6); c.lineTo(px, top); c.stroke();
+      c.beginPath(); c.moveTo(px, top + 2);
+      for (let i = 0; i <= 6; i++) c.lineTo(px - i * 6, top + 2 + Math.sin(t * 7 - i * 0.9) * 3 * (i / 6));
+      for (let i = 6; i >= 0; i--) c.lineTo(px - i * 6, top + 26 + Math.sin(t * 7 - i * 0.9) * 3 * (i / 6));
+      c.closePath(); c.fillStyle = "#1d1d2b"; c.fill(); c.strokeStyle = ol; c.lineWidth = 2; c.stroke();
+      c.fillStyle = "#fff"; c.beginPath(); c.arc(px - 17, top + 12 + Math.sin(t * 7 - 2.5) * 1.5, 5, 0, Math.PI * 2); c.fill();
+      c.fillRect(px - 21, top + 18 + Math.sin(t * 7 - 2.5) * 1.5, 8, 3);
+    }
+    if (s.deco === "deco_lantern" && !behind) {
+      // a lantern on a bent pole at the bow; it glows warmer as the day ends
+      const px = bow - 10, top = deck - 62, sway = Math.sin(t * 1.7) * 3, lx = px + 16 + sway, ly = top + 14;
+      c.strokeStyle = ol; c.lineWidth = 5; c.beginPath(); c.moveTo(px, deck + 6); c.lineTo(px, top); c.quadraticCurveTo(px + 4, top - 6, px + 16, top); c.stroke();
+      c.strokeStyle = "#8a5a32"; c.lineWidth = 2.5; c.beginPath(); c.moveTo(px, deck + 6); c.lineTo(px, top); c.quadraticCurveTo(px + 4, top - 6, px + 16, top); c.stroke();
+      c.strokeStyle = ol; c.lineWidth = 1.5; c.beginPath(); c.moveTo(px + 16, top); c.lineTo(lx, ly - 8); c.stroke();
+      const night = 1 - s.daylight * 0.75, gl = c.createRadialGradient(lx, ly, 2, lx, ly, 46 + night * 30);
+      gl.addColorStop(0, `rgba(255,220,120,${0.55 * night})`); gl.addColorStop(1, "rgba(255,200,90,0)");
+      c.fillStyle = gl; c.beginPath(); c.arc(lx, ly, 76, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#ffb03a"; c.strokeStyle = ol; c.lineWidth = 2.5;
+      c.beginPath(); c.roundRect(lx - 8, ly - 9, 16, 18, 5); c.fill(); c.stroke();
+      c.fillStyle = `rgba(255,250,200,${0.75 + 0.25 * Math.sin(t * 9)})`; c.beginPath(); c.ellipse(lx, ly, 4, 6, 0, 0, Math.PI * 2); c.fill();
+    }
+    if (s.deco === "deco_motor" && behind) {
+      // an outboard motor on the stern: the propeller spins and churns a trail of bubbles
+      const mx = stern + 16, my = deck + 10;
+      c.fillStyle = "#e8eef6"; c.strokeStyle = ol; c.lineWidth = 3;
+      c.beginPath(); c.roundRect(mx - 22, my - 22, 26, 24, 7); c.fill(); c.stroke();
+      c.fillStyle = "#ff5a3a"; c.fillRect(mx - 19, my - 15, 20, 5);
+      c.fillStyle = "#5a6a80"; c.fillRect(mx - 12, my + 2, 6, 30); c.strokeRect(mx - 12, my + 2, 6, 30);
+      const k = Math.sin(t * 30);
+      c.fillStyle = "#b8c4d6"; c.beginPath(); c.ellipse(mx - 9, my + 34, 3, 9 * Math.abs(k) + 2, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+      for (let i = 0; i < 6; i++) {
+        const p = ((t * 1.4 + i / 6) % 1);
+        c.fillStyle = `rgba(255,255,255,${0.7 * (1 - p)})`;
+        c.beginPath(); c.arc(mx - 14 - p * 70, my + 30 - p * 20 + Math.sin(i * 2 + t * 5) * 3, 2 + p * 5, 0, Math.PI * 2); c.fill();
+      }
+    }
+    if (s.deco === "deco_duck" && behind) {
+      // a rubber duck on a string, bobbing behind the boat
+      const duck = img("rubber_duck"), dx = stern - 46 + Math.sin(t * 0.8) * 6, dy = deck + 20 + Math.sin(t * 2.1) * 3;
+      c.strokeStyle = "rgba(255,255,255,0.8)"; c.lineWidth = 1.5;
+      c.beginPath(); c.moveTo(stern + 4, deck + 4); c.quadraticCurveTo((stern + dx) / 2, deck + 22, dx + 10, dy - 4); c.stroke();
+      if (duck) { const w = 34; c.save(); c.translate(dx, dy); c.rotate(Math.sin(t * 2.1) * 0.12); c.scale(-1, 1); c.drawImage(duck, -w / 2, -w / 2, w, (w * duck.height) / duck.width); c.restore(); }
+    }
+    c.restore();
+  }
+
   private drawBoat(c: Ctx, s: SceneState) {
     const b = this.boatGeo(s.t, s.pose);
     // soft water shadow under the hull
@@ -1051,7 +1125,10 @@ export class Renderer {
     c.translate(b.cx, b.bottomY);
     c.rotate(b.tilt + Math.sin(s.t * 0.9) * 0.012);
     c.scale(1 - pop * 0.6 - breathe * 0.4, 1 + pop + breathe);
+    const stern = b.left + b.g.hull[0] * b.w, bow = b.left + b.g.hull[1] * b.w, deck = -BOAT_W * 0.2;
+    if (s.deco) this.drawDeco(c, s, stern, bow, deck, true);
     if (b.im) { c.drawImage(this.dressed(b.p, b.im), b.left, -b.h, b.w, b.h); blink(c, b.key, b.left, -b.h, b.w, b.h, s.t, 7); }
+    if (s.deco) this.drawDeco(c, s, stern, bow, deck, false);
     // cosmetics: a hat over the cap, a pet on the bow
     // no hat chosen = the classic red cap
     const pet = s.pet ? img(s.pet) : null;
