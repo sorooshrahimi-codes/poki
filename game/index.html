@@ -20,12 +20,13 @@
         <button class="pill btn round" id="muteBtn">🔊</button>
         <button class="pill btn round" id="pauseBtn">⏸</button>
       </div>
-      <div id="status"><div class="pill hidden" id="baitPill"></div><div class="pill" id="weatherPill"></div><div class="pill hidden" id="eventPill"></div></div>
+      <div id="status"><button class="pill btn hidden" id="baitPill"></button><div class="pill" id="weatherPill"></div><div class="pill hidden" id="eventPill"></div></div>
       <div id="diveHud" class="hidden">
         <div class="pill" id="depthN">0m</div>
         <div class="pill" id="slots"></div>
       </div>
       <div id="dock">
+        <div id="mission" class="hidden"></div>
         <div id="dockRow"><div id="zones"></div><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb round2" id="aquaBtn">🐠</button><button class="btn zone shopb round2" id="wardBtn">🎩</button><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
         <div id="upgrades"></div>
       </div>
@@ -48,6 +49,7 @@
       </div>
       <div id="wardrobe" class="panel hidden">
         <div class="title">🎩 🐾</div>
+        <div id="wardNote"></div>
         <div id="wardGrid"></div>
         <button class="btn big ok" id="wardClose">✕</button>
       </div>
@@ -65,6 +67,7 @@
       </div>
       <div id="shop" class="panel hidden">
         <div class="title"><img class="ti" src="./art/g_shop.webp" alt=""> <span id="restock"></span></div>
+        <div id="myGear"></div>
         <div id="offers"></div>
         <div id="gearRow"></div>
         <button class="btn big ok" id="shopClose">✕</button>

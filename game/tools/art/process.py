@@ -28,13 +28,15 @@ SHEETS = {
     "fish_reef2": ["lionfish", "sea_turtle", "octopus", "manta"],
     "pets": ["pet_cat", "pet_dog", "pet_parrot", "pet_penguin"],
     "hats": ["hat_pirate", "hat_crown", "hat_beanie", "hat_straw"],
+    "hats2": ["hat_cap", "hat_rain", "hat_frog", "hat_sailor"],
 }
-SINGLES = {"fish_whiskers": "old_whiskers", "fish_marlin": "grand_marlin", "fish_whale": "star_whale", "boat": "boat", "boat_cast": "boat_cast", "boat_reel": "boat_reel", "boat_cheer": "boat_cheer",
+SINGLES = {"fish_whiskers": "old_whiskers", "fish_marlin": "grand_marlin", "fish_whale": "star_whale", "nc_idle": "kid_idle", "nc_cast": "kid_cast", "nc_reel": "kid_reel", "nc_cheer": "kid_cheer",
+           "boat": "boat", "boat_cast": "boat_cast", "boat_reel": "boat_reel", "boat_cheer": "boat_cheer",
            "ice_floor": "floor_ice", "fish_narwhal": "narwhal_king", "fish_aurora": "aurora_ray",
            "reef_floor": "floor_reef", "fish_coraldragon": "coral_dragon", "fish_opal": "opal_serpent",
            "lake_floor": "floor_lake", "ocean_floor": "floor_ocean"}
 BACKGROUNDS = {"lake_surface": "bg_lake", "ocean_surface": "bg_ocean", "ice_surface": "bg_ice", "reef_surface": "bg_reef", "aquarium": "bg_aquarium"}
-MAX = {"pet_": 160, "hat_": 140, "coral_dragon": 420, "opal_serpent": 460, "i_": 128, "b_": 128, "g_": 128, "s_": 300, "narwhal_king": 420, "aurora_ray": 460, "boat_": 420, "p_": 360, "floor_": 1024, "boat": 420, "old_whiskers": 420, "grand_marlin": 420, "star_whale": 480}
+MAX = {"kid_": 420, "pet_": 160, "hat_": 140, "coral_dragon": 420, "opal_serpent": 460, "i_": 128, "b_": 128, "g_": 128, "s_": 300, "narwhal_king": 420, "aurora_ray": 460, "boat_": 420, "p_": 360, "floor_": 1024, "boat": 420, "old_whiskers": 420, "grand_marlin": 420, "star_whale": 480}
 
 def max_for(name):
     for k, v in MAX.items():

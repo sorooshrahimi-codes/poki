@@ -5,6 +5,7 @@ import { currentEvent, isNight, nextWorldEvent, personalEventDue, type ActiveEve
 import type { Catch, UpgradeId, ZoneId } from "./core/types.ts";
 import { FISH, FISH_BY_ID } from "./data/fish.ts";
 import { COSMETICS, TRY_DIVES, aquariumEarned, aquariumFish, milestoneMet, type CosmeticDef } from "./data/cosmetics.ts";
+import { MISSIONS } from "./data/missions.ts";
 import { BAIT_BY_ID, GEAR, lanternRadius, shopOffers, sonarRange, type BaitDef } from "./data/gear.ts";
 import { RARITY_COLOR, RARITY_ORDER, ZONES, ZONE_ORDER } from "./data/world.ts";
 import { LANGS, LANG_LABEL, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tWeather, tZone } from "./i18n.ts";
@@ -96,7 +97,12 @@ async function cast() {
   if (surprise) noteSurprise(save.director, surprise, playSec);
   const treasure = treasureNext;
   if (treasure) { treasureNext = false; save.mapPieces -= 3; }
-  scene.dive = startDive(scene.zone, ctx, treasure ? null : surprise, treasure);
+  // first-minute pacing: a rare is guaranteed in rounds 2-3, and round 6 teases a legend below
+  const hasRare = Object.keys(save.album).some((id) => FISH_BY_ID[id] && FISH_BY_ID[id].rarity !== "common" && !FISH_BY_ID[id].junk);
+  const guarantee = (save.dives === 1 || save.dives === 2) && !hasRare;
+  let sur = treasure ? null : surprise;
+  if (!sur && !save.seenGlimpse && save.dives === 5) { sur = "glimpse"; save.seenGlimpse = true; }
+  scene.dive = startDive(scene.zone, ctx, sur, treasure, guarantee);
   scene.mode = "dive";
   scene.hint = false;
   sfx.cast();
@@ -118,6 +124,7 @@ function handleFx(d: Dive) {
       }
     } else if (fx.kind === "turn") { sfx.turn(); setPose("reel"); }
     else if (fx.kind === "fightWon") {
+      save.stats.fightsWon++;
       sfx.reveal(fx.fish.def.rarity);
       renderer.burst(d.hookX, d.hookY, RARITY_COLOR[fx.fish.def.rarity], 40, 260);
       renderer.shakeIt(10);
@@ -189,12 +196,15 @@ async function collect(double: boolean) {
     const e = (save.album[c.fish] ??= { count: 0, muts: [], best: 0 });
     e.count++;
     e.best = Math.max(e.best, c.value);
+    e.bestKg = Math.max(e.bestKg ?? 0, c.kg ?? 0);
+    save.stats.catches++;
     if (c.mut && !e.muts.includes(c.mut)) e.muts.push(c.mut);
   }
   total += pendingBonus;
   pendingBonus = 0;
   if (double) total *= 2;
   save.coins += total;
+  setTimeout(checkMission, 500);
   pending.forEach((_, i) => setTimeout(() => sfx.coin(i), i * 40));
   pending = [];
   $("reveal").classList.add("hidden");
@@ -242,17 +252,22 @@ function showReveal(list: Catch[]) {
   const order = [...list].sort((a, b) => RARITY_ORDER.indexOf(FISH_BY_ID[a.fish].rarity) - RARITY_ORDER.indexOf(FISH_BY_ID[b.fish].rarity));
   let total = 0;
   const shown = new Set<string>();
+  const bestInReveal = new Map<string, number>();
   order.forEach((c, i) => {
     const def = FISH_BY_ID[c.fish];
     const isNew = !save.album[c.fish] && !shown.has(c.fish);
+    const prevKg = Math.max(save.album[c.fish]?.bestKg ?? 0, bestInReveal.get(c.fish) ?? 0);
+    const isRecord = !isNew && !!save.album[c.fish] && (c.kg ?? 0) > prevKg && !FISH_BY_ID[c.fish].junk;
+    bestInReveal.set(c.fish, Math.max(bestInReveal.get(c.fish) ?? 0, c.kg ?? 0));
     shown.add(c.fish);
     const card = document.createElement("div");
     card.className = "card" + (RARITY_ORDER.indexOf(def.rarity) >= 2 || c.mut ? " big" : "");
     card.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
     card.style.animationDelay = `${i * 0.18}s`;
     card.appendChild(fishThumb(c.fish, c.mut, 92, 50));
-    card.insertAdjacentHTML("beforeend", `<div class="cn">${fishName(def)}</div><div class="cr">${tRarity(def.rarity)}</div><div class="cv">🪙 ${c.value}</div>` +
-      (c.mut ? `<div class="cm">${MUT_ICON[c.mut]}</div>` : "") + (isNew ? `<div class="newb">${t("new")}</div>` : ""));
+    card.insertAdjacentHTML("beforeend", `<div class="cn">${fishName(def)}</div><div class="cr">${tRarity(def.rarity)}</div><div class="ck">⚖️ ${fmtKg(c.kg)}</div><div class="cv">🪙 ${c.value}</div>` +
+      (c.mut ? `<div class="cm">${MUT_ICON[c.mut]}</div>` : "") + (isNew ? `<div class="newb">${t("new")}</div>` : "") + (isRecord ? `<div class="newb rec">🏆 ${t("record")}</div>` : ""));
+    if (isRecord) setTimeout(() => sfx.newFish(), i * 180 + 120);
     box.appendChild(card);
     setTimeout(() => { sfx.reveal(def.rarity); if (isNew) sfx.newFish(); }, i * 180);
     total += c.value;
@@ -331,7 +346,7 @@ function showAlbum() {
     cell.className = "acell";
     cell.style.setProperty("--rc", e ? RARITY_COLOR[def.rarity] : "#2a3a4a");
     cell.appendChild(fishThumb(def.id, null, 70, 40, !e));
-    cell.insertAdjacentHTML("beforeend", `<div class="an">${e ? fishName(def) : "?"}</div><div class="am">${e ? e.muts.map((m) => MUT_ICON[m]).join("") : ""}</div>`);
+    cell.insertAdjacentHTML("beforeend", `<div class="an">${e ? fishName(def) : "?"}</div><div class="am">${e ? e.muts.map((m) => MUT_ICON[m]).join("") : ""}</div>${e?.bestKg ? `<div class="ak">🏆 ${fmtKg(e.bestKg)}</div>` : ""}`);
     grid.appendChild(cell);
   }
   $("albumTitle").textContent = "📖 " + t("album");
@@ -347,20 +362,42 @@ const FX_ICON: Record<string, string> = { rare: "🔷", epic: "🟣", legendary:
 const baitName = (b: BaitDef) => b.names[getLang()] ?? b.names.en;
 
 let shownRestock = 0;
+/** one plain line saying what a bait does */
+function baitEffect(b: BaitDef): string {
+  const parts: string[] = [];
+  for (const [r, m] of Object.entries(b.rarity ?? {})) parts.push(`${FX_ICON[r] ?? ""} ${tRarity(r as Parameters<typeof tRarity>[0])} ×${m}`);
+  for (const [k, m] of Object.entries(b.mutation ?? {})) parts.push(`${FX_ICON[k] ?? ""} ×${m}`);
+  if (b.attracts?.length) parts.push(`🧲 ${t("fx.attracts")}`);
+  if (b.unlocksSecret) parts.push(`❓ ${t("fx.secret")}`);
+  return parts.join("<br>");
+}
+
+/** what you own right now and where it is working */
+function renderMyGear() {
+  const bait = save.bait ? BAIT_BY_ID[save.bait.id] : null;
+  const rows = [
+    bait ? `<div class="gi"><img src="${artUrl(bait.art)}" alt=""><span><b>${baitName(bait)}</b> · 🎣 ${save.bait!.uses} ${t("fx.casts")}<br><small>${baitEffect(bait).replace(/<br>/g, " · ")}</small></span></div>`
+      : `<div class="gi dim"><span>🪱 ${t("fx.nobait")}</span></div>`,
+    `<div class="gi"><img src="${artUrl("g_lantern")}" alt=""><span><b>${t("fx.lantern")}</b> ★${save.gear.lantern} · 💡 ${lanternRadius(save.gear.lantern)}</span></div>`,
+    `<div class="gi${save.gear.sonar ? "" : " dim"}"><img src="${artUrl("g_sonar")}" alt=""><span><b>${t("fx.sonar")}</b> ★${save.gear.sonar} · ${sonarRange(save.gear.sonar) ? Math.round(sonarRange(save.gear.sonar) / 10) + " m" : "—"}</span></div>`,
+  ];
+  $("myGear").innerHTML = `<div class="gt">${t("fx.mygear")}</div>` + rows.join("");
+}
+
 function renderShop() {
   const now = Date.now();
   const { offers, restockAt } = shopOffers(now);
   shownRestock = restockAt;
   const left = Math.max(0, Math.ceil((restockAt - now) / 1000));
   $("restock").textContent = `🔄 ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+  renderMyGear();
   const box = $("offers");
   box.innerHTML = "";
   for (const b of offers) {
     const el = document.createElement("div");
     el.className = `offer tier-${b.tier}`;
     el.style.setProperty("--tc", TIER_COLOR[b.tier]);
-    const fx = [...Object.keys(b.rarity ?? {}), ...Object.keys(b.mutation ?? {})].map((k) => `<span>${FX_ICON[k] ?? ""}⬆</span>`).join("") + (b.unlocksSecret ? "<span>❓</span>" : "");
-    el.innerHTML = `<img class="bi" src="${artUrl(b.art)}" alt=""><div class="on">${baitName(b)}</div><div class="ue">🎣 ×${b.uses}</div><div class="fx">${fx}</div>`;
+    el.innerHTML = `<img class="bi" src="${artUrl(b.art)}" alt=""><div class="on">${baitName(b)}</div><div class="ue">🎣 ${b.uses} ${t("fx.casts")}</div><div class="eff">${baitEffect(b)}</div><div class="fx"></div>`;
     // attracted species: thumbnails, dark silhouettes until caught (a teaser)
     const fxRow = el.querySelector(".fx")!;
     for (const id of b.attracts ?? []) if (FISH_BY_ID[id]) fxRow.appendChild(fishThumb(id, null, 34, 20, !save.album[id]));
@@ -373,6 +410,7 @@ function renderShop() {
       save.coins -= b.price;
       save.bait = { id: b.id, uses: (save.bait?.id === b.id ? save.bait.uses : 0) + b.uses };
       sfx.buy(); writeSave(save); renderShop(); updateUi();
+      toast(`✅ ${baitName(b)}: ${t("fx.nextcasts").replace("{n}", String(save.bait.uses))}`, 2600);
     };
     el.appendChild(btn);
     box.appendChild(el);
@@ -384,8 +422,11 @@ function renderShop() {
     const el = document.createElement("div");
     el.className = "offer";
     el.style.setProperty("--tc", "#7be495");
-    const stat = g.id === "lantern" ? `💡 ${lanternRadius(lvl)}` : `📡 ${sonarRange(lvl) ? Math.round(sonarRange(lvl) / 10) + "m" : "—"}`;
-    el.innerHTML = `<img class="bi" src="${artUrl(g.art)}" alt=""><div class="ue">${"★".repeat(lvl)}${"☆".repeat(g.max - lvl)}</div><div class="fx">${stat}</div>`;
+    const val = (l: number) => g.id === "lantern" ? `${lanternRadius(l)}` : sonarRange(l) ? `${Math.round(sonarRange(l) / 10)} m` : "—";
+    const name = g.id === "lantern" ? t("fx.lantern") : t("fx.sonar");
+    const what = g.id === "lantern" ? t("fx.lanternDo") : t("fx.sonarDo");
+    el.innerHTML = `<img class="bi" src="${artUrl(g.art)}" alt=""><div class="on">${name}</div><div class="ue">${"★".repeat(lvl)}${"☆".repeat(g.max - lvl)}</div>`
+      + `<div class="eff">${what}<br><b>${val(lvl)}${lvl < g.max ? " → " + val(lvl + 1) : ""}</b></div>`;
     const btn = document.createElement("button");
     btn.className = "btn big gold buy";
     btn.innerHTML = cost === null ? t("max") : `🪙 ${cost.toLocaleString()}`;
@@ -394,6 +435,7 @@ function renderShop() {
       if (cost === null || save.coins < cost) return;
       save.coins -= cost; save.gear[g.id]++;
       sfx.buy(); writeSave(save); renderShop(); updateUi();
+      toast(`✅ ${g.id === "lantern" ? t("fx.lantern") : t("fx.sonar")} ★${save.gear[g.id]}`, 2200);
     };
     el.appendChild(btn);
     gr.appendChild(el);
@@ -403,15 +445,16 @@ function renderShop() {
 // ------------------------------------------------------------------ wardrobe (cosmetics)
 const isOwned = (c: CosmeticDef) => save.owned.includes(c.id) || (!c.price && milestoneMet(c, save.album));
 function renderWardrobe() {
+  $("wardNote").textContent = t("ward.note");
   const box = $("wardGrid");
   box.innerHTML = "";
   for (const c of COSMETICS) {
     const owned = isOwned(c);
-    const worn = save.wear[c.kind] === c.id;
+    const worn = save.wear[c.kind] === c.id || (c.id === "hat_cap" && !save.wear.hat);
     const el = document.createElement("div");
     el.className = "offer" + (worn ? " worn" : "");
     el.style.setProperty("--tc", worn ? "#ffe066" : owned ? "#7be495" : "#7f93b5");
-    el.innerHTML = `<img class="bi${owned || c.price ? "" : " lockedimg"}" src="${artUrl(c.art)}" alt="">`;
+    el.innerHTML = `<img class="bi${owned || c.price ? "" : " lockedimg"}" src="${artUrl(c.art)}" alt=""><div class="eff">${c.kind === "hat" ? "👦 🎩" : "🚣 🐾"}</div>`;
     const btn = document.createElement("button");
     btn.className = "btn big buy " + (owned ? "ok" : c.price ? "gold" : "plain");
     if (owned) {
@@ -499,6 +542,43 @@ function togglePause(force?: boolean) {
 }
 
 // ------------------------------------------------------------------ dock ui
+const fmtKg = (kg?: number) => (kg ?? 0) >= 10 ? `${Math.round(kg!)} kg` : `${(kg ?? 0).toFixed(1)} kg`;
+
+/** pay out every finished starter mission, one celebration each */
+function checkMission() {
+  const m = MISSIONS[save.mission];
+  if (!m) return;
+  const [cur, goal] = m.progress(save);
+  if (cur >= goal) {
+    save.mission++;
+    save.coins += m.reward;
+    toast(`🎯 ${m.text[getLang()] ?? m.text.en} ✓ 🪙+${m.reward}`, 2400);
+    sfx.reveal("epic");
+    writeSave(save);
+    updateUi();
+    setTimeout(checkMission, 2600);
+  }
+  renderMission();
+}
+
+function renderMission() {
+  const el = $("mission");
+  const m = MISSIONS[save.mission];
+  el.classList.toggle("hidden", !m || scene.mode !== "dock");
+  if (!m) return;
+  const [cur, goal] = m.progress(save);
+  el.innerHTML = `🎯 ${m.text[getLang()] ?? m.text.en} <b>${Math.floor(cur)}/${goal}</b> <span class="mr">🪙${m.reward}</span><i style="width:${Math.round((cur / goal) * 100)}%"></i>`;
+}
+
+/** the next new species the line upgrade reaches: a silhouette teaser on the button */
+function nextFishTeaser(): { id: string; depth: number } | null {
+  const now = maxDepth(save.upgrades), next = now + 120;
+  const cand = FISH.filter((f) => f.zone === scene.zone && !f.junk && !f.event && f.depth[0] > now && f.depth[0] <= Math.max(next, now + 1))
+    .sort((a, b) => a.depth[0] - b.depth[0]);
+  const f = cand.find((x) => !save.album[x.id]) ?? null;
+  return f ? { id: f.id, depth: Math.round(f.depth[0] / 10) } : null;
+}
+
 function buy(id: UpgradeId) {
   const cost = upgradeCost(save.upgrades, id);
   if (cost === null || cost > save.coins || scene.mode !== "dock") return;
@@ -507,6 +587,8 @@ function buy(id: UpgradeId) {
   sfx.buy();
   writeSave(save);
   updateUi();
+  toast(`✅ ${tUpgrade(id)}: ${t(`fx.${id}` as Parameters<typeof t>[0])}`, 1800);
+  checkMission();
 }
 
 const zoneReachable = (z: ZoneId) => !ZONES[z].after || save.zones.includes(ZONES[z].after!);
@@ -549,6 +631,7 @@ function pickZone(z: ZoneId) {
   scene.zone = z;
   writeSave(save);
   updateUi();
+  checkMission();
 }
 
 function updateUi() {
@@ -561,6 +644,7 @@ function updateUi() {
   $("letgoBtn").textContent = t("letgo");
   $("doubleLbl").textContent = t("double");
   const dock = scene.mode === "dock";
+  renderMission();
   $("aquaBtn").classList.toggle("hidden", Object.keys(save.album).length < 3);
   const mb = $<HTMLButtonElement>("mapBtn");
   mb.classList.toggle("hidden", save.mapPieces < 1);
@@ -588,9 +672,16 @@ function updateUi() {
     const can = cost !== null && cost <= save.coins;
     b.className = "btn up" + (can ? " can" : "");
     b.disabled = cost === null;
-    const lvl = id === "line" ? `${(400 + 120 * save.upgrades.line) / 10}m` : id === "capacity" ? `×${capacity(save.upgrades)}` : `+${save.upgrades.luck * 12}%`;
-    b.innerHTML = `<span class="ui"><img src="${artUrl(UP_ICON[id])}" alt="" onerror="this.replaceWith('${UPGRADES[id].icon}')"></span><span class="ul">${tUpgrade(id)} ${lvl}</span><span class="uc">${cost === null ? t("max") : "🪙" + cost.toLocaleString()}</span>`;
+    const valAt = (l: number) => id === "line" ? `${(400 + 120 * l) / 10}m` : id === "capacity" ? `×${3 + l}` : `+${l * 12}%`;
+    const lv = save.upgrades[id];
+    const lvl = cost === null ? valAt(lv) : `${valAt(lv)}→${valAt(lv + 1)}`;
+    b.innerHTML = `<span class="ui"><img src="${artUrl(UP_ICON[id])}" alt="" onerror="this.replaceWith('${UPGRADES[id].icon}')"></span><span class="ul">${tUpgrade(id)}</span><span class="ul2">${lvl}</span><span class="uc">${cost === null ? t("max") : "🪙" + cost.toLocaleString()}</span>`;
+    b.title = t(`fx.${id}` as Parameters<typeof t>[0]);
     b.onclick = () => buy(id);
+    if (id === "line" && cost !== null) {
+      const tz = nextFishTeaser();
+      if (tz) { const tw = document.createElement("span"); tw.className = "tease"; tw.appendChild(fishThumb(tz.id, null, 34, 20, true)); tw.insertAdjacentHTML("beforeend", "<b>?</b>"); b.appendChild(tw); }
+    }
     ups.appendChild(b);
   }
 }
@@ -723,6 +814,7 @@ $("aquaBtn").onclick = () => { if (scene.mode === "dock") openAquarium(false); }
 $("aquaClose").onclick = () => $("aquarium").classList.add("hidden");
 $("aquaCollect").onclick = () => void collectAquarium(false);
 $("aquaDouble").onclick = () => void collectAquarium(true);
+$("baitPill").onclick = () => { const b = save.bait ? BAIT_BY_ID[save.bait.id] : null; if (b) toast(`${baitName(b)}: ${baitEffect(b).replace(/<br>/g, " · ")}`, 2600); };
 $("mapClose").onclick = () => $("map").classList.add("hidden");
 $("shopBtn").onclick = () => { if (scene.mode === "dock") { renderShop(); $("shop").classList.remove("hidden"); } };
 $("shopClose").onclick = () => $("shop").classList.add("hidden");

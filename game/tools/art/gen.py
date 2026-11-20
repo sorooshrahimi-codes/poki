@@ -115,6 +115,17 @@ JOBS.update({
      "green plants at both sides, a tiny treasure chest and a little castle decoration at the bottom, bubbles, soft light from the top, glass edges framing it. " + STYLE, "3:2", False),
 })
 
+POSE_NC = ("Exactly the same kid, same small white-and-red wooden rowboat, same blue life vest, same art style, same size and same side-view framing as the reference image, "
+           "BUT the kid wears NO cap and NO hat: short messy brown hair fully visible on top of the head. Fully transparent background, no water, no text. ")
+JOBS.update({
+  "nc_idle": (POSE_NC + "Pose: sitting calmly holding the fishing rod pointing up and to the right, happy smile. " + STYLE, "3:2", True, [BOAT_REF]),
+  "nc_cast": (POSE_NC + "Pose: swinging the fishing rod back over the shoulder to cast, leaning back, excited open-mouth smile, rod pointing up and back to the upper LEFT. " + STYLE, "3:2", True, [BOAT_REF]),
+  "nc_reel": (POSE_NC + "Pose: cranking the reel hard with a determined face, tongue out, rod pointing up and to the right. " + STYLE, "3:2", True, [BOAT_REF]),
+  "nc_cheer": (POSE_NC + "Pose: celebrating, both arms raised high, rod held up in one hand, huge happy smile, eyes closed with joy, little sparkles. " + STYLE, "3:2", True, [BOAT_REF]),
+  "hats2": (SHEET + "Cute cartoon hats, each a single hat seen from the side-front, no head: top-left a red baseball cap with the visor pointing right, top-right a yellow fisherman rain hat, "
+     "bottom-left a green frog-shaped beanie with eyes, bottom-right a tiny sailor captain hat with an anchor. " + STYLE, "1:1", True),
+})
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]

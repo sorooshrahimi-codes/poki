@@ -5,6 +5,8 @@ export interface AlbumEntry {
   count: number;
   muts: MutationId[];
   best: number;
+  /** heaviest one caught */
+  bestKg?: number;
 }
 
 export interface SaveData {
@@ -28,6 +30,10 @@ export interface SaveData {
   /** a rewarded-ad trial: cosmetic id and dives left */
   trial: { id: string; dives: number } | null;
   aquariumAt: number;
+  /** starter missions: index of the current one */
+  mission: number;
+  stats: { catches: number; fightsWon: number };
+  seenGlimpse: boolean;
 }
 
 export const newSave = (): SaveData => ({
@@ -35,6 +41,7 @@ export const newSave = (): SaveData => ({
   album: {}, seenEvent: false, muted: false, lang: null, dives: 0, playMs: 0,
   director: newDirector(), mapPieces: 0, bait: null, gear: { lantern: 0, sonar: 0 },
   owned: [], wear: { pet: null, hat: null }, trial: null, aquariumAt: 0,
+  mission: 0, stats: { catches: 0, fightsWon: 0 }, seenGlimpse: false,
 });
 
 /** parse anything (old, partial or broken) into a valid save */
@@ -44,7 +51,7 @@ export function readSave(raw: string | null): SaveData {
   try {
     const d = JSON.parse(raw);
     if (!d || d.v !== 1) return base;
-    return { ...base, ...d, upgrades: { ...base.upgrades, ...d.upgrades }, album: d.album ?? {}, director: { ...base.director, ...d.director }, gear: { ...base.gear, ...d.gear }, wear: { ...base.wear, ...d.wear } };
+    return { ...base, ...d, upgrades: { ...base.upgrades, ...d.upgrades }, album: d.album ?? {}, director: { ...base.director, ...d.director }, gear: { ...base.gear, ...d.gear }, wear: { ...base.wear, ...d.wear }, stats: { ...base.stats, ...d.stats } };
   } catch {
     return base;
   }

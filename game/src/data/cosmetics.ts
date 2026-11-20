@@ -17,10 +17,16 @@ export interface CosmeticDef {
   fish?: string;
   /** unlocked by catching any fish of this rarity */
   rarity?: "legendary" | "secret";
+  /** everyone owns it from the start */
+  free?: boolean;
 }
 
 export const COSMETICS: CosmeticDef[] = [
+  { id: "hat_cap", kind: "hat", art: "hat_cap", free: true },
   { id: "hat_beanie", kind: "hat", art: "hat_beanie", price: 500 },
+  { id: "hat_rain", kind: "hat", art: "hat_rain", price: 700 },
+  { id: "hat_sailor", kind: "hat", art: "hat_sailor", price: 1200 },
+  { id: "hat_frog", kind: "hat", art: "hat_frog", album: 20 },
   { id: "hat_straw", kind: "hat", art: "hat_straw", price: 900 },
   { id: "hat_pirate", kind: "hat", art: "hat_pirate", album: 10 },
   { id: "hat_crown", kind: "hat", art: "hat_crown", rarity: "legendary" },
@@ -34,6 +40,7 @@ export const COSMETICS: CosmeticDef[] = [
 export const TRY_DIVES = 8;
 
 export function milestoneMet(c: CosmeticDef, album: Record<string, unknown>): boolean {
+  if (c.free) return true;
   if (c.album !== undefined) return Object.keys(album).length >= c.album;
   if (c.fish) return !!album[c.fish];
   if (c.rarity) return FISH.some((f) => f.rarity === c.rarity && album[f.id]);

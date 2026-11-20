@@ -45,10 +45,11 @@ const BOAT_W = 150;
 /** rod tip and waterline inside the boat sprite, as fractions of its size */
 /** per pose sprite: hull extent and rod tip, as fractions of the sprite (measured on the art) */
 const POSE_GEO: Record<Pose, { hull: [number, number]; tip: [number, number]; head: [number, number] }> = {
-  idle: { hull: [0, 0.917], tip: [0.998, 0.024], head: [0.27, 0.11] },
-  cast: { hull: [0.155, 0.986], tip: [0, 0.029], head: [0.51, 0.1] },
-  reel: { hull: [0.002, 0.857], tip: [0.971, 0.245], head: [0.27, 0.11] },
-  cheer: { hull: [0, 0.988], tip: [0.967, 0.019], head: [0.37, 0.1] },
+  // measured on the capless "kid_*" sprites; the hat is a separate layer on the hair
+  idle: { hull: [0, 0.926], tip: [0.998, 0.032], head: [0.27, 0.12] },
+  cast: { hull: [0.152, 0.988], tip: [0, 0.025], head: [0.465, 0.135] },
+  reel: { hull: [0, 0.924], tip: [0.998, 0.018], head: [0.28, 0.13] },
+  cheer: { hull: [0, 0.962], tip: [0.998, 0.022], head: [0.37, 0.14] },
 };
 export type Pose = "idle" | "cast" | "reel" | "cheer";
 /** shapes that do not bend when swimming */
@@ -671,7 +672,7 @@ export class Renderer {
   }
 
   // ------------------------------------------------------------- boat, hook
-  private boatImg(pose: Pose) { return img(pose === "idle" ? "boat" : `boat_${pose}`); }
+  private boatImg(pose: Pose) { return img(`kid_${pose}`); }
 
   /**
    * Boat geometry for a pose. Every pose sprite is scaled so its hull has the same width and sits
@@ -679,7 +680,7 @@ export class Renderer {
    */
   private boatGeo(t: number, pose: Pose) {
     let p = pose, im = this.boatImg(p);
-    if (!im) { p = "idle"; im = img("boat"); }
+    if (!im) { p = "idle"; im = img("kid_idle"); }
     const g = POSE_GEO[p];
     const hullW = BOAT_W * 0.917;
     const w = hullW / (g.hull[1] - g.hull[0]);
@@ -712,9 +713,10 @@ export class Renderer {
     c.scale(1 - pop * 0.6, 1 + pop);
     if (b.im) c.drawImage(b.im, b.left, -b.h, b.w, b.h);
     // cosmetics: a hat over the cap, a pet on the bow
-    const hat = s.hat ? img(s.hat) : null;
+    // no hat chosen = the classic red cap
+    const hat = img(s.hat ?? "hat_cap");
     if (hat) {
-      const hw = b.w * 0.3, hh = (hw * hat.height) / hat.width;
+      const hw = b.w * 0.33, hh = (hw * hat.height) / hat.width;
       c.drawImage(hat, b.left + b.g.head[0] * b.w - hw / 2, -b.h + b.g.head[1] * b.h - hh * 0.72, hw, hh);
     }
     const pet = s.pet ? img(s.pet) : null;

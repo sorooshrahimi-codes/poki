@@ -4,7 +4,7 @@ import type { ZoneId } from "./types.ts";
 // The surprise director: a hidden "film director" for each session. Players feel that anything
 // can happen at any moment; underneath, these rules decide when and what. Only we know them.
 
-export type SurpriseKind = "golden_school" | "shark" | "bottle" | "whirlpool" | "chest" | "shadow";
+export type SurpriseKind = "golden_school" | "shark" | "bottle" | "whirlpool" | "chest" | "shadow" | "glimpse";
 
 export interface DirectorState {
   /** dives in a row without anything rare, epic+ or mutated */
@@ -20,7 +20,7 @@ export const newDirector = (): DirectorState => ({ dry: 0, lastAt: -999, last: n
 /** never two surprises closer than this (play seconds): surprise must stay surprising */
 const COOLDOWN = 30;
 /** the first surprise of a player's life lands here, and it is always a nice one */
-const FIRST_AT = 75;
+const FIRST_AT = 45;
 
 interface Options { zone: ZoneId; bottom: number; floor: number; capacity: number }
 
@@ -31,6 +31,7 @@ const WEIGHTS: Record<SurpriseKind, (o: Options) => number> = {
   whirlpool: (o) => (o.bottom < o.floor - 250 ? 1.6 : 0),
   chest: (o) => (o.bottom >= 500 ? 1.5 : 0),
   shadow: (o) => (o.bottom >= 700 ? 1.4 : 0),
+  glimpse: () => 0, // scripted only: the early "a legend lives down there" tease
 };
 
 /** decide, at the start of a dive, whether something unexpected will happen in it */

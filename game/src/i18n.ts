@@ -14,10 +14,15 @@ type Key =
   | "ev.blood_moon" | "ev.meteor" | "ev.rainbow_sky" | "ev.golden_hour" | "ev.next"
   | "sur.golden_school" | "sur.shark" | "sur.bottle" | "sur.whirlpool" | "sur.chest" | "sur.shadow" | "stolen" | "escaped" | "map"
   | "wx.sunny" | "wx.rain" | "wx.storm" | "wx.fog"
+  | "record" | "sur.glimpse" | "fx.casts" | "fx.nextcasts" | "fx.attracts" | "fx.secret" | "fx.lantern" | "fx.sonar" | "fx.lanternDo" | "fx.sonarDo"
+  | "ward.note" | "fx.mygear" | "fx.nobait" | "fx.line" | "fx.capacity" | "fx.luck"
   | "new" | "collect" | "double" | "snapped" | "retry" | "letgo" | "reel" | "album" | "paused" | "resume";
 
 const T: Record<Lang, Partial<Record<Key, string>>> = {
   en: {
+    "ward.note": "Just for looks: hats go on your fisher, pets ride your boat. Tap 👕 to wear.",
+    "fx.casts": "casts", "fx.nextcasts": "active for your next {n} casts", "fx.attracts": "attracts special fish", "fx.secret": "secret fish can appear", "fx.lantern": "Lantern", "fx.sonar": "Sonar", "fx.lanternDo": "Bigger light in the dark deep", "fx.sonarDo": "Arrows point to hidden rare fish", "fx.mygear": "My gear (working now)", "fx.nobait": "No bait: buy one below", "fx.line": "go deeper, new fish live there", "fx.capacity": "catch more fish per dive", "fx.luck": "rare fish appear more often",
+    record: "RECORD!", "sur.glimpse": "A legend swims below...",
     "wx.sunny": "Sunny", "wx.rain": "Rain: rare fish rise!", "wx.storm": "Storm! Electric fish!", "wx.fog": "Fog: hidden treasures...",
     "sur.golden_school": "Golden school!", "sur.shark": "Shark! Dodge it!", "sur.bottle": "A bottle drifts by...", "sur.whirlpool": "Whirlpool! Going deeper!", "sur.chest": "Treasure chest!", "sur.shadow": "Something HUGE is down there...", stolen: "The shark stole a fish!", escaped: "You escaped the shark!", map: "Map piece",
     "rarity.common": "Common", "rarity.rare": "Rare", "rarity.epic": "Epic", "rarity.legendary": "Legendary", "rarity.secret": "SECRET",
@@ -28,6 +33,9 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     reel: "HOLD!", album: "Album", paused: "Paused", resume: "Play",
   },
   es: {
+    "ward.note": "Solo estética: los gorros van en tu pescador y las mascotas en tu barca. Toca 👕 para usar.",
+    "fx.casts": "lanzamientos", "fx.nextcasts": "activo en tus próximos {n} lanzamientos", "fx.attracts": "atrae peces especiales", "fx.secret": "pueden salir peces secretos", "fx.lantern": "Linterna", "fx.sonar": "Sonar", "fx.lanternDo": "Más luz en lo profundo", "fx.sonarDo": "Flechas hacia peces raros ocultos", "fx.mygear": "Mi equipo (activo)", "fx.nobait": "Sin cebo: compra uno abajo", "fx.line": "más profundo, peces nuevos", "fx.capacity": "más peces por bajada", "fx.luck": "peces raros más a menudo",
+    record: "¡RÉCORD!", "sur.glimpse": "Una leyenda nada abajo...",
     "wx.sunny": "Soleado", "wx.rain": "Lluvia: ¡suben peces raros!", "wx.storm": "¡Tormenta! ¡Peces eléctricos!", "wx.fog": "Niebla: tesoros ocultos...",
     "sur.golden_school": "¡Banco dorado!", "sur.shark": "¡Tiburón! ¡Esquívalo!", "sur.bottle": "Una botella flota...", "sur.whirlpool": "¡Remolino! ¡Más hondo!", "sur.chest": "¡Cofre del tesoro!", "sur.shadow": "Algo ENORME hay ahí abajo...", stolen: "¡El tiburón robó un pez!", escaped: "¡Escapaste del tiburón!", map: "Trozo de mapa",
     "rarity.common": "Común", "rarity.rare": "Raro", "rarity.epic": "Épico", "rarity.legendary": "Legendario", "rarity.secret": "SECRETO",
@@ -38,6 +46,9 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     reel: "¡MANTÉN!", album: "Álbum", paused: "Pausa", resume: "Jugar",
   },
   pt: {
+    "ward.note": "Só visual: chapéus vão no pescador e pets no barco. Toque 👕 para usar.",
+    "fx.casts": "lançamentos", "fx.nextcasts": "ativo nos próximos {n} lançamentos", "fx.attracts": "atrai peixes especiais", "fx.secret": "peixes secretos podem aparecer", "fx.lantern": "Lanterna", "fx.sonar": "Sonar", "fx.lanternDo": "Mais luz no fundo escuro", "fx.sonarDo": "Setas para peixes raros escondidos", "fx.mygear": "Meu equipamento (ativo)", "fx.nobait": "Sem isca: compre uma abaixo", "fx.line": "mais fundo, peixes novos", "fx.capacity": "mais peixes por descida", "fx.luck": "peixes raros com mais frequência",
+    record: "RECORDE!", "sur.glimpse": "Uma lenda nada lá embaixo...",
     "wx.sunny": "Ensolarado", "wx.rain": "Chuva: peixes raros sobem!", "wx.storm": "Tempestade! Peixes elétricos!", "wx.fog": "Neblina: tesouros escondidos...",
     "sur.golden_school": "Cardume dourado!", "sur.shark": "Tubarão! Desvie!", "sur.bottle": "Uma garrafa passa...", "sur.whirlpool": "Redemoinho! Mais fundo!", "sur.chest": "Baú do tesouro!", "sur.shadow": "Tem algo ENORME lá embaixo...", stolen: "O tubarão roubou um peixe!", escaped: "Você escapou do tubarão!", map: "Pedaço do mapa",
     "rarity.common": "Comum", "rarity.rare": "Raro", "rarity.epic": "Épico", "rarity.legendary": "Lendário", "rarity.secret": "SECRETO",
@@ -48,6 +59,9 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     reel: "SEGURE!", album: "Álbum", paused: "Pausado", resume: "Jogar",
   },
   hi: {
+    "ward.note": "सिर्फ़ दिखावट: टोपी मछुआरे पर, पालतू नाव पर। पहनने के लिए 👕 दबाएँ।",
+    "fx.casts": "बार", "fx.nextcasts": "अगले {n} बार के लिए चालू", "fx.attracts": "खास मछलियाँ खींचता है", "fx.secret": "रहस्य मछलियाँ आ सकती हैं", "fx.lantern": "लालटेन", "fx.sonar": "सोनार", "fx.lanternDo": "अँधेरी गहराई में ज़्यादा रोशनी", "fx.sonarDo": "छिपी दुर्लभ मछलियों की ओर तीर", "fx.mygear": "मेरा सामान (चालू)", "fx.nobait": "चारा नहीं: नीचे खरीदें", "fx.line": "और गहराई, नई मछलियाँ", "fx.capacity": "हर बार ज़्यादा मछलियाँ", "fx.luck": "दुर्लभ मछलियाँ ज़्यादा",
+    record: "रिकॉर्ड!", "sur.glimpse": "नीचे एक दिग्गज तैर रहा है...",
     "wx.sunny": "धूप", "wx.rain": "बारिश: दुर्लभ मछलियाँ ऊपर!", "wx.storm": "तूफ़ान! बिजली वाली मछलियाँ!", "wx.fog": "कोहरा: छिपे खज़ाने...",
     "sur.golden_school": "सुनहरा झुंड!", "sur.shark": "शार्क! बचो!", "sur.bottle": "एक बोतल तैर रही है...", "sur.whirlpool": "भँवर! और गहराई में!", "sur.chest": "खज़ाने का संदूक!", "sur.shadow": "नीचे कुछ विशाल है...", stolen: "शार्क ने मछली चुरा ली!", escaped: "तुम शार्क से बच गए!", map: "नक्शे का टुकड़ा",
     "rarity.common": "साधारण", "rarity.rare": "दुर्लभ", "rarity.epic": "महाकाव्य", "rarity.legendary": "पौराणिक", "rarity.secret": "रहस्य",
@@ -58,6 +72,9 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     reel: "दबाए रखें!", album: "एल्बम", paused: "रुका हुआ", resume: "खेलें",
   },
   ja: {
+    "ward.note": "見た目だけ: 帽子は釣り人に、ペットはボートに乗るよ。👕で装備。",
+    "fx.casts": "回", "fx.nextcasts": "次の{n}回キャストで有効", "fx.attracts": "特別な魚を引き寄せる", "fx.secret": "シークレットの魚が出るかも", "fx.lantern": "ランタン", "fx.sonar": "ソナー", "fx.lanternDo": "暗い深海でもっと明るく", "fx.sonarDo": "隠れたレア魚を矢印で表示", "fx.mygear": "装備中のアイテム", "fx.nobait": "エサなし: 下で買おう", "fx.line": "もっと深く、新しい魚がいる", "fx.capacity": "1回でもっと釣れる", "fx.luck": "レアな魚が出やすくなる",
+    record: "新記録!", "sur.glimpse": "下に伝説の魚が...",
     "wx.sunny": "晴れ", "wx.rain": "雨: レアな魚が浮上!", "wx.storm": "嵐! 電気の魚!", "wx.fog": "霧: 隠れたお宝...",
     "sur.golden_school": "金色の群れ!", "sur.shark": "サメだ! よけて!", "sur.bottle": "ボトルが流れてきた...", "sur.whirlpool": "渦潮! もっと深く!", "sur.chest": "宝箱!", "sur.shadow": "下に何か巨大なものが...", stolen: "サメに魚を取られた!", escaped: "サメから逃げた!", map: "地図のかけら",
     "rarity.common": "コモン", "rarity.rare": "レア", "rarity.epic": "エピック", "rarity.legendary": "レジェンド", "rarity.secret": "シークレット",

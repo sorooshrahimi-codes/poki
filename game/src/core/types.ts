@@ -86,4 +86,6 @@ export interface Catch {
   fish: string;
   mut: MutationId | null;
   value: number;
+  /** weight of this individual fish: every catch can be a new record */
+  kg: number;
 }

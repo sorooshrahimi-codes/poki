@@ -23,8 +23,10 @@ export interface LiveFish {
   y: number;
   dir: 1 | -1;
   speed: number;
-  /** body length after the giant mutation */
+  /** body length after size roll and the giant mutation */
   size: number;
+  /** individual size roll (0.8-1.25): bigger = heavier and worth a bit more */
+  scale: number;
   bob: number;
   hooked: boolean;
 }
@@ -144,12 +146,14 @@ export function spawnFish(zone: ZoneId, y: number, ctx: DiveContext): LiveFish |
   }, ctx.rng);
   if (!def) return null;
   const mut = def.junk ? null : rollMutation(ctx);
+  const scale = 0.8 + ctx.rng() * 0.45;
   const dir: 1 | -1 = ctx.rng() < 0.5 ? 1 : -1;
   return {
     uid: uidCounter++, def, mut, y, dir,
     x: ctx.rng() * COLUMN,
     speed: def.speed * (0.8 + ctx.rng() * 0.4),
-    size: def.size * (mut === "giant" ? 1.7 : 1),
+    scale,
+    size: def.size * scale * (mut === "giant" ? 1.7 : 1),
     bob: ctx.rng() * Math.PI * 2,
     hooked: false,
   };
@@ -162,7 +166,7 @@ function fillFish(zone: ZoneId, from: number, to: number, ctx: DiveContext, into
   }
 }
 
-export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind | null = null, treasure = false): Dive {
+export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind | null = null, treasure = false, guaranteeRare = false): Dive {
   const z = ZONES[zone];
   const bottom = Math.min(maxDepth(ctx.upgrades), z.floor);
   const fish: LiveFish[] = [];
@@ -190,6 +194,16 @@ export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind
       d.slabs.push({ x: w / 2 + ctx.rng() * (COLUMN - w), y, w, h: 18 });
     }
   }
+  if (guaranteeRare) {
+    // early game: one rare swims right across the hook's path, deep enough to need a dodge on the way down
+    const y = Math.max(140, bottom * 0.75);
+    const pool = FISH.filter((f) => f.zone === zone && f.rarity === "rare" && !f.junk && y >= f.depth[0] - 250 && y <= f.depth[1]);
+    const def = pool[Math.floor(ctx.rng() * pool.length)];
+    if (def) {
+      d.fish = d.fish.filter((f) => Math.abs(f.y - y) > 40);
+      d.fish.push({ uid: uidCounter++, def, mut: null, x: COLUMN * (0.25 + ctx.rng() * 0.5), y, dir: ctx.rng() < 0.5 ? 1 : -1, speed: def.speed * 0.5, size: def.size * 1.1, scale: 1.1, bob: 0, hooked: false });
+    }
+  }
   d.treasure = treasure;
   if (treasure) surprise = "chest";
   if (surprise) setupSurprise(d, surprise, ctx);
@@ -213,13 +227,17 @@ function setupSurprise(d: Dive, kind: SurpriseKind, ctx: DiveContext) {
     const def = pool[Math.floor(r() * pool.length)] ?? FISH.find((f) => f.zone === d.zone && !f.junk)!;
     for (let i = 0; i < 7; i++) {
       d.fish.push({ uid: uidCounter++, def, mut: "gold", x: (s.dir > 0 ? -60 : COLUMN + 60) - s.dir * i * 50, y: s.y + Math.sin(i * 1.7) * 26,
-        dir: s.dir, speed: 70, size: def.size, bob: i, hooked: false });
+        dir: s.dir, speed: 70, size: def.size, scale: 1, bob: i, hooked: false });
     }
   } else if (kind === "bottle" || kind === "chest") {
     s.y = kind === "chest" ? d.bottom - 25 : d.bottom * (0.3 + r() * 0.5);
     s.x = 50 + r() * (COLUMN - 100);
   } else if (kind === "whirlpool") {
     s.y = d.bottom * (0.4 + r() * 0.3);
+  } else if (kind === "glimpse") {
+    // a legendary drifts past just below the hook's reach: "one day that will be mine"
+    s.y = d.bottom + 70;
+    s.x = s.dir > 0 ? -160 : COLUMN + 160;
   } else if (kind === "shadow") {
     // a huge shape drifts past far behind; this dive the zone's secret creature is in the water
     s.y = d.bottom * (0.5 + r() * 0.3);
@@ -227,7 +245,7 @@ function setupSurprise(d: Dive, kind: SurpriseKind, ctx: DiveContext) {
     const secret = FISH.find((f) => f.zone === d.zone && f.rarity === "secret");
     if (secret) {
       const y = Math.min(d.bottom - 20, Math.max(secret.depth[0], d.bottom * 0.7));
-      d.fish.push({ uid: uidCounter++, def: secret, mut: null, x: r() * COLUMN, y, dir: s.dir, speed: secret.speed * 0.8, size: secret.size, bob: 0, hooked: false });
+      d.fish.push({ uid: uidCounter++, def: secret, mut: null, x: r() * COLUMN, y, dir: s.dir, speed: secret.speed * 0.8, size: secret.size, scale: 1, bob: 0, hooked: false });
     }
   }
 }
@@ -240,8 +258,10 @@ function stepSurprise(d: Dive, dt: number) {
   switch (s.kind) {
     case "golden_school":
     case "shadow":
+    case "glimpse":
       if (s.state === "waiting" && Math.abs(d.hookY - s.y) < 260) { s.state = "active"; d.fx.push({ kind: "surprise", surprise: s.kind }); }
       if (s.kind === "shadow") s.x += s.dir * 60 * dt;
+      if (s.kind === "glimpse" && s.state === "active") s.x += s.dir * 75 * dt;
       break;
     case "bottle":
     case "chest":
@@ -294,10 +314,16 @@ function fillFishBelow(d: Dive, from: number, to: number) {
 
 export function catchValue(f: LiveFish): number {
   const m = MUTATIONS.find((x) => x.id === f.mut);
-  return Math.round(f.def.value * (m ? m.mult : 1));
+  return Math.round(f.def.value * (m ? m.mult : 1) * (f.scale ?? 1));
 }
 
-export const diveCatches = (d: Dive): Catch[] => d.hooked.map((f) => ({ fish: f.def.id, mut: f.mut, value: catchValue(f) }));
+/** weight in kg: volume grows with the cube of length */
+export function catchKg(f: LiveFish): number {
+  const kg = 0.00003 * Math.pow(f.def.size, 3) * Math.pow(f.scale ?? 1, 3) * (f.mut === "giant" ? 4.9 : 1);
+  return Math.round(kg * 100) / 100;
+}
+
+export const diveCatches = (d: Dive): Catch[] => d.hooked.map((f) => ({ fish: f.def.id, mut: f.mut, value: catchValue(f), kg: catchKg(f) }));
 
 function startFight(d: Dive, f: LiveFish, ctx: DiveContext) {
   d.resume = d.phase === "ascend" ? "ascend" : "descend";
