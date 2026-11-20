@@ -5,8 +5,9 @@ import { currentEvent, isNight, nextWorldEvent, personalEventDue, type ActiveEve
 import type { Catch, UpgradeId, ZoneId } from "./core/types.ts";
 import { FISH, FISH_BY_ID } from "./data/fish.ts";
 import { RARITY_COLOR, RARITY_ORDER, ZONES, ZONE_ORDER } from "./data/world.ts";
-import { LANGS, LANG_LABEL, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tZone } from "./i18n.ts";
-import { setDucked, setMusicMood, setMuted, sfx, unlockAudio } from "./platform/audio.ts";
+import { LANGS, LANG_LABEL, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tWeather, tZone } from "./i18n.ts";
+import { setDucked, setMusicMood, setMuted, setRain, sfx, unlockAudio } from "./platform/audio.ts";
+import { WEATHER, weatherAt, type WeatherId } from "./core/weather.ts";
 import { commercialBreak, gameplayStart, gameplayStop, initPoki, isAdPlaying, loadingFinished, rewardedBreak } from "./platform/poki.ts";
 import { loadSave, writeSave } from "./platform/storage.ts";
 import "@fontsource/fredoka/latin-500.css";
@@ -24,7 +25,7 @@ setMuted(save.muted);
 
 const canvas = $<HTMLCanvasElement>("game");
 const renderer = new Renderer(canvas);
-const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9 };
+const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id };
 function setPose(p: SceneState["pose"]) { if (scene.pose !== p) { scene.pose = p; scene.poseT = 0; } }
 /** slow motion: remaining real seconds and the time scale while it lasts */
 let slowmo = 0;
@@ -82,7 +83,7 @@ async function cast() {
   busy = false;
   if (paused) return;
   gameplayStart();
-  const ctx = { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: Math.random };
+  const ctx = { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: Math.random, weather: weatherAt(Date.now()).def };
   const playSec = save.playMs / 1000;
   const floor = ZONES[scene.zone].floor;
   const surprise = forcedSurprise ?? pickSurprise(save.director, playSec, { zone: scene.zone, bottom: Math.min(maxDepth(save.upgrades), floor), floor, capacity: capacity(save.upgrades) }, Math.random);
@@ -400,7 +401,23 @@ function toast(text: string, ms = 2200) {
   toastTimer = window.setTimeout(() => el.classList.add("hidden"), ms);
 }
 
+let lastWeather = "";
+let forcedWeather: WeatherId | null = null;
+function updateWeather(now: number) {
+  const w = weatherAt(now);
+  if (forcedWeather) w.def = WEATHER[forcedWeather];
+  scene.weather = w.def.id;
+  const pill = $("weatherPill");
+  const left = Math.max(0, Math.ceil((w.endsAt - now) / 1000));
+  pill.textContent = `${w.def.icon} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+  pill.title = tWeather(w.def.id);
+  setRain(w.def.id === "storm" ? 1 : w.def.id === "rain" ? 0.6 : 0);
+  if (lastWeather && lastWeather !== w.def.id) { toast(`${w.def.icon} ${tWeather(w.def.id)}`, 2400); sfx.event(); }
+  lastWeather = w.def.id;
+}
+
 function updateEvent(now: number) {
+  updateWeather(now);
   const due = personalEventDue(now, sessionStart, save.seenEvent);
   if (due !== null) personalEventAt = due;
   const ev: ActiveEvent | null = currentEvent(now, personalEventAt);
@@ -443,7 +460,7 @@ function frame(now: number) {
     readInput();
     const d = scene.dive;
     if (scene.mode === "dive" && d) {
-      const ctx = { upgrades: save.upgrades, event: scene.event, night: false, rng: Math.random };
+      const ctx = { upgrades: save.upgrades, event: scene.event, night: false, rng: Math.random, weather: weatherAt(Date.now()).def };
       stepDive(d, dt, input, ctx);
       handleFx(d);
       reelTick -= dt;
@@ -502,4 +519,4 @@ updateUi();
 requestAnimationFrame(frame);
 
 // debug handle for automated checks (harmless in production)
-(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, catchValue, updateUi, showLegend, force: (k: typeof forcedSurprise) => { forcedSurprise = k; } };
+(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, catchValue, updateUi, showLegend, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };

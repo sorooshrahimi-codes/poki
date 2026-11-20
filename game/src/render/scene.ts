@@ -1,5 +1,7 @@
 import { COLUMN, type Dive, type LiveFish } from "../core/dive.ts";
 import type { ActiveEvent } from "../core/events.ts";
+import type { WeatherId } from "../core/weather.ts";
+import { sfx } from "../platform/audio.ts";
 import { makeRng } from "../core/rng.ts";
 import type { FishDef, MutationId, ZoneId } from "../core/types.ts";
 import { FISH } from "../data/fish.ts";
@@ -9,7 +11,7 @@ import { drawFish } from "./fish.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
-interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number; kind: "dot" | "ring" | "bubble" | "star" | "mote" }
+interface Particle { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number; kind: "dot" | "ring" | "bubble" | "star" | "mote" | "rain" }
 
 export interface View { w: number; h: number; scale: number; ox: number; viewH: number; dpr: number }
 
@@ -21,6 +23,7 @@ export interface SceneState {
   t: number;
   hint: boolean;
   pose: Pose;
+  weather: WeatherId;
   /** seconds since the pose changed: drives the squash-and-stretch pop */
   poseT: number;
 }
@@ -68,6 +71,9 @@ export class Renderer {
   private facing = new WeakMap<LiveFish, number>();
   private flash = 0;
   private zoom = 0;
+  private lightning = 0;
+  private nextBolt = 4;
+  private boltX = 0;
   private zoomAt = { x: 0, y: 0 };
   private ambient = new Map<ZoneId, Ambient[]>();
 
@@ -172,11 +178,27 @@ export class Renderer {
     // bubbles rise, motes (plankton) drift: they sell the depth even when nothing else moves
     if (Math.random() < dt * 5) this.parts.push({ x: Math.random() * COLUMN, y: this.camY + v.viewH + 10, vx: 0, vy: -35 - Math.random() * 45, life: 0, max: 8, color: "rgba(255,255,255,0.5)", size: 1.5 + Math.random() * 3, kind: "bubble" });
     if (Math.random() < dt * 8) this.parts.push({ x: -40 + Math.random() * (COLUMN + 80), y: this.camY + Math.random() * v.viewH, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6, life: 0, max: 4 + Math.random() * 3, color: "#dff8ff", size: 0.8 + Math.random() * 1.4, kind: "mote" });
+    // weather: rain drops fall into the sea, storms throw lightning
+    const wx = s.weather;
+    if ((wx === "rain" || wx === "storm") && this.camY < 0) {
+      const left = -v.ox / v.scale, width = COLUMN + (2 * v.ox) / v.scale;
+      const n = (wx === "storm" ? 160 : 70) * dt;
+      for (let i = 0; i < n; i++) this.parts.push({ x: left + Math.random() * width, y: this.camY - 10, vx: wx === "storm" ? -90 : -25, vy: 520 + Math.random() * 160, life: 0, max: 3, color: "rgba(220,235,255,0.55)", size: 1, kind: "rain" });
+    }
+    if (wx === "storm") {
+      this.nextBolt -= dt;
+      if (this.nextBolt <= 0) { this.lightning = 1; this.nextBolt = 5 + Math.random() * 7; this.boltX = Math.random() * COLUMN; setTimeout(() => sfx.thunder(), 250 + Math.random() * 500); }
+    }
+    this.lightning = Math.max(0, this.lightning - dt * 3);
     for (const p of this.parts) {
       p.life += dt;
       p.x += p.vx * dt; p.y += p.vy * dt;
       if (p.kind === "dot" || p.kind === "star") { p.vx *= 0.93; p.vy = p.vy * 0.93 + 140 * dt; }
       if (p.kind === "bubble") p.x += Math.sin(p.life * 3 + p.y * 0.05) * 0.4;
+    }
+    for (const p of this.parts) if (p.kind === "rain" && p.y >= 0) {
+      p.life = p.max; // hit the water: leave a tiny ring
+      if (Math.random() < 0.25) this.parts.push({ x: p.x, y: 1, vx: 0, vy: 0, life: 0, max: 0.4, color: "rgba(255,255,255,0.6)", size: 1, kind: "ring" });
     }
     this.parts = this.parts.filter((p) => p.life < p.max && !(p.kind === "bubble" && p.y < 2));
     if (this.parts.length > 400) this.parts.splice(0, this.parts.length - 400);
@@ -185,8 +207,11 @@ export class Renderer {
     this.zoom = Math.max(0, this.zoom - dt * 0.35);
   }
 
+  private weatherNow: WeatherId = "sunny";
+
   draw(s: SceneState) {
     const c = this.ctx, v = this.view;
+    this.weatherNow = s.weather;
     c.save();
     c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     c.clearRect(0, 0, v.w, v.h);
@@ -254,6 +279,23 @@ export class Renderer {
         const fg = c.createLinearGradient(0, fadeTop, 0, bgBottomY);
         fg.addColorStop(0, "rgba(0,0,0,0)"); fg.addColorStop(1, bgBottomColor(s.zone));
         c.fillStyle = fg; c.fillRect(left, fadeTop, width, bgBottomY - fadeTop + 1);
+      }
+      // weather over the sky
+      if (s.weather !== "sunny" && top < 0) {
+        c.save();
+        c.globalCompositeOperation = s.weather === "fog" ? "screen" : "multiply";
+        c.fillStyle = s.weather === "rain" ? "#9fb2c6" : s.weather === "storm" ? "#5b6782" : "#c9d6e0";
+        c.globalAlpha = s.weather === "fog" ? 0.55 : 0.85;
+        c.fillRect(left, y0, width, -y0 + 30);
+        c.restore();
+      }
+      if (this.lightning > 0 && top < 0) {
+        c.save();
+        c.fillStyle = `rgba(255,255,255,${this.lightning * 0.5})`; c.fillRect(left, y0, width, -y0);
+        c.strokeStyle = `rgba(255,255,230,${this.lightning})`; c.lineWidth = 3; c.lineJoin = "round";
+        c.beginPath(); let bx = this.boltX, by = y0 * 0.9; c.moveTo(bx, by);
+        while (by < -10) { bx += (Math.random() - 0.5) * 40; by += 25 + Math.random() * 25; c.lineTo(bx, Math.min(by, -10)); }
+        c.stroke(); c.restore();
       }
       // event mood over the sky
       const ev = s.event?.def.id;
@@ -572,7 +614,8 @@ export class Renderer {
     const hullW = BOAT_W * 0.917;
     const w = hullW / (g.hull[1] - g.hull[0]);
     const h = im ? (w * im.height) / im.width : 100;
-    const bob = Math.sin(t * 1.8) * 2.2, tilt = Math.sin(t * 1.3) * 0.03;
+    const rough = this.weatherNow === "storm" ? 3 : this.weatherNow === "rain" ? 1.6 : 1;
+    const bob = Math.sin(t * 1.8 * Math.sqrt(rough)) * 2.2 * rough, tilt = Math.sin(t * 1.3 * Math.sqrt(rough)) * 0.03 * rough;
     const cx = COLUMN / 2 - 10;
     // hull bottom sits a little under the waterline
     const bottomY = 14 + bob;
@@ -640,9 +683,15 @@ export class Renderer {
   private drawParticles(c: Ctx) {
     for (const p of this.parts) {
       const k = 1 - p.life / p.max;
-      if (p.kind === "ring") {
-        c.globalAlpha = Math.max(0, k); c.strokeStyle = p.color; c.lineWidth = 3;
-        c.beginPath(); c.arc(p.x, p.y, p.size + (1 - k) * 42, 0, Math.PI * 2); c.stroke();
+      if (p.kind === "rain") {
+        c.globalAlpha = 1; c.strokeStyle = p.color; c.lineWidth = 1.2;
+        c.beginPath(); c.moveTo(p.x, p.y); c.lineTo(p.x - p.vx * 0.025, p.y - p.vy * 0.025); c.stroke();
+      } else if (p.kind === "ring") {
+        c.globalAlpha = Math.max(0, k); c.strokeStyle = p.color; c.lineWidth = p.size > 1 ? 3 : 1;
+        c.beginPath();
+        if (p.size > 1) c.arc(p.x, p.y, p.size + (1 - k) * 42, 0, Math.PI * 2);
+        else c.ellipse(p.x, p.y, 2 + (1 - k) * 9, 1 + (1 - k) * 2.5, 0, 0, Math.PI * 2);
+        c.stroke();
       } else if (p.kind === "bubble") {
         c.globalAlpha = 0.8;
         c.strokeStyle = p.color; c.lineWidth = 1;
@@ -667,7 +716,10 @@ export class Renderer {
   private drawDarkness(s: SceneState) {
     const v = this.view;
     const mid = this.camY + v.viewH * 0.5;
-    const k = Math.max(0, Math.min(1, (mid - 500) / (ZONES[s.zone].floor - 500)));
+    let k = Math.max(0, Math.min(1, (mid - 500) / (ZONES[s.zone].floor - 500)));
+    if (s.weather === "storm") k = Math.min(1, k + 0.18);
+    if (s.weather === "fog") this.drawFogLayer(s);
+    if (this.lightning > 0) k *= 1 - this.lightning * 0.6;
     if (k <= 0.02) return;
     const f = this.fog.getContext("2d")!;
     const fw = this.fog.width, fh = this.fog.height, sc = 0.5;
@@ -706,6 +758,29 @@ export class Renderer {
     const c = this.ctx;
     c.save();
     c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
+    c.drawImage(this.fog, 0, 0, fw, fh, 0, 0, v.w, v.h);
+    c.restore();
+  }
+
+  /** fog: a milky veil underwater that only clears around the hook (sonar and lanterns matter) */
+  private drawFogLayer(s: SceneState) {
+    const v = this.view, f = this.fog.getContext("2d")!;
+    const fw = this.fog.width, fh = this.fog.height, sc = 0.5;
+    const surf = Math.max(0, (0 - this.camY) * v.scale * sc);
+    f.globalCompositeOperation = "source-over";
+    f.clearRect(0, 0, fw, fh);
+    f.fillStyle = "rgba(205,222,235,0.42)";
+    f.fillRect(0, surf, fw, fh - surf);
+    const d = s.dive;
+    if (d && s.mode === "dive") {
+      f.globalCompositeOperation = "destination-out";
+      const x = (v.ox + d.hookX * v.scale) * sc, y = (d.hookY - this.camY) * v.scale * sc, r = 130 * v.scale * sc;
+      const g = f.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, "rgba(0,0,0,1)"); g.addColorStop(1, "rgba(0,0,0,0)");
+      f.fillStyle = g; f.beginPath(); f.arc(x, y, r, 0, Math.PI * 2); f.fill();
+    }
+    const c = this.ctx;
+    c.save(); c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     c.drawImage(this.fog, 0, 0, fw, fh, 0, 0, v.w, v.h);
     c.restore();
   }

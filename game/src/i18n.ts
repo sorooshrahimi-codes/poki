@@ -13,10 +13,12 @@ type Key =
   | "zone.lake" | "zone.ocean"
   | "ev.blood_moon" | "ev.meteor" | "ev.rainbow_sky" | "ev.golden_hour" | "ev.next"
   | "sur.golden_school" | "sur.shark" | "sur.bottle" | "sur.whirlpool" | "sur.chest" | "sur.shadow" | "stolen" | "escaped" | "map"
+  | "wx.sunny" | "wx.rain" | "wx.storm" | "wx.fog"
   | "new" | "collect" | "double" | "snapped" | "retry" | "letgo" | "reel" | "album" | "paused" | "resume";
 
 const T: Record<Lang, Partial<Record<Key, string>>> = {
   en: {
+    "wx.sunny": "Sunny", "wx.rain": "Rain: rare fish rise!", "wx.storm": "Storm! Electric fish!", "wx.fog": "Fog: hidden treasures...",
     "sur.golden_school": "Golden school!", "sur.shark": "Shark! Dodge it!", "sur.bottle": "A bottle drifts by...", "sur.whirlpool": "Whirlpool! Going deeper!", "sur.chest": "Treasure chest!", "sur.shadow": "Something HUGE is down there...", stolen: "The shark stole a fish!", escaped: "You escaped the shark!", map: "Map piece",
     "rarity.common": "Common", "rarity.rare": "Rare", "rarity.epic": "Epic", "rarity.legendary": "Legendary", "rarity.secret": "SECRET",
     "up.line": "Line", "up.capacity": "Hooks", "up.luck": "Luck", max: "MAX",
@@ -26,6 +28,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     reel: "HOLD!", album: "Album", paused: "Paused", resume: "Play",
   },
   es: {
+    "wx.sunny": "Soleado", "wx.rain": "Lluvia: ¡suben peces raros!", "wx.storm": "¡Tormenta! ¡Peces eléctricos!", "wx.fog": "Niebla: tesoros ocultos...",
     "sur.golden_school": "¡Banco dorado!", "sur.shark": "¡Tiburón! ¡Esquívalo!", "sur.bottle": "Una botella flota...", "sur.whirlpool": "¡Remolino! ¡Más hondo!", "sur.chest": "¡Cofre del tesoro!", "sur.shadow": "Algo ENORME hay ahí abajo...", stolen: "¡El tiburón robó un pez!", escaped: "¡Escapaste del tiburón!", map: "Trozo de mapa",
     "rarity.common": "Común", "rarity.rare": "Raro", "rarity.epic": "Épico", "rarity.legendary": "Legendario", "rarity.secret": "SECRETO",
     "up.line": "Sedal", "up.capacity": "Anzuelos", "up.luck": "Suerte", max: "MÁX",
@@ -35,6 +38,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     reel: "¡MANTÉN!", album: "Álbum", paused: "Pausa", resume: "Jugar",
   },
   pt: {
+    "wx.sunny": "Ensolarado", "wx.rain": "Chuva: peixes raros sobem!", "wx.storm": "Tempestade! Peixes elétricos!", "wx.fog": "Neblina: tesouros escondidos...",
     "sur.golden_school": "Cardume dourado!", "sur.shark": "Tubarão! Desvie!", "sur.bottle": "Uma garrafa passa...", "sur.whirlpool": "Redemoinho! Mais fundo!", "sur.chest": "Baú do tesouro!", "sur.shadow": "Tem algo ENORME lá embaixo...", stolen: "O tubarão roubou um peixe!", escaped: "Você escapou do tubarão!", map: "Pedaço do mapa",
     "rarity.common": "Comum", "rarity.rare": "Raro", "rarity.epic": "Épico", "rarity.legendary": "Lendário", "rarity.secret": "SECRETO",
     "up.line": "Linha", "up.capacity": "Anzóis", "up.luck": "Sorte", max: "MÁX",
@@ -44,6 +48,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     reel: "SEGURE!", album: "Álbum", paused: "Pausado", resume: "Jogar",
   },
   hi: {
+    "wx.sunny": "धूप", "wx.rain": "बारिश: दुर्लभ मछलियाँ ऊपर!", "wx.storm": "तूफ़ान! बिजली वाली मछलियाँ!", "wx.fog": "कोहरा: छिपे खज़ाने...",
     "sur.golden_school": "सुनहरा झुंड!", "sur.shark": "शार्क! बचो!", "sur.bottle": "एक बोतल तैर रही है...", "sur.whirlpool": "भँवर! और गहराई में!", "sur.chest": "खज़ाने का संदूक!", "sur.shadow": "नीचे कुछ विशाल है...", stolen: "शार्क ने मछली चुरा ली!", escaped: "तुम शार्क से बच गए!", map: "नक्शे का टुकड़ा",
     "rarity.common": "साधारण", "rarity.rare": "दुर्लभ", "rarity.epic": "महाकाव्य", "rarity.legendary": "पौराणिक", "rarity.secret": "रहस्य",
     "up.line": "डोरी", "up.capacity": "काँटे", "up.luck": "किस्मत", max: "अधिकतम",
@@ -53,6 +58,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     reel: "दबाए रखें!", album: "एल्बम", paused: "रुका हुआ", resume: "खेलें",
   },
   ja: {
+    "wx.sunny": "晴れ", "wx.rain": "雨: レアな魚が浮上!", "wx.storm": "嵐! 電気の魚!", "wx.fog": "霧: 隠れたお宝...",
     "sur.golden_school": "金色の群れ!", "sur.shark": "サメだ! よけて!", "sur.bottle": "ボトルが流れてきた...", "sur.whirlpool": "渦潮! もっと深く!", "sur.chest": "宝箱!", "sur.shadow": "下に何か巨大なものが...", stolen: "サメに魚を取られた!", escaped: "サメから逃げた!", map: "地図のかけら",
     "rarity.common": "コモン", "rarity.rare": "レア", "rarity.epic": "エピック", "rarity.legendary": "レジェンド", "rarity.secret": "シークレット",
     "up.line": "糸", "up.capacity": "針", "up.luck": "運", max: "MAX",
@@ -84,4 +90,5 @@ export const tRarity = (r: Rarity) => t(`rarity.${r}` as Key);
 export const tUpgrade = (u: UpgradeId) => t(`up.${u}` as Key);
 export const tZone = (z: ZoneId) => t(`zone.${z}` as Key);
 export const tEvent = (e: EventId) => t(`ev.${e}` as Key);
+export const tWeather = (w: string) => t(`wx.${w}` as Key);
 export const fishName = (f: FishDef) => f.names?.[lang] ?? f.name;

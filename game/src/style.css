@@ -43,7 +43,9 @@ canvas#game { position: fixed; inset: 0; display: block; }
 .btn.ad { background: linear-gradient(#c38bff, #8a3cf0); }
 .btn.plain { background: linear-gradient(#8a9bb0, #5d6f86); }
 
-#diveHud { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
+#status { position: absolute; top: 60px; left: 0; right: 0; display: flex; justify-content: center; gap: 6px; }
+#status .pill { font-size: 16px; padding: 3px 12px; }
+#diveHud { position: absolute; top: 104px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; }
 #diveHud .pill { padding: 5px 14px; }
 #slots { letter-spacing: 3px; color: #ffe066; }
 

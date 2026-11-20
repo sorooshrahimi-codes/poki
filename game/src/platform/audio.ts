@@ -124,6 +124,10 @@ export const sfx = {
   fightTick(inZone: boolean) { if (!ok()) return; noise(now(), 0.025, inZone ? 0.09 : 0.05, inZone ? 4200 : 1500, 5); },
   buy() { if (!ok()) return; const t = now(); [0, 4, 7, 12].forEach((n, i) => mallet(midi(76 + n), t + i * 0.06, 0.25, sfxBus!, 0.4)); },
   event() { if (!ok()) return; const t = now(); [0, 4, 7, 11, 14, 19].forEach((n, i) => bell(midi(76 + n), t + i * 0.1, 0.12, 1.2)); },
+  thunder() {
+    if (!ok()) return; const t = now();
+    noise(t, 1.6, 0.5, 120, 0.6, 50); noise(t + 0.05, 0.6, 0.3, 400, 0.8, 90);
+  },
   tap() { if (!ok()) return; bloop(700, 1100, now(), 0.12, 0.06); },
   newFish() { if (!ok()) return; const t = now(); [0, 7, 12].forEach((n, i) => bell(midi(88 + n), t + i * 0.07, 0.12, 0.8)); },
 };
@@ -177,4 +181,17 @@ function startMusic() {
   if (!ctx || musicTimer) return;
   nextT = ctx.currentTime + 0.1;
   musicTimer = window.setInterval(tick, 90);
+}
+
+// ----------------------------------------------------------------- rain ambience
+let rainGain: GainNode | null = null;
+export function setRain(level: number) {
+  if (!ctx || !noiseBuf || !master) return;
+  if (!rainGain) {
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 2400; f.Q.value = 0.4;
+    rainGain = ctx.createGain(); rainGain.gain.value = 0;
+    src.connect(f).connect(rainGain).connect(master); src.start();
+  }
+  rainGain.gain.setTargetAtTime(level * 0.16, ctx.currentTime, 0.8);
 }

@@ -3,6 +3,7 @@ import { FIGHT, MUTATIONS, RARITY_WEIGHT, ZONES } from "../data/world.ts";
 import { ascendSpeed, capacity, descendSpeed, luckMult, maxDepth } from "./economy.ts";
 import type { SurpriseKind } from "./director.ts";
 import type { ActiveEvent } from "./events.ts";
+import type { WeatherDef } from "./weather.ts";
 import { pickWeighted, type Rng } from "./rng.ts";
 import type { Catch, FishDef, MutationId, UpgradeLevels, ZoneId } from "./types.ts";
 
@@ -99,15 +100,17 @@ export interface DiveContext {
   event: ActiveEvent | null;
   night: boolean;
   rng: Rng;
+  weather?: WeatherDef | null;
 }
 
 let uidCounter = 1;
 
 function rollMutation(ctx: DiveContext): MutationId | null {
   for (const m of MUTATIONS) {
-    if (m.event && ctx.event?.def.id !== m.event) continue;
-    if (m.night && !ctx.night) continue;
-    const boost = ctx.event?.def.mutation?.[m.id] ?? 1;
+    const byWeather = ctx.weather?.mutation?.[m.id];
+    if (m.event && ctx.event?.def.id !== m.event && !byWeather) continue;
+    if (m.night && !ctx.night && !byWeather) continue;
+    const boost = (ctx.event?.def.mutation?.[m.id] ?? 1) * (byWeather ?? 1);
     if (ctx.rng() < m.chance * boost) return m.id;
   }
   return null;
@@ -118,7 +121,7 @@ export function spawnFish(zone: ZoneId, y: number, ctx: DiveContext): LiveFish |
   const pool = FISH.filter((f) => f.zone === zone && y >= f.depth[0] && y <= f.depth[1] && (!f.event || f.event === ctx.event?.def.id));
   const def = pickWeighted(pool, (f) => {
     const base = RARITY_WEIGHT[f.rarity];
-    const ev = ctx.event?.def.rarity?.[f.rarity] ?? 1;
+    const ev = (ctx.event?.def.rarity?.[f.rarity] ?? 1) * (ctx.weather?.rarity?.[f.rarity] ?? 1);
     // junk is a joke, not a nuisance: it shows up, but rarely
     return base * (f.rarity === "common" ? 1 : luck) * ev * (f.junk ? 0.3 : 1);
   }, ctx.rng);
@@ -264,7 +267,7 @@ function startFight(d: Dive, f: LiveFish, ctx: DiveContext) {
   d.resume = d.phase === "ascend" ? "ascend" : "descend";
   d.phase = "fight";
   const cfg = FIGHT[f.def.rarity]!;
-  d.fight = { fish: f, zone: 0.5, zoneHalf: cfg.half, speed: cfg.speed, marker: 0.5, vel: 0, progress: 0.3, t: 0, seed: ctx.rng() * 100, retried: false };
+  d.fight = { fish: f, zone: 0.5, zoneHalf: cfg.half, speed: cfg.speed * (ctx.weather?.fight ?? 1), marker: 0.5, vel: 0, progress: 0.3, t: 0, seed: ctx.rng() * 100, retried: false };
 }
 
 function stepFight(d: Dive, dt: number, input: DiveInput) {

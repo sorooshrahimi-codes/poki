@@ -6,6 +6,7 @@ import { catchValue, COLUMN, resolveSnap, startDive, stepDive, type Dive, type D
 import { newDirector, noteDive, noteSurprise, pickSurprise } from "../src/core/director.ts";
 import { maxDepth, UPGRADE_ORDER, upgradeCost, capacity as capOf } from "../src/core/economy.ts";
 import { makeRng } from "../src/core/rng.ts";
+import { weatherAt } from "../src/core/weather.ts";
 import { newSave } from "../src/core/save.ts";
 import type { Rarity } from "../src/core/types.ts";
 import { FISH } from "../src/data/fish.ts";
@@ -65,7 +66,8 @@ function session(seed: number): Result {
   let fights = 0, won = 0, dives = 0, earned = 0, legFights = 0, firstLegendary = -1, surprises = 0, firstSurprise = -1, stolen = 0;
   const director = newDirector();
   while (t < MINUTES * 60) {
-    const ctx: DiveContext = { upgrades: s.upgrades, event: null, night: false, rng };
+    // real weather rotation, each session starting at a different time of day
+    const ctx: DiveContext = { upgrades: s.upgrades, event: null, night: false, rng, weather: weatherAt(seed * 977_000 + t * 1000).def };
     const kind = pickSurprise(director, t, { zone: s.zone, bottom: Math.min(maxDepth(s.upgrades), ZONES[s.zone].floor), floor: ZONES[s.zone].floor, capacity: capOf(s.upgrades) }, rng);
     if (kind) { noteSurprise(director, kind, t); surprises++; if (firstSurprise < 0) firstSurprise = t; }
     const d = startDive(s.zone, ctx, kind);
