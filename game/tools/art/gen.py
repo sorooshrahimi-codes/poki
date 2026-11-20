@@ -131,6 +131,17 @@ JOBS.update({
      "top-right a cheerful chef cat wearing a white chef hat, bottom-left a little girl marine biologist with glasses and a clipboard, bottom-right a jolly pirate grandma with an eye patch and a parrot feather. " + STYLE, "1:1", True),
 })
 
+HATTED = ("A 2x2 grid of four separate game sprites on a fully transparent background, generous empty space, nothing touching, no text, no water. "
+          "Exactly the same kid, same small white-and-red wooden rowboat, same blue life vest and same art style as the reference image, side view, in four poses: "
+          "TOP-LEFT sitting calmly holding the rod pointing up and to the right; TOP-RIGHT swinging the rod back over the shoulder to cast, rod pointing to the upper LEFT; "
+          "BOTTOM-LEFT cranking the reel with a determined face, rod pointing up and to the right; BOTTOM-RIGHT celebrating with both arms raised, rod held up in one hand. "
+          "In all four the kid wears {hat} on the head, fitted naturally over the hair. " + STYLE)
+HATS = {"beanie": "a cozy blue knitted beanie with a white pom-pom", "rain": "a yellow fisherman rain hat", "sailor": "a white sailor captain hat with an anchor badge",
+        "frog": "a green frog-shaped beanie with big frog eyes on top", "straw": "a straw sun hat with a red band and a pink flower",
+        "pirate": "a black pirate captain tricorn hat with a gold anchor emblem", "crown": "a small shiny golden royal crown with gems sitting directly on the hair (NO cap, NO other hat under it)"}
+for k, v in HATS.items():
+    JOBS["kidhat_" + k] = (HATTED.replace("{hat}", v), "1:1", True, [BOAT_REF])
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]

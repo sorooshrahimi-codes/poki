@@ -37,7 +37,7 @@ SINGLES = {"fish_whiskers": "old_whiskers", "fish_marlin": "grand_marlin", "fish
            "reef_floor": "floor_reef", "fish_coraldragon": "coral_dragon", "fish_opal": "opal_serpent",
            "lake_floor": "floor_lake", "ocean_floor": "floor_ocean"}
 BACKGROUNDS = {"lake_surface": "bg_lake", "ocean_surface": "bg_ocean", "ice_surface": "bg_ice", "reef_surface": "bg_reef", "aquarium": "bg_aquarium"}
-MAX = {"npc_": 140, "kid_": 420, "pet_": 160, "hat_": 140, "coral_dragon": 420, "opal_serpent": 460, "i_": 128, "b_": 128, "g_": 128, "s_": 300, "narwhal_king": 420, "aurora_ray": 460, "boat_": 420, "p_": 360, "floor_": 1024, "boat": 420, "old_whiskers": 420, "grand_marlin": 420, "star_whale": 480}
+MAX = {"npc_": 140, "kid_": 400, "pet_": 160, "hat_": 140, "coral_dragon": 420, "opal_serpent": 460, "i_": 128, "b_": 128, "g_": 128, "s_": 300, "narwhal_king": 420, "aurora_ray": 460, "boat_": 420, "p_": 360, "floor_": 1024, "boat": 420, "old_whiskers": 420, "grand_marlin": 420, "star_whale": 480}
 
 def max_for(name):
     for k, v in MAX.items():

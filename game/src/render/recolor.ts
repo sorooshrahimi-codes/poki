@@ -30,7 +30,7 @@ function hsl2rgb(h: number, s: number, l: number): [number, number, number] {
 
 /** which pixels belong to the part: by hue band and height in the sprite */
 function inPart(part: Part, h: number, s: number, l: number, yFrac: number): boolean {
-  if (part === "vest") return h >= 195 && h <= 245 && s > 0.35 && l > 0.18 && l < 0.85 && yFrac > 0.25 && yFrac < 0.78;
+  if (part === "vest") return h >= 195 && h <= 245 && s > 0.35 && l > 0.18 && l < 0.85 && yFrac > 0.36 && yFrac < 0.8;
   return (h >= 345 || h <= 15) && s > 0.45 && l > 0.25 && yFrac > 0.6;
 }
 

@@ -9,6 +9,7 @@ import { RARITY_COLOR, ZONES } from "../data/world.ts";
 import { BG_WATERLINE, SHADOW_PAD, bgBottomColor, bgTopColor, drawGlint, img, propNames, spriteShadowed, spriteTinted } from "./assets.ts";
 import { drawFish } from "./fish.ts";
 import { recolor, type Tint } from "./recolor.ts";
+import { KID_GEO } from "../data/kidgeo.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -239,6 +240,7 @@ export class Renderer {
   draw(s: SceneState) {
     const c = this.ctx, v = this.view;
     this.looks = { outfit: s.outfit, outfitId: s.outfitId, paint: s.paint, paintId: s.paintId };
+    this.hatId = (s.hat ?? "hat_cap").replace("hat_", "");
     this.weatherNow = s.weather;
     c.save();
     c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
@@ -692,7 +694,9 @@ export class Renderer {
   }
 
   // ------------------------------------------------------------- boat, hook
-  private boatImg(pose: Pose): HTMLImageElement | HTMLCanvasElement | null { return img(`kid_${pose}`); }
+  /** the fisher wears the hat in the art itself: one full sprite per hat and pose */
+  private hatId = "cap";
+  private boatImg(pose: Pose): HTMLImageElement | HTMLCanvasElement | null { return img(`kid_${this.hatId}_${pose}`) ?? img(`kid_cap_${pose}`); }
   private looks: { outfit: Tint | null; outfitId: string | null; paint: Tint | null; paintId: string | null } = { outfit: null, outfitId: null, paint: null, paintId: null };
   /** the kid+boat sprite with the chosen vest colour and boat paint applied */
   private dressed(pose: Pose, im: HTMLImageElement | HTMLCanvasElement) {
@@ -701,7 +705,7 @@ export class Renderer {
     if (L.outfit && L.outfitId !== "vest_blue") parts.push({ part: "vest", tint: L.outfit });
     if (L.paint && L.paintId !== "paint_red") parts.push({ part: "stripe", tint: L.paint });
     if (!parts.length) return im;
-    return recolor(`${pose}|${L.outfitId}|${L.paintId}`, im, parts);
+    return recolor(`${this.hatId}|${pose}|${L.outfitId}|${L.paintId}`, im, parts);
   }
 
   /**
@@ -710,8 +714,10 @@ export class Renderer {
    */
   private boatGeo(t: number, pose: Pose) {
     let p = pose, im = this.boatImg(p);
-    if (!im) { p = "idle"; im = img("kid_idle"); }
-    const g = POSE_GEO[p];
+    if (!im) { p = "idle"; im = img("kid_cap_idle"); }
+    const key = img(`kid_${this.hatId}_${p}`) ? `kid_${this.hatId}_${p}` : `kid_cap_${p}`;
+    const kg = KID_GEO[key] ?? { hull: POSE_GEO[p].hull, tip: POSE_GEO[p].tip };
+    const g = { hull: kg.hull, tip: kg.tip, head: POSE_GEO[p].head };
     const hullW = BOAT_W * 0.917;
     const w = hullW / (g.hull[1] - g.hull[0]);
     const h = im ? (w * im.height) / im.width : 100;
@@ -744,19 +750,6 @@ export class Renderer {
     if (b.im) c.drawImage(this.dressed(b.p, b.im), b.left, -b.h, b.w, b.h);
     // cosmetics: a hat over the cap, a pet on the bow
     // no hat chosen = the classic red cap
-    const hatId = s.hat ?? "hat_cap";
-    const hat = img(hatId);
-    if (hat) {
-      // every hat has its own fit: width (share of the sprite) and how far it sinks onto the hair
-      const fit = HAT_FIT[hatId] ?? { w: 0.33, dy: 0 };
-      const hw = b.w * fit.w, hh = (hw * hat.height) / hat.width;
-      const tilt = b.p === "cast" ? -0.12 : b.p === "cheer" ? 0.06 : 0;
-      c.save();
-      c.translate(b.left + b.g.head[0] * b.w, -b.h + (b.g.head[1] + fit.dy) * b.h);
-      c.rotate(tilt);
-      c.drawImage(hat, -hw / 2 + (fit.dx ?? 0) * b.w, -hh * 0.72, hw, hh);
-      c.restore();
-    }
     const pet = s.pet ? img(s.pet) : null;
     if (pet) {
       // sits on the bow, clear of the fisher's hands
