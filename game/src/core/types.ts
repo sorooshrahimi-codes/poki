@@ -4,7 +4,7 @@
 export type Lang = "en" | "es" | "pt" | "hi" | "ja";
 export type Rarity = "common" | "rare" | "epic" | "legendary" | "secret";
 export type MutationId = "gold" | "rainbow" | "giant" | "ghost" | "electric";
-export type ZoneId = "lake" | "ocean" | "ice" | "reef";
+export type ZoneId = "lake" | "ocean" | "ice" | "reef" | "volcano";
 export type EventId = "blood_moon" | "meteor" | "rainbow_sky" | "golden_hour";
 export type Shape = "fish" | "eel" | "puffer" | "jelly" | "boot" | "can" | "duck" | "crab";
 
@@ -51,6 +51,8 @@ export interface ZoneDef {
   ice?: boolean;
   /** reef zone technique: water currents push the hook sideways */
   currents?: boolean;
+  /** volcano zone technique: hot vents build up and erupt; touching an eruption knocks a fish off */
+  vents?: boolean;
   /** must own this zone first (the map branches after the ocean) */
   after?: ZoneId;
 }

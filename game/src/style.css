@@ -341,3 +341,16 @@ img.flag { width: 26px; height: 17px; border-radius: 3px; box-shadow: 0 0 0 2px 
 @media (orientation: portrait) and (max-width: 480px) { .shopb, .zone { padding: 2px 8px; } .shopb img { height: 26px; } .round2 { font-size: 20px; } }
 /* Captain Bo's tips never sit on top of an open panel */
 body:has(.panel:not(.hidden):not(#reveal)) #guide { display: none; }
+/* round buttons stay perfect circles: the info pills give way instead */
+.pill.round { flex-shrink: 0; }
+#top .pill:not(.round) { flex-shrink: 1; min-width: 0; }
+#voyN { display: none; }
+/* map: each place shows how full its logbook page is */
+.mnode .mp { position: relative; width: 78%; height: 14px; border-radius: 8px; background: rgba(5,15,40,.75); overflow: hidden; margin: 1px 0; }
+.mnode .mp i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(#8ff0a0, #3cc46a); }
+.mnode .mp b { position: relative; font-size: 10px; line-height: 14px; display: block; text-align: center; }
+#mapNodes.wide { width: min(88vw, 680px); height: min(64vh, 300px); }
+#mapNodes.wide .mnode { width: min(100px, 30vh); height: min(100px, 30vh); }
+#map:has(#mapNodes.wide) { max-width: 94vw; padding: 10px 14px; gap: 8px; }
+#map:has(#mapNodes.wide) .title { font-size: 20px; }
+#mapNodes.wide { width: min(84vw, 680px); }

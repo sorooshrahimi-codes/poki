@@ -184,6 +184,11 @@ function handleFx(d: Dive) {
       toast(`🍾 ${t("map")} ${save.mapPieces + d.mapPieces}/3`); sfx.newFish(); renderer.burst(d.hookX, d.hookY, "#bdf3ff", 20);
     } else if (fx.kind === "chest") {
       toast(`💰 +${fx.coins}`); sfx.reveal("legendary"); renderer.burst(d.hookX, d.hookY, "#ffd84a", 40, 260); renderer.flashIt(0.6);
+    } else if (fx.kind === "vent") {
+      sfx.snap(); renderer.shakeIt(9);
+      renderer.burst(fx.x, fx.y, "#ff8a3a", 34, 280);
+      renderer.floatText(fx.x, fx.y - 20, fx.fish ? `🔥 ${fishName(fx.fish.def)}: HOT HOT HOT!` : "🔥 HOT!", "#ffb35a", 1.3);
+      if (!save.tips.includes("vent")) { save.tips.push("vent"); toast(`🌋 ${t("vent")}`, 2600); }
     } else if (fx.kind === "bonk") {
       sfx.bonk(); renderer.shakeIt(3);
     } else if (fx.kind === "whirlpool") {
@@ -758,7 +763,7 @@ function renderOrders() {
 
 
 // ------------------------------------------------------------------ guide: Captain Bo tells the story and explains each idea once
-type TipId = "start" | "reveal" | "dodge" | "upgrade" | "fight" | "shopBtn" | "aquaBtn" | "ordersBtn" | "wardBtn" | "competeBtn" | "zone" | "weather" | "event";
+type TipId = "start" | "reveal" | "dodge" | "upgrade" | "fight" | "shopBtn" | "aquaBtn" | "ordersBtn" | "wardBtn" | "competeBtn" | "zone" | "weather" | "event" | "vent";
 const tipQueue: TipId[] = [];
 let tipShowing = false;
 function guide(id: TipId) {
@@ -794,7 +799,7 @@ let play: Play = { kind: "normal" };
 /** friend challenge: 3 casts in the same seeded sea with the same rod */
 const CH_DIVES = 3;
 const CH_UPGRADES = { line: 8, capacity: 5, luck: 3 };
-const CH_ZONES: ZoneId[] = ["lake", "ocean", "reef", "ice"];
+const CH_ZONES: ZoneId[] = ["lake", "ocean", "reef", "ice", "volcano"];
 const dayOf = (now: number) => Math.floor(now / 86_400_000);
 const titleText = () => t(`lv.t${titleIndex(save.prog.level)}` as Parameters<typeof t>[0]);
 const tierName = (tr: string) => t(`tier.${tr}` as Parameters<typeof t>[0]);
@@ -1104,9 +1109,19 @@ function buy(id: UpgradeId) {
 const zoneReachable = (z: ZoneId) => !ZONES[z].after || save.zones.includes(ZONES[z].after!);
 
 /** world map: lake -> ocean -> fork (Frozen North | Coral Reef) */
-const MAP_POS: Record<ZoneId, [number, number]> = { lake: [50, 84], ocean: [50, 52], ice: [22, 16], reef: [78, 16] };
+const MAP_POS_TALL: Record<ZoneId, [number, number]> = { lake: [50, 86], ocean: [50, 57], ice: [18, 32], reef: [82, 32], volcano: [50, 15] };
+/** wide screens read the journey left to right */
+const MAP_POS_WIDE: Record<ZoneId, [number, number]> = { lake: [11, 50], ocean: [36, 50], ice: [63, 24], reef: [63, 76], volcano: [89, 50] };
+let MAP_POS = MAP_POS_TALL;
+/** big numbers stay short in the HUD: 9,999 · 12.3K · 1.25M */
+const shortNum = (n: number) => n < 10_000 ? n.toLocaleString() : n < 1_000_000 ? `${(n / 1000).toFixed(n < 100_000 ? 1 : 0)}K` : `${(n / 1e6).toFixed(2)}M`;
+const ZONE_TECH: Partial<Record<ZoneId, string>> = { ice: "🧊", reef: "🌊", volcano: "🌋" };
+
 function renderMap() {
   const box = $("mapNodes");
+  const wide = innerWidth > innerHeight * 1.2;
+  MAP_POS = wide ? MAP_POS_WIDE : MAP_POS_TALL;
+  box.classList.toggle("wide", wide);
   box.innerHTML = "";
   const lines = ZONE_ORDER.filter((z) => ZONES[z].after).map((z) => {
     const [x1, y1] = MAP_POS[ZONES[z].after!], [x2, y2] = MAP_POS[z];
@@ -1121,7 +1136,10 @@ function renderMap() {
     n.style.left = `${MAP_POS[z][0]}%`; n.style.top = `${MAP_POS[z][1]}%`;
     n.style.backgroundImage = `url(${artUrl(`bg_${z}`)})`;
     const status = owned ? (z === scene.zone ? "📍" : "") : reach ? `🔒 🪙${price.toLocaleString()}` : `🔒 ${t("map.needs")} ${tZone(ZONES[z].after!)}`;
-    n.innerHTML = `<span class="mn">${tZone(z)}</span><span class="ms">${status}</span>`;
+    // how much of this place's logbook is filled, and its special technique
+    const all = FISH.filter((f) => f.zone === z), got = all.filter((f) => save.album[f.id]).length;
+    const prog = `<span class="mp"><i style="width:${Math.round((got / all.length) * 100)}%"></i><b>🐟 ${got}/${all.length}</b></span>`;
+    n.innerHTML = `<span class="mn">${ZONE_TECH[z] ?? ""} ${tZone(z)}</span>${owned ? prog : ""}<span class="ms">${status}</span>`;
     n.disabled = !owned && (!reach || save.coins < price);
     n.onclick = () => { pickZone(z); $("map").classList.add("hidden"); };
     box.appendChild(n);
@@ -1148,7 +1166,7 @@ function pickZone(z: ZoneId) {
 function updateUi() {
   renderLevelPill();
   updatePlayPill();
-  $("coinsN").textContent = save.coins.toLocaleString();
+  $("coinsN").textContent = shortNum(save.coins);
   $("albumN").textContent = albumText();
   $("langBtn").innerHTML = `<img class="flag" src="${LANG_FLAG[getLang()]}" alt="">`;
   $("muteBtn").textContent = save.muted ? "🔇" : "🔊";

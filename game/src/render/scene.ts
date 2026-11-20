@@ -1,4 +1,4 @@
-import { COLUMN, FIGHT_GRACE, ICE_HOLE, type Dive, type LiveFish } from "../core/dive.ts";
+import { COLUMN, FIGHT_GRACE, ICE_HOLE, VENT_ERUPT, VENT_WARN, ventCycle, type Dive, type LiveFish } from "../core/dive.ts";
 import type { ActiveEvent } from "../core/events.ts";
 import type { WeatherId } from "../core/weather.ts";
 import { sfx } from "../platform/audio.ts";
@@ -155,7 +155,7 @@ export class Renderer {
   private propsFor(zone: ZoneId): Prop[] {
     let list = this.props.get(zone);
     if (list) return list;
-    const rng = makeRng(zone === "lake" ? 11 : zone === "ocean" ? 23 : zone === "ice" ? 37 : 41);
+    const rng = makeRng(zone === "lake" ? 11 : zone === "ocean" ? 23 : zone === "ice" ? 37 : zone === "reef" ? 41 : 53);
     const names = propNames(zone);
     list = [];
     const floor = ZONES[zone].floor;
@@ -176,7 +176,7 @@ export class Renderer {
   private ambientFor(zone: ZoneId): Ambient[] {
     let list = this.ambient.get(zone);
     if (list) return list;
-    const rng = makeRng(zone === "lake" ? 5 : zone === "ocean" ? 9 : zone === "ice" ? 13 : 17);
+    const rng = makeRng(zone === "lake" ? 5 : zone === "ocean" ? 9 : zone === "ice" ? 13 : zone === "reef" ? 17 : 19);
     const pool = FISH.filter((f) => f.zone === zone && !f.junk && (f.rarity === "common" || f.rarity === "rare")).map((f) => f.id);
     list = [];
     for (let y = 120; y < ZONES[zone].floor; y += 160 + rng() * 140) {
@@ -273,6 +273,7 @@ export class Renderer {
     const left = -v.ox / v.scale, right = COLUMN + v.ox / v.scale;
 
     this.drawBackdrop(c, s, top, bottom, left, right);
+    this.drawDepthLayers(c, s, top, bottom, left, right);
     this.drawFloor(c, s, left, right, true);
     this.drawProps(c, s, 0, top, bottom, left, right);
     this.drawAmbient(c, s, top, bottom);
@@ -284,6 +285,7 @@ export class Renderer {
     if (ZONES[s.zone].ice) this.drawIceSheet(c, s, left, right);
     if (s.dive) this.drawSlabs(c, s.dive, s.t, top, bottom);
     if (s.dive) this.drawCurrents(c, s.dive, s.t, top, bottom, left, right);
+    if (s.dive) this.drawVents(c, s.dive, top, bottom);
     if (s.dive) this.drawShadow(c, s.dive, s.t);
     if (s.dive) this.drawDiveFish(c, s.dive, s.t, top, bottom);
     if (s.dive) this.drawSurprise(c, s.dive, s.t);
@@ -332,6 +334,7 @@ export class Renderer {
         fg.addColorStop(0, "rgba(0,0,0,0)"); fg.addColorStop(1, bgBottomColor(s.zone));
         c.fillStyle = fg; c.fillRect(left, fadeTop, width, bgBottomY - fadeTop + 1);
       }
+      if (top < 0) this.drawSkyLayers(c, s, y0, left, right);
       // weather over the sky
       if (s.weather !== "sunny" && top < 0) {
         c.save();
@@ -381,6 +384,73 @@ export class Renderer {
       c.fillRect(left, Math.max(0, top), width, bottom - Math.max(0, top));
       c.globalAlpha = 1;
     }
+  }
+
+  /** depth above water: two cloud layers drifting at different speeds, far birds and a horizon haze */
+  private drawSkyLayers(c: Ctx, s: SceneState, y0: number, left: number, right: number) {
+    const w = right - left, t = s.t;
+    const horizon = -6;
+    for (const [layer, speed, alpha, scale, yk] of [[0, 4, 0.35, 0.7, 0.55], [1, 11, 0.55, 1, 0.75]] as const) {
+      for (let i = 0; i < 4; i++) {
+        const span = w + 260;
+        const x = left - 130 + ((((i * 211 + layer * 97) + t * speed) % span) + span) % span;
+        const y = y0 * (yk - i * 0.07) + Math.sin(i * 1.7) * 10;
+        const r = (26 + (i % 3) * 10) * scale;
+        c.fillStyle = `rgba(255,255,255,${alpha})`;
+        c.beginPath();
+        c.ellipse(x, y, r * 1.6, r * 0.55, 0, 0, Math.PI * 2);
+        c.ellipse(x - r * 0.7, y + 2, r * 0.8, r * 0.45, 0, 0, Math.PI * 2);
+        c.ellipse(x + r * 0.5, y - r * 0.25, r * 0.9, r * 0.55, 0, 0, Math.PI * 2);
+        c.fill();
+      }
+    }
+    // far birds: tiny gliding Vs
+    if (s.zone !== "volcano") {
+      c.strokeStyle = "rgba(40,60,90,0.55)"; c.lineWidth = 1.6; c.lineCap = "round";
+      for (let i = 0; i < 3; i++) {
+        const span = w + 120;
+        const x = left - 60 + ((i * 157 + t * (14 + i * 3)) % span);
+        const y = y0 * (0.45 - i * 0.06) + Math.sin(t * 0.7 + i) * 6;
+        const f = Math.sin(t * 7 + i * 2) * 3;
+        c.beginPath(); c.moveTo(x - 6, y - f); c.lineTo(x, y); c.lineTo(x + 6, y - f); c.stroke();
+      }
+    }
+    // horizon haze: far things fade into the sky (atmospheric perspective)
+    const hz = c.createLinearGradient(0, horizon - 70, 0, horizon);
+    hz.addColorStop(0, "rgba(255,255,255,0)"); hz.addColorStop(1, s.zone === "volcano" ? "rgba(255,170,120,0.28)" : "rgba(230,245,255,0.3)");
+    c.fillStyle = hz; c.fillRect(left, horizon - 70, w, 70);
+  }
+
+  /** depth under water: three layers of rocky walls along the sides, farther ones slower and hazier */
+  private drawDepthLayers(c: Ctx, s: SceneState, top: number, bottom: number, left: number, right: number) {
+    if (bottom < 30) return;
+    const z = ZONES[s.zone];
+    const from = Math.max(top, 30);
+    const LAYERS = [[0.35, 0.16, 0.12], [0.6, 0.26, 0.2], [0.85, 0.4, 0.3]] as const; // parallax, darkness, reach
+    const width = right - left;
+    for (const [k, dark, reach] of LAYERS) {
+      // the pattern scrolls at k of the camera speed: far walls drift by slowly
+      const off = top * (1 - k);
+      const col = mix(mix(z.water[0], z.water[2], Math.min(1, Math.max(0, top / z.floor))), "#020812", dark);
+      c.fillStyle = col;
+      c.globalAlpha = 0.32 + k * 0.35;
+      for (const side of [-1, 1]) {
+        const edge = side < 0 ? left : right;
+        c.beginPath();
+        c.moveTo(edge, from);
+        for (let y = from; y <= bottom + 20; y += 16) {
+          const u = (y - off) * 0.01 + k * 13 + (side > 0 ? 40 : 0);
+          const n = Math.sin(u) * 0.5 + Math.sin(u * 2.3 + 1.3) * 0.3 + Math.sin(u * 5.1) * 0.12;
+          const fadeIn = Math.min(1, (y - 30) / 160);
+          const x = edge - side * width * reach * (0.45 + n * 0.5) * fadeIn;
+          c.lineTo(x, y);
+        }
+        c.lineTo(edge, bottom + 20);
+        c.closePath();
+        c.fill();
+      }
+    }
+    c.globalAlpha = 1;
   }
 
   private drawRainbow(c: Ctx, y0: number) {
@@ -637,6 +707,56 @@ export class Renderer {
     }
   }
 
+  /** volcano vents: a rocky chimney that glows as it builds up, then a column of fire bubbles */
+  private drawVents(c: Ctx, d: Dive, top: number, bottom: number) {
+    for (const v of d.vents) {
+      if (v.y > bottom + 40 || v.y + v.h < top - 60) continue;
+      const k = ventCycle(v, d.t), base = v.y + v.h;
+      const warn = k >= VENT_WARN && k < VENT_ERUPT ? (k - VENT_WARN) / (VENT_ERUPT - VENT_WARN) : 0;
+      const erupt = k >= VENT_ERUPT ? (k - VENT_ERUPT) / (1 - VENT_ERUPT) : -1;
+      c.save();
+      // the column's lane, always faintly visible so the danger can be read
+      const lane = c.createLinearGradient(v.x - 30, 0, v.x + 30, 0);
+      const a = erupt >= 0 ? 0.42 * (1 - erupt * 0.5) : 0.06 + warn * 0.18;
+      lane.addColorStop(0, "rgba(255,120,40,0)"); lane.addColorStop(0.5, `rgba(255,${erupt >= 0 ? 170 : 110},60,${a})`); lane.addColorStop(1, "rgba(255,120,40,0)");
+      c.fillStyle = lane; c.fillRect(v.x - 30, v.y, 60, v.h);
+      // chimney
+      const wob = warn ? Math.sin(d.t * 60) * warn * 2 : 0;
+      c.translate(wob, 0);
+      const g = c.createLinearGradient(0, base - 34, 0, base);
+      g.addColorStop(0, "#5a4048"); g.addColorStop(1, "#2a1a22");
+      c.fillStyle = g; c.strokeStyle = "#1a0a10"; c.lineWidth = 2.5;
+      c.beginPath(); c.moveTo(v.x - 30, base + 6); c.lineTo(v.x - 13, base - 30); c.lineTo(v.x + 13, base - 30); c.lineTo(v.x + 30, base + 6); c.closePath(); c.fill(); c.stroke();
+      // glowing mouth: brighter as it builds up
+      const glow = erupt >= 0 ? 1 : 0.25 + warn * 0.75;
+      const mg = c.createRadialGradient(v.x, base - 30, 0, v.x, base - 30, 24 + glow * 18);
+      mg.addColorStop(0, `rgba(255,220,120,${glow})`); mg.addColorStop(1, "rgba(255,90,30,0)");
+      c.fillStyle = mg; c.beginPath(); c.arc(v.x, base - 30, 24 + glow * 18, 0, Math.PI * 2); c.fill();
+      c.fillStyle = `rgba(255,${150 + glow * 80},80,1)`; c.beginPath(); c.ellipse(v.x, base - 30, 12, 4, 0, 0, Math.PI * 2); c.fill();
+      // lava cracks
+      c.strokeStyle = `rgba(255,140,50,${0.4 + glow * 0.5})`; c.lineWidth = 2;
+      c.beginPath(); c.moveTo(v.x - 6, base - 26); c.lineTo(v.x - 12, base - 10); c.lineTo(v.x - 8, base); c.moveTo(v.x + 7, base - 24); c.lineTo(v.x + 14, base - 6); c.stroke();
+      // eruption: a column of fire bubbles racing up
+      if (erupt >= 0) {
+        for (let i = 0; i < 22; i++) {
+          const p = ((i / 22 + d.t * 1.6) % 1), y = base - 30 - p * (v.h - 10);
+          const x = v.x + Math.sin(i * 2.3 + d.t * 9) * (8 + p * 10);
+          const r = 4 + ((i * 7) % 6) + p * 3;
+          c.fillStyle = i % 3 ? `rgba(255,${180 - p * 80},70,${0.9 - p * 0.5})` : `rgba(255,240,200,${0.8 - p * 0.5})`;
+          c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+        }
+      } else if (warn > 0) {
+        // little warning puffs
+        for (let i = 0; i < 4; i++) {
+          const p = ((i / 4 + d.t * 1.2) % 1);
+          c.fillStyle = `rgba(255,200,140,${(1 - p) * 0.6 * warn})`;
+          c.beginPath(); c.arc(v.x + Math.sin(i * 3 + d.t * 4) * 5, base - 32 - p * 40, 3 + p * 4, 0, Math.PI * 2); c.fill();
+        }
+      }
+      c.restore();
+    }
+  }
+
   /** reef currents: a soft band with streaks racing along it, so the push is readable before you hit it */
   private drawCurrents(c: Ctx, d: Dive, t: number, top: number, bottom: number, left: number, right: number) {
     for (const q of d.currents) {
@@ -759,7 +879,36 @@ export class Renderer {
       c.translate(f.x, f.y); c.scale(k, k); c.translate(-f.x, -f.y);
       this.drawSwimmer(c, f, t);
       c.restore();
+      this.drawFishLife(c, f, d, t);
     }
+  }
+
+  /** small signs of life: bubbles from the mouth, and a reaction when the hook swims close */
+  private drawFishLife(c: Ctx, f: LiveFish, d: Dive, t: number) {
+    const face = this.facing.get(f) ?? f.dir;
+    const y = f.y + Math.sin(f.bob) * 4;
+    // a bubble every few seconds, each fish on its own rhythm
+    const per = 2.2 + (f.uid % 7) * 0.35, k = ((t + f.uid * 0.37) % per) / per;
+    if (k < 0.45 && !f.def.junk) {
+      const p = k / 0.45;
+      c.fillStyle = `rgba(230,250,255,${0.75 * (1 - p)})`; c.strokeStyle = `rgba(255,255,255,${0.9 * (1 - p)})`; c.lineWidth = 1;
+      const bx = f.x + face * f.size * 0.5 + Math.sin(p * 9) * 2, by = y - 4 - p * 34;
+      c.beginPath(); c.arc(bx, by, 2.5 + p * 2.5, 0, Math.PI * 2); c.fill(); c.stroke();
+    }
+    // reaction to the hook: commons get a fright, rare ones look interested, junk does nothing
+    if (f.def.junk || d.phase === "fight") return;
+    const dx = f.x - d.hookX, dy = f.y - d.hookY, dist = Math.hypot(dx, dy);
+    if (dist > 120) return;
+    const near = 1 - dist / 120;
+    const icon = f.def.rarity === "common" ? (f.uid % 3 === 0 ? "💦" : "😮") : f.def.rarity === "rare" ? "❓" : "❗";
+    const pop = Math.min(1, near * 2.2);
+    c.save();
+    c.translate(f.x, y - f.size * 0.55 - 14 - Math.abs(Math.sin(t * 8 + f.uid)) * 3 * near);
+    c.scale(pop, pop);
+    c.globalAlpha = Math.min(1, near * 2);
+    c.font = "18px system-ui"; c.textAlign = "center"; c.textBaseline = "middle";
+    c.fillText(icon, 0, 0);
+    c.restore();
   }
 
   // ------------------------------------------------------------- boat, hook

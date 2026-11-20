@@ -12,17 +12,18 @@ const PROPS: Record<ZoneId, string[]> = {
   ocean: ["p_kelp", "p_coral", "p_anemone", "p_glow"],
   ice: ["p_crystal", "p_iceberg", "p_arctickelp", "p_icicles"],
   reef: ["p_seafan", "p_brain", "p_anemone2", "p_tube"],
+  volcano: ["p_vent", "p_tubeworm", "p_geode", "p_emberweed"],
 };
 export const propNames = (z: ZoneId) => PROPS[z];
 
 /** where the water surface sits in each background image (fraction of its height) */
-export const BG_WATERLINE: Record<ZoneId, number> = { lake: 0.245, ocean: 0.228, ice: 0.305, reef: 0.245 };
+export const BG_WATERLINE: Record<ZoneId, number> = { lake: 0.245, ocean: 0.228, ice: 0.305, reef: 0.245, volcano: 0.25 };
 
 const NAMES = [
   ...FISH.map((f) => f.id), ...["cap", "beanie", "rain", "sailor", "frog", "straw", "pirate", "crown"].flatMap((h) => ["idle", "cast", "reel", "cheer"].map((p) => `kid_${h}_${p}`)),
-  "hat_cap", "hat_rain", "hat_frog", "hat_sailor", "npc_captain", "npc_chef", "npc_scientist", "npc_granny", "floor_lake", "floor_ocean", "floor_ice", "floor_reef", "bg_lake", "bg_ocean", "bg_ice", "bg_reef", "bg_aquarium",
+  "hat_cap", "hat_rain", "hat_frog", "hat_sailor", "npc_captain", "npc_chef", "npc_scientist", "npc_granny", "floor_lake", "floor_ocean", "floor_ice", "floor_reef", "floor_volcano", "bg_lake", "bg_ocean", "bg_ice", "bg_reef", "bg_volcano", "bg_aquarium",
   "pet_cat", "pet_dog", "pet_parrot", "pet_penguin", "hat_pirate", "hat_crown", "hat_beanie", "hat_straw",
-  ...PROPS.lake, ...PROPS.ocean, ...PROPS.ice, ...PROPS.reef, "i_coin", "i_line", "i_hooks", "i_luck", "s_shark", "s_bottle", "s_chest", "s_gull", "b_worm", "b_shrimp", "b_firefly", "b_golden", "b_moon", "b_ice", "b_rainbow", "g_lantern", "g_sonar", "g_shop", "g_map",
+  ...PROPS.lake, ...PROPS.ocean, ...PROPS.ice, ...PROPS.reef, ...PROPS.volcano, "i_coin", "i_line", "i_hooks", "i_luck", "s_shark", "s_bottle", "s_chest", "s_gull", "b_worm", "b_shrimp", "b_firefly", "b_golden", "b_moon", "b_ice", "b_rainbow", "g_lantern", "g_sonar", "g_shop", "g_map",
 ];
 
 const raw = new Map<string, HTMLImageElement>();
@@ -46,7 +47,7 @@ function isCore(n: string) {
 
 export function loadRest(): Promise<void> {
   return loadList(NAMES.filter((n) => !isCore(n) && !raw.has(n)), () => {}).then(() => {
-    for (const z of ["lake", "ocean", "ice", "reef"] as const) {
+    for (const z of ["lake", "ocean", "ice", "reef", "volcano"] as const) {
       const im = raw.get(`bg_${z}`);
       if (im && !bgBottom.has(z)) { bgBottom.set(z, sampleRow(im, im.height - 8)); bgTop.set(z, sampleRow(im, 0)); }
     }
@@ -55,7 +56,7 @@ export function loadRest(): Promise<void> {
 
 export function loadAssets(onProgress: (k: number) => void, extra: string[] = []): Promise<void> {
   return loadList(NAMES.filter((n) => isCore(n) || extra.includes(n)), onProgress).then(() => {
-    for (const z of ["lake", "ocean", "ice", "reef"] as const) {
+    for (const z of ["lake", "ocean", "ice", "reef", "volcano"] as const) {
       const im = raw.get(`bg_${z}`);
       if (im) { bgBottom.set(z, sampleRow(im, im.height - 8)); bgTop.set(z, sampleRow(im, 0)); }
     }

@@ -2,7 +2,7 @@
 // pacing targets from the design (first upgrade ~40 s, ocean ~6 min). It is also the judge for
 // AI-made content: run it after adding fish and it fails (exit 1) when pacing leaves the targets.
 //   node tools/sim.ts [sessions=200] [minutes=15]
-import { catchValue, COLUMN, resolveSnap, startDive, stepDive, type Dive, type DiveContext, type DiveInput } from "../src/core/dive.ts";
+import { catchValue, COLUMN, VENT_WARN, ventCycle, resolveSnap, startDive, stepDive, type Dive, type DiveContext, type DiveInput } from "../src/core/dive.ts";
 import { newDirector, noteDive, noteSurprise, pickSurprise } from "../src/core/director.ts";
 import { maxDepth, UPGRADE_ORDER, upgradeCost, capacity as capOf } from "../src/core/economy.ts";
 import { makeRng } from "../src/core/rng.ts";
@@ -70,6 +70,13 @@ function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; 
       if (!near) continue;
       if (down) s += bad(f) ? -1 : catchValue(f) / 100;
       else s += catchValue(f) / 50;
+    }
+    // vents: a human sees the glow and steers clear of a column about to erupt
+    for (const v of d.vents) {
+      if (Math.abs(x - v.x) > 34) continue;
+      const ahead = down ? v.y + v.h - d.hookY : d.hookY - v.y;
+      if (ahead < -10 || ahead > 220) continue;
+      if (ventCycle(v, d.t + 0.4) >= VENT_WARN * skill + 0.2) s -= 3;
     }
     if (s > bestScore) { bestScore = s; best = x; }
   }

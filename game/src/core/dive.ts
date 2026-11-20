@@ -63,6 +63,11 @@ export interface Fight {
 
 export interface Slab { x: number; y: number; w: number; h: number }
 export interface Current { y: number; h: number; v: number }
+/** a hot vent: a geyser column at x from y to y+h that glows, then erupts every `period` seconds */
+export interface Vent { x: number; y: number; h: number; period: number; phase: number }
+/** 0..1 through the vent's cycle; warns from WARN, erupts from ERUPT */
+export const VENT_WARN = 0.45, VENT_ERUPT = 0.66;
+export const ventCycle = (v: Vent, t: number) => (((t + v.phase) % v.period) + v.period) % v.period / v.period;
 export const ICE_HOLE: [number, number] = [COLUMN / 2 - 62, COLUMN / 2 + 62];
 
 /** an unexpected event inside a dive (picked by the director, played out by these rules) */
@@ -106,6 +111,10 @@ export interface Dive {
   treasure: boolean;
   /** reef zone: horizontal water currents (y = top, h = height, v = push speed) */
   currents: Current[];
+  /** volcano zone: hot vents */
+  vents: Vent[];
+  /** seconds before a vent can hit again */
+  ventCool: number;
   /** coins found during the dive (chests) and map pieces (bottles) */
   bonusCoins: number;
   mapPieces: number;
@@ -113,7 +122,7 @@ export interface Dive {
 
 export type DiveFx = { kind: "hook"; fish: LiveFish } | { kind: "turn" } | { kind: "fightWon"; fish: LiveFish } | { kind: "snap"; fish: LiveFish } | { kind: "surface" }
   | { kind: "surprise"; surprise: SurpriseKind } | { kind: "stolen"; fish: LiveFish } | { kind: "sharkGone" }
-  | { kind: "bottle" } | { kind: "chest"; coins: number } | { kind: "whirlpool"; extra: number } | { kind: "bonk" };
+  | { kind: "bottle" } | { kind: "chest"; coins: number } | { kind: "whirlpool"; extra: number } | { kind: "bonk" } | { kind: "vent"; fish: LiveFish | null; x: number; y: number };
 
 export interface DiveInput {
   /** absolute target x for pointer control (world units), or null */
@@ -191,7 +200,7 @@ export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind
   const d: Dive = {
     zone, phase: "descend", resume: "descend", hookX: COLUMN / 2, hookY: 0, bottom,
     capacity: capacity(ctx.upgrades), fish, hooked: [], fight: null, t: 0, escaped: null, fx: [],
-    surprise: null, bonusCoins: 0, mapPieces: 0, slabs: [], hole: null, treasure: false, currents: [],
+    surprise: null, bonusCoins: 0, mapPieces: 0, slabs: [], hole: null, treasure: false, currents: [], vents: [], ventCool: 0,
   };
   if (z.currents) {
     for (let y = 220; y < bottom - 40; y += 230 + ctx.rng() * 160) {
@@ -201,6 +210,14 @@ export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind
     for (const f of d.fish) {
       const c = d.currents.find((q) => f.y >= q.y && f.y <= q.y + q.h);
       if (c) { f.dir = c.v > 0 ? 1 : -1; f.speed = Math.abs(c.v) * 0.9 + f.speed * 0.3; }
+    }
+  }
+  if (z.vents) {
+    // a vent every 200-330 units, never two in a row on the same side, each with its own rhythm
+    let side = ctx.rng() < 0.5 ? 0 : 1;
+    for (let y = 200; y < bottom - 60; y += 200 + ctx.rng() * 130) {
+      side = 1 - side;
+      d.vents.push({ x: COLUMN * (side ? 0.58 + ctx.rng() * 0.3 : 0.12 + ctx.rng() * 0.3), y, h: 130 + ctx.rng() * 70, period: 2.4 + ctx.rng() * 1.4, phase: ctx.rng() * 4 });
     }
   }
   if (z.ice) {
@@ -469,6 +486,18 @@ export function stepDive(d: Dive, dt: number, input: DiveInput, ctx: DiveContext
     const topY = sl.y - 9, botY = sl.y + sl.h + 9;
     if (d.phase === "descend" && prevY <= topY && d.hookY > topY) { if (prevY < topY - 0.5) d.fx.push({ kind: "bonk" }); d.hookY = topY; }
     if (d.phase === "ascend" && prevY >= botY && d.hookY < botY) { if (prevY > botY + 0.5) d.fx.push({ kind: "bonk" }); d.hookY = botY; }
+  }
+  // hot vents: an eruption blasts the hook up and knocks the last fish off the line
+  if (d.ventCool > 0) d.ventCool -= dt;
+  else for (const v of d.vents) {
+    if (Math.abs(d.hookX - v.x) > 26 || d.hookY < v.y || d.hookY > v.y + v.h) continue;
+    if (ventCycle(v, d.t) < VENT_ERUPT) continue;
+    const lost = d.hooked.pop() ?? null;
+    if (lost) { d.fish = d.fish.filter((x) => x !== lost); d.escaped = lost; }
+    d.fx.push({ kind: "vent", fish: lost, x: d.hookX, y: d.hookY });
+    d.hookY = Math.max(16, v.y - 30);
+    d.ventCool = 0.9;
+    break;
   }
   if (d.phase === "ascend") {
     // under the ice sheet you can only surface through the hole

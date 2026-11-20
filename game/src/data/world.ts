@@ -5,8 +5,9 @@ export const ZONES: Record<ZoneId, ZoneDef> = {
   ocean: { id: "ocean", floor: 3650, price: 1200, after: "lake", water: ["#3aa7e8", "#14558f", "#060f2b"] },
   ice: { id: "ice", floor: 2800, price: 6000, water: ["#6fd3ee", "#1f7aa6", "#082238"], ice: true, after: "ocean" },
   reef: { id: "reef", floor: 3200, price: 6000, water: ["#5fe0ea", "#1a86b5", "#0a2a52"], currents: true, after: "ocean" },
+  volcano: { id: "volcano", floor: 4200, price: 18000, water: ["#ff9a5a", "#7a2a3a", "#1a0612"], vents: true, after: "ocean" },
 };
-export const ZONE_ORDER: ZoneId[] = ["lake", "ocean", "ice", "reef"];
+export const ZONE_ORDER: ZoneId[] = ["lake", "ocean", "ice", "reef", "volcano"];
 
 /** spawn weight per rarity (before luck and events) */
 export const RARITY_WEIGHT: Record<Rarity, number> = { common: 70, rare: 12, epic: 5, legendary: 3.2, secret: 2.5 };
