@@ -19,7 +19,7 @@ export const propNames = (z: ZoneId) => PROPS[z];
 export const BG_WATERLINE: Record<ZoneId, number> = { lake: 0.245, ocean: 0.228, ice: 0.305, reef: 0.245 };
 
 const NAMES = [
-  ...FISH.map((f) => f.id), "kid_idle", "kid_cast", "kid_reel", "kid_cheer", "hat_cap", "hat_rain", "hat_frog", "hat_sailor", "floor_lake", "floor_ocean", "floor_ice", "floor_reef", "bg_lake", "bg_ocean", "bg_ice", "bg_reef", "bg_aquarium",
+  ...FISH.map((f) => f.id), "kid_idle", "kid_cast", "kid_reel", "kid_cheer", "hat_cap", "hat_rain", "hat_frog", "hat_sailor", "npc_captain", "npc_chef", "npc_scientist", "npc_granny", "floor_lake", "floor_ocean", "floor_ice", "floor_reef", "bg_lake", "bg_ocean", "bg_ice", "bg_reef", "bg_aquarium",
   "pet_cat", "pet_dog", "pet_parrot", "pet_penguin", "hat_pirate", "hat_crown", "hat_beanie", "hat_straw",
   ...PROPS.lake, ...PROPS.ocean, ...PROPS.ice, ...PROPS.reef, "i_coin", "i_line", "i_hooks", "i_luck", "s_shark", "s_bottle", "s_chest", "s_gull", "b_worm", "b_shrimp", "b_firefly", "b_golden", "b_moon", "b_ice", "b_rainbow", "g_lantern", "g_sonar", "g_shop", "g_map",
 ];

@@ -1,4 +1,5 @@
 import { newDirector, type DirectorState } from "./director.ts";
+import type { Order, Tank } from "./tank.ts";
 import type { Lang, MutationId, UpgradeLevels, ZoneId } from "./types.ts";
 
 export interface AlbumEntry {
@@ -34,6 +35,8 @@ export interface SaveData {
   mission: number;
   stats: { catches: number; fightsWon: number };
   seenGlimpse: boolean;
+  tank: Tank;
+  orders: Order[];
 }
 
 export const newSave = (): SaveData => ({
@@ -42,6 +45,7 @@ export const newSave = (): SaveData => ({
   director: newDirector(), mapPieces: 0, bait: null, gear: { lantern: 0, sonar: 0 },
   owned: [], wear: { pet: null, hat: null }, trial: null, aquariumAt: 0,
   mission: 0, stats: { catches: 0, fightsWon: 0 }, seenGlimpse: false,
+  tank: {}, orders: [],
 });
 
 /** parse anything (old, partial or broken) into a valid save */

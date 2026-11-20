@@ -54,12 +54,22 @@ export const AQUARIUM_SLOTS = 6;
 export const AQUARIUM_RATE = 0.012;
 export const AQUARIUM_CAP_MIN = 8 * 60;
 
-export function aquariumFish(album: Record<string, { best: number }>): string[] {
-  return Object.entries(album).sort((a, b) => b[1].best - a[1].best).slice(0, AQUARIUM_SLOTS).map(([id]) => id);
+import { STAR_POWER, bestStar, tankPower, type Tank } from "../core/tank.ts";
+export { STAR_POWER };
+
+/** the aquarium shows the strongest fish in your tank (kept and merged) */
+export function aquariumFish(tank: Tank): { id: string; star: number }[] {
+  return Object.entries(tank).filter(([, e]) => bestStar(e) > 0)
+    .sort((a, b) => tankPower(b[0], b[1]) - tankPower(a[0], a[1])).slice(0, AQUARIUM_SLOTS)
+    .map(([id, e]) => ({ id, star: bestStar(e) }));
 }
 
-export function aquariumEarned(album: Record<string, { best: number }>, since: number, now: number): number {
+/** coins per minute from the tank's top fish */
+export function aquariumRate(tank: Tank): number {
+  return aquariumFish(tank).reduce((a, f) => a + tankPower(f.id, tank[f.id]), 0) * AQUARIUM_RATE;
+}
+
+export function aquariumEarned(tank: Tank, since: number, now: number): number {
   const minutes = Math.min(AQUARIUM_CAP_MIN, Math.max(0, (now - since) / 60_000));
-  const rate = aquariumFish(album).reduce((a, id) => a + album[id].best, 0) * AQUARIUM_RATE;
-  return Math.floor(rate * minutes);
+  return Math.floor(aquariumRate(tank) * minutes);
 }

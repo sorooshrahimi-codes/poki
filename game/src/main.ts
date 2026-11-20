@@ -4,7 +4,8 @@ import { UPGRADES, UPGRADE_ORDER, capacity, maxDepth, upgradeCost } from "./core
 import { currentEvent, isNight, nextWorldEvent, personalEventDue, type ActiveEvent } from "./core/events.ts";
 import type { Catch, UpgradeId, ZoneId } from "./core/types.ts";
 import { FISH, FISH_BY_ID } from "./data/fish.ts";
-import { COSMETICS, TRY_DIVES, aquariumEarned, aquariumFish, milestoneMet, type CosmeticDef } from "./data/cosmetics.ts";
+import { COSMETICS, TRY_DIVES, aquariumEarned, aquariumFish, aquariumRate, milestoneMet, type CosmeticDef } from "./data/cosmetics.ts";
+import { MERGE_COUNT, ORDER_SLOTS, canFill, fill, keep, matching, merge, newOrder, tankPower, type Order } from "./core/tank.ts";
 import { MISSIONS } from "./data/missions.ts";
 import { BAIT_BY_ID, GEAR, lanternRadius, shopOffers, sonarRange, type BaitDef } from "./data/gear.ts";
 import { RARITY_COLOR, RARITY_ORDER, ZONES, ZONE_ORDER } from "./data/world.ts";
@@ -75,7 +76,7 @@ function readInput() {
   input.hold = pointerDown || keys.has(" ") || keys.has("arrowup") || keys.has("w");
 }
 
-const anyPanelOpen = () => ["album", "pause", "shop", "map", "wardrobe", "aquarium"].some((id) => !$(id).classList.contains("hidden"));
+const anyPanelOpen = () => ["album", "pause", "shop", "map", "wardrobe", "aquarium", "orders"].some((id) => !$(id).classList.contains("hidden"));
 
 // ------------------------------------------------------------------ dive flow
 async function cast() {
@@ -191,8 +192,8 @@ async function collect(double: boolean) {
     if (!ok) return;
   }
   let total = 0;
-  for (const c of pending) {
-    total += c.value;
+  for (const [i, c] of pending.entries()) {
+    if (keepSet.has(i)) keep(save.tank, c.fish); else total += c.value;
     const e = (save.album[c.fish] ??= { count: 0, muts: [], best: 0 });
     e.count++;
     e.best = Math.max(e.best, c.value);
@@ -202,6 +203,8 @@ async function collect(double: boolean) {
   }
   total += pendingBonus;
   pendingBonus = 0;
+  if (keepSet.size) toast(`📥 ${keepSet.size} → 🐠`, 1600);
+  keepSet.clear();
   if (double) total *= 2;
   save.coins += total;
   setTimeout(checkMission, 500);
@@ -245,8 +248,19 @@ function fishThumb(id: string, mut: Catch["mut"], w: number, h: number, silhouet
   return cv;
 }
 
+/** indices of pending catches the player chose to keep in the tank */
+const keepSet = new Set<number>();
+function updateRevealTotal() {
+  const sold = pending.reduce((a, c, i) => a + (keepSet.has(i) ? 0 : c.value), 0);
+  $("totalN").textContent = String(sold + pendingBonus);
+  $("keepN").textContent = keepSet.size ? `📥 ${keepSet.size}` : "";
+}
+
 function showReveal(list: Catch[]) {
   if (scene.mode !== "reveal") return;
+  keepSet.clear();
+  $("keepHint").textContent = t("tank.tap");
+  $("keepN").textContent = "";
   const box = $("cards");
   box.innerHTML = "";
   const order = [...list].sort((a, b) => RARITY_ORDER.indexOf(FISH_BY_ID[a.fish].rarity) - RARITY_ORDER.indexOf(FISH_BY_ID[b.fish].rarity));
@@ -261,6 +275,8 @@ function showReveal(list: Catch[]) {
     bestInReveal.set(c.fish, Math.max(bestInReveal.get(c.fish) ?? 0, c.kg ?? 0));
     shown.add(c.fish);
     const card = document.createElement("div");
+    const idx = list.indexOf(c);
+    const wanted = save.orders.some((o) => o.need.kind === "fish" ? o.need.fish === c.fish : FISH_BY_ID[c.fish].rarity === o.need.rarity && FISH_BY_ID[c.fish].zone === o.need.zone);
     card.className = "card" + (RARITY_ORDER.indexOf(def.rarity) >= 2 || c.mut ? " big" : "");
     card.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
     card.style.animationDelay = `${i * 0.18}s`;
@@ -268,6 +284,16 @@ function showReveal(list: Catch[]) {
     card.insertAdjacentHTML("beforeend", `<div class="cn">${fishName(def)}</div><div class="cr">${tRarity(def.rarity)}</div><div class="ck">⚖️ ${fmtKg(c.kg)}</div><div class="cv">🪙 ${c.value}</div>` +
       (c.mut ? `<div class="cm">${MUT_ICON[c.mut]}</div>` : "") + (isNew ? `<div class="newb">${t("new")}</div>` : "") + (isRecord ? `<div class="newb rec">🏆 ${t("record")}</div>` : ""));
     if (isRecord) setTimeout(() => sfx.newFish(), i * 180 + 120);
+    if (wanted && !def.junk) card.insertAdjacentHTML("beforeend", `<div class="wantb">📋</div>`);
+    if (!def.junk) {
+      card.classList.add("keepable");
+      card.onclick = () => {
+        if (keepSet.has(idx)) keepSet.delete(idx); else keepSet.add(idx);
+        card.classList.toggle("kept", keepSet.has(idx));
+        sfx.tap();
+        updateRevealTotal();
+      };
+    }
     box.appendChild(card);
     setTimeout(() => { sfx.reveal(def.rarity); if (isNew) sfx.newFish(); }, i * 180);
     total += c.value;
@@ -486,22 +512,61 @@ function renderWardrobe() {
   }
 }
 
-// ------------------------------------------------------------------ aquarium
+// ------------------------------------------------------------------ tank + aquarium (keep & merge)
 let aquaRaf = 0;
-function openAquarium(welcome: boolean) {
+const STARS = ["", "★", "★★", "★★★"];
+
+function renderTankList() {
+  const box = $("tankList");
+  box.innerHTML = "";
+  const entries = Object.entries(save.tank).filter(([, e]) => e[0] + e[1] + e[2] > 0)
+    .sort((a, b) => tankPower(b[0], b[1]) - tankPower(a[0], a[1]));
+  if (!entries.length) { box.innerHTML = `<div class="tankEmpty">${t("tank.empty")}</div>`; return; }
+  for (const [id, e] of entries) {
+    const row = document.createElement("div");
+    row.className = "trow";
+    row.appendChild(fishThumb(id, null, 54, 32));
+    const counts = [0, 1, 2].filter((i) => e[i] > 0).map((i) => `<span class="st s${i + 1}">${STARS[i + 1]}×${e[i]}</span>`).join(" ");
+    row.insertAdjacentHTML("beforeend", `<div class="tn"><b>${fishName(FISH_BY_ID[id])}</b><br>${counts}</div>`);
+    for (const star of [1, 2] as const) {
+      if (e[star - 1] >= MERGE_COUNT) {
+        const mb = document.createElement("button");
+        mb.className = "btn big gold mergeb";
+        mb.textContent = `3${STARS[star]} → ${STARS[star + 1]}`;
+        mb.onclick = () => {
+          const got = merge(save.tank, id, star);
+          if (!got) return;
+          sfx.reveal(got === 3 ? "legendary" : "epic");
+          toast(`✨ ${fishName(FISH_BY_ID[id])} ${STARS[got]}!`, 2000);
+          writeSave(save); renderTankList(); openAquarium(false, true);
+        };
+        row.appendChild(mb);
+      } else if (e[star - 1] > 0 && star === 1) {
+        row.insertAdjacentHTML("beforeend", `<span class="mprog">${e[0]}/${MERGE_COUNT} → ★★</span>`);
+      }
+    }
+    box.appendChild(row);
+  }
+}
+
+function openAquarium(welcome: boolean, keepOpen = false) {
   const now = Date.now();
   if (!save.aquariumAt) save.aquariumAt = now;
-  const earned = aquariumEarned(save.album, save.aquariumAt, now);
-  $("aquaEarn").textContent = `🪙 +${earned.toLocaleString()}`;
+  const earned = aquariumEarned(save.tank, save.aquariumAt, now);
+  const perHour = Math.round(aquariumRate(save.tank) * 60);
+  $("aquaEarn").innerHTML = `🪙 +${earned.toLocaleString()} <small>(${perHour.toLocaleString()}/h)</small>`;
   $("aquaCollect").textContent = t("collect");
   $<HTMLButtonElement>("aquaCollect").disabled = earned <= 0;
   $("aquaDouble").classList.toggle("hidden", earned < 50);
   $("aquaTitle").textContent = welcome ? "🐠 💤 → 🪙" : "🐠";
+  $("aquaHint").textContent = t("tank.hint");
+  renderTankList();
   $("aquarium").classList.remove("hidden");
+  if (keepOpen && aquaRaf) return;
   const cv = $<HTMLCanvasElement>("aquaCanvas");
   const ctx = cv.getContext("2d")!;
-  const ids = aquariumFish(save.album);
-  const swimmers = ids.map((id, i) => ({ id, x: 40 + ((i * 97) % 300), y: 50 + ((i * 53) % 150), dir: i % 2 ? 1 : -1, sp: 18 + (i % 3) * 8 }));
+  const show = aquariumFish(save.tank);
+  const swimmers = show.map((f, i) => ({ ...f, x: 40 + ((i * 97) % 300), y: 50 + ((i * 53) % 150), dir: i % 2 ? 1 : -1, sp: 18 + (i % 3) * 8 }));
   let last = performance.now();
   cancelAnimationFrame(aquaRaf);
   const bg = img("bg_aquarium");
@@ -514,24 +579,94 @@ function openAquarium(welcome: boolean) {
       if (f.x < 30) f.dir = 1; if (f.x > cv.width - 30) f.dir = -1;
       const sp = img(f.id);
       if (!sp) continue;
-      const w = Math.min(90, 40 + FISH_BY_ID[f.id].size * 0.6), h = (w * sp.height) / sp.width;
-      ctx.save(); ctx.translate(f.x, f.y + Math.sin(tm / 600 + f.x * 0.02) * 5); ctx.scale(f.dir, 1);
+      // merged fish are bigger and shine
+      const w = Math.min(110, (40 + FISH_BY_ID[f.id].size * 0.6) * (1 + (f.star - 1) * 0.25)), h = (w * sp.height) / sp.width;
+      const y = f.y + Math.sin(tm / 600 + f.x * 0.02) * 5;
+      if (f.star > 1) {
+        const g = ctx.createRadialGradient(f.x, y, 0, f.x, y, w * 0.7);
+        g.addColorStop(0, f.star === 3 ? "rgba(255,210,80,0.55)" : "rgba(160,220,255,0.45)"); g.addColorStop(1, "rgba(0,0,0,0)");
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(f.x, y, w * 0.7, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.save(); ctx.translate(f.x, y); ctx.scale(f.dir, 1);
       ctx.drawImage(sp, -w / 2, -h / 2, w, h); ctx.restore();
+      if (f.star > 1) { ctx.font = "700 13px Fredoka, sans-serif"; ctx.fillStyle = "#ffe066"; ctx.textAlign = "center"; ctx.fillText(STARS[f.star], f.x, y - h / 2 - 2); }
     }
-    if (!$("aquarium").classList.contains("hidden")) aquaRaf = requestAnimationFrame(step);
+    if (!$("aquarium").classList.contains("hidden")) aquaRaf = requestAnimationFrame(step); else aquaRaf = 0;
   };
   aquaRaf = requestAnimationFrame(step);
 }
 
 async function collectAquarium(double: boolean) {
   const now = Date.now();
-  let earned = aquariumEarned(save.album, save.aquariumAt || now, now);
+  let earned = aquariumEarned(save.tank, save.aquariumAt || now, now);
   if (earned <= 0) return;
   if (double) { busy = true; const ok = await rewardedBreak(); busy = false; if (!ok) return; earned *= 2; }
   save.coins += earned; save.aquariumAt = now;
   for (let i = 0; i < 8; i++) setTimeout(() => sfx.coin(i), i * 50);
   writeSave(save); updateUi();
-  $("aquarium").classList.add("hidden");
+  openAquarium(false, true);
+}
+
+// ------------------------------------------------------------------ orders board
+const NPCS = ["npc_captain", "npc_chef", "npc_scientist", "npc_granny"];
+function refillOrders() {
+  const known = new Set(Object.keys(save.album));
+  while (save.orders.length < ORDER_SLOTS) save.orders.push(newOrder(save.zones, known, Math.random, NPCS.length));
+}
+const fillableOrders = () => save.orders.filter((o) => canFill(save.tank, o)).length;
+
+function needText(o: Order): string {
+  if (o.need.kind === "fish") return `${o.need.count} × ${save.album[o.need.fish] ? fishName(FISH_BY_ID[o.need.fish]) : "???"}`;
+  return `${o.need.count} × ${tRarity(o.need.rarity)} · ${tZone(o.need.zone)}`;
+}
+const haveCount = (o: Order) => matching(save.tank, o.need).reduce((a, id) => a + save.tank[id][0], 0);
+
+function renderOrders() {
+  refillOrders();
+  $("ordersNote").textContent = t("orders.note");
+  const box = $("orderList");
+  box.innerHTML = "";
+  for (const o of save.orders) {
+    const ok = canFill(save.tank, o);
+    const el = document.createElement("div");
+    el.className = "order" + (ok ? " ready" : "");
+    el.innerHTML = `<img class="npc" src="${artUrl(NPCS[o.npc])}" alt="">`;
+    const mid = document.createElement("div");
+    mid.className = "omid";
+    if (o.need.kind === "fish") mid.appendChild(fishThumb(o.need.fish, null, 58, 34, !save.album[o.need.fish]));
+    else mid.insertAdjacentHTML("beforeend", `<div class="rbadge" style="--rc:${RARITY_COLOR[o.need.rarity]}">${tRarity(o.need.rarity)}</div>`);
+    mid.insertAdjacentHTML("beforeend", `<div class="ot">${needText(o)}</div><div class="oh">📥 ${Math.min(haveCount(o), o.need.count)}/${o.need.count}</div>`);
+    el.appendChild(mid);
+    const right = document.createElement("div");
+    right.className = "oright";
+    right.insertAdjacentHTML("beforeend", `<div class="orew">🪙 ${o.coins.toLocaleString()}${o.bait ? `<br><img src="${artUrl(BAIT_BY_ID[o.bait.id].art)}" alt="">×${o.bait.uses}` : ""}</div>`);
+    const btn = document.createElement("button");
+    btn.className = "btn big " + (ok ? "gold" : "plain") + " obtn";
+    btn.textContent = ok ? t("orders.deliver") : "🎣";
+    btn.disabled = !ok;
+    btn.onclick = () => {
+      if (!fill(save.tank, o)) return;
+      save.coins += o.coins;
+      if (o.bait) save.bait = { id: o.bait.id, uses: (save.bait?.id === o.bait.id ? save.bait.uses : 0) + o.bait.uses };
+      save.orders = save.orders.filter((x) => x !== o);
+      sfx.reveal("epic"); for (let i = 0; i < 6; i++) setTimeout(() => sfx.coin(i), 200 + i * 60);
+      toast(`📋 ✓ 🪙+${o.coins.toLocaleString()}`, 2000);
+      writeSave(save); renderOrders(); updateUi();
+    };
+    right.appendChild(btn);
+    const rr = document.createElement("button");
+    rr.className = "btn big ad obtn small";
+    rr.textContent = "🎬 🔄";
+    rr.onclick = async () => {
+      busy = true; const okAd = await rewardedBreak(); busy = false;
+      if (!okAd) return;
+      save.orders = save.orders.filter((x) => x !== o);
+      writeSave(save); renderOrders();
+    };
+    right.appendChild(rr);
+    el.appendChild(right);
+    box.appendChild(el);
+  }
 }
 
 function togglePause(force?: boolean) {
@@ -645,7 +780,10 @@ function updateUi() {
   $("doubleLbl").textContent = t("double");
   const dock = scene.mode === "dock";
   renderMission();
-  $("aquaBtn").classList.toggle("hidden", Object.keys(save.album).length < 3);
+  refillOrders();
+  const fo = fillableOrders();
+  $("ordersBadge").textContent = fo ? String(fo) : "";
+  $("ordersBadge").classList.toggle("hidden", !fo);
   const mb = $<HTMLButtonElement>("mapBtn");
   mb.classList.toggle("hidden", save.mapPieces < 1);
   mb.disabled = save.mapPieces < 3;
@@ -811,6 +949,8 @@ $("mapBtn").onclick = () => {
 $("wardBtn").onclick = () => { if (scene.mode === "dock") { renderWardrobe(); $("wardrobe").classList.remove("hidden"); } };
 $("wardClose").onclick = () => $("wardrobe").classList.add("hidden");
 $("aquaBtn").onclick = () => { if (scene.mode === "dock") openAquarium(false); };
+$("ordersBtn").onclick = () => { if (scene.mode === "dock") { renderOrders(); $("orders").classList.remove("hidden"); } };
+$("ordersClose").onclick = () => $("orders").classList.add("hidden");
 $("aquaClose").onclick = () => $("aquarium").classList.add("hidden");
 $("aquaCollect").onclick = () => void collectAquarium(false);
 $("aquaDouble").onclick = () => void collectAquarium(true);
@@ -838,7 +978,7 @@ Promise.all([
 ]).then(() => {
   loadingFinished();
   $("loading").classList.add("gone");
-  if (save.aquariumAt && aquariumEarned(save.album, save.aquariumAt, Date.now()) >= 25) openAquarium(true);
+  if (save.aquariumAt && aquariumEarned(save.tank, save.aquariumAt, Date.now()) >= 25) openAquarium(true);
   else if (!save.aquariumAt) save.aquariumAt = Date.now();
   $("coinIco").innerHTML = `<img src="${artUrl("i_coin")}" alt="">`;
   updateUi();

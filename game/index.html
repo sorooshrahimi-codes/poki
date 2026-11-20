@@ -27,12 +27,14 @@
       </div>
       <div id="dock">
         <div id="mission" class="hidden"></div>
-        <div id="dockRow"><div id="zones"></div><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb round2" id="aquaBtn">🐠</button><button class="btn zone shopb round2" id="wardBtn">🎩</button><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
+        <div id="dockRow"><div id="zones"></div><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb round2" id="aquaBtn">🐠</button><button class="btn zone shopb round2" id="ordersBtn">📋<span id="ordersBadge" class="hidden"></span></button><button class="btn zone shopb round2" id="wardBtn">🎩</button><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
         <div id="upgrades"></div>
       </div>
       <div id="reveal" class="panel hidden">
         <div id="cards"></div>
+        <div id="keepHint"></div>
         <div id="bonusN"></div>
+        <div id="keepN"></div>
         <div id="total"><span class="ico">🪙</span><b id="totalN">0</b></div>
         <div class="row">
           <button class="btn big ad" id="doubleBtn">🎬 <span id="doubleLbl">x2</span></button>
@@ -57,8 +59,16 @@
         <div class="title" id="aquaTitle">🐠</div>
         <canvas id="aquaCanvas" width="360" height="240"></canvas>
         <div id="aquaEarn"></div>
+        <div id="aquaHint"></div>
+        <div id="tankList"></div>
         <div class="row"><button class="btn big ad" id="aquaDouble">🎬 x2</button><button class="btn big ok" id="aquaCollect"></button></div>
         <button class="btn big plain" id="aquaClose">✕</button>
+      </div>
+      <div id="orders" class="panel hidden">
+        <div class="title">📋</div>
+        <div id="ordersNote"></div>
+        <div id="orderList"></div>
+        <button class="btn big ok" id="ordersClose">✕</button>
       </div>
       <div id="map" class="panel hidden">
         <div class="title" id="mapTitle">🗺️</div>

@@ -202,3 +202,41 @@ canvas#game { position: fixed; inset: 0; display: block; }
 #myGear .gi small { color: #cfe6ff; }
 #myGear .gi.dim { opacity: 0.6; }
 #wardNote { font-size: 14px; color: #cfe6ff; text-align: center; }
+
+/* ---------------------------------------------------------------- keep & merge, orders */
+.card.keepable { cursor: pointer; }
+.card.kept { outline: 4px solid #7be495; outline-offset: 2px; }
+.card.kept::after { content: "📥"; position: absolute; bottom: -10px; left: -8px; font-size: 22px; }
+.card.kept .cv { text-decoration: line-through; opacity: 0.6; }
+.card .wantb { position: absolute; top: -10px; left: 50%; translate: -50% 0; font-size: 18px; }
+#keepHint { font-size: 14px; color: #cfe6ff; }
+#keepN { font-size: 18px; color: #7be495; font-weight: 700; }
+#keepN:empty { display: none; }
+#aquarium { overflow-y: auto; width: min(94vw, 520px); }
+#aquaEarn small { font-size: 15px; color: #cfe6ff; }
+#aquaHint, #ordersNote { font-size: 13px; color: #cfe6ff; text-align: center; }
+#tankList { width: 100%; display: flex; flex-direction: column; gap: 6px; max-height: 30vh; overflow-y: auto; }
+.trow { display: flex; gap: 8px; align-items: center; background: rgba(13,30,69,.55); border-radius: 14px; padding: 4px 8px; }
+.trow canvas { width: 54px; height: 32px; }
+.trow .tn { flex: 1; font-size: 13px; }
+.trow .st { color: #ffe066; font-size: 12px; }
+.trow .mprog { font-size: 12px; color: #bfe3ff; }
+.mergeb { min-width: 0; min-height: 36px; font-size: 14px; padding: 4px 10px; animation: pulse 1.2s infinite; }
+.tankEmpty { font-size: 14px; color: #cfe6ff; text-align: center; padding: 10px; }
+#ordersBtn { position: relative; background: linear-gradient(#ffd24a, #ff9a1f); }
+#ordersBadge { position: absolute; top: -8px; right: -8px; background: #ff2d6f; border: 2px solid #0d1e45; border-radius: 99px; font-size: 12px; padding: 0 6px; }
+#orders { width: min(94vw, 520px); overflow-y: auto; }
+#orderList { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.order { display: flex; align-items: center; gap: 8px; background: rgba(13,30,69,.6); border: 3px solid #0d1e45; border-radius: 18px; padding: 6px 8px; }
+.order.ready { border-color: #ffe066; box-shadow: 0 0 14px rgba(255,224,102,.5); }
+.order .npc { height: 64px; }
+.omid { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.omid canvas { width: 58px; height: 34px; }
+.omid .ot { font-size: 14px; font-weight: 700; text-align: center; }
+.omid .oh { font-size: 13px; color: #7be495; }
+.rbadge { border: 3px solid var(--rc); color: var(--rc); border-radius: 10px; padding: 2px 8px; font-weight: 700; font-size: 13px; }
+.oright { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.orew { font-size: 15px; font-weight: 700; color: #ffe066; text-align: center; }
+.orew img { height: 22px; vertical-align: middle; }
+.obtn { min-width: 0; min-height: 36px; font-size: 14px; padding: 4px 10px; }
+.obtn.small { min-height: 30px; font-size: 12px; }

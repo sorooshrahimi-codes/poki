@@ -126,6 +126,11 @@ JOBS.update({
      "bottom-left a green frog-shaped beanie with eyes, bottom-right a tiny sailor captain hat with an anchor. " + STYLE, "1:1", True),
 })
 
+JOBS.update({
+  "npcs": (SHEET + "Cute friendly character portraits (head and shoulders, facing the viewer), each a single character: top-left an old bearded sea captain with a pipe-free smile and captain hat, "
+     "top-right a cheerful chef cat wearing a white chef hat, bottom-left a little girl marine biologist with glasses and a clipboard, bottom-right a jolly pirate grandma with an eye patch and a parrot feather. " + STYLE, "1:1", True),
+})
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]
