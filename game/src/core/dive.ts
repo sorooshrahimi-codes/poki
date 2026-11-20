@@ -92,7 +92,7 @@ export interface Surprise {
 export const pufferInflated = (t: number, ph: number) => Math.sin(t * 2.2 + ph) > 0.2;
 export const CRAB_TAPS = 6, CRAB_TIME = 3.4;
 /** follow fights: half-width of the "on the fish" window, in fight-zone units */
-export const FOLLOW_WIN = 1.05;
+export const FOLLOW_WIN = 0.72;
 
 export type DivePhase = "descend" | "fight" | "snapped" | "ascend" | "done";
 
@@ -484,14 +484,14 @@ function stepFight(d: Dive, dt: number, input: DiveInput) {
   } else if (fg.kind === "follow") {
     // the fish swims left and right; keep your marker (steer like the hook) under it.
     // Gentle on purpose: smooth swings a finger can follow, a wide window, and a slow drain when you slip
-    fg.fishPos = 0.5 + 0.28 * Math.sin(tt * 1.1 * speed + fg.seed) + 0.09 * Math.sin(tt * 2.5 * speed + fg.seed * 3);
+    fg.fishPos = 0.5 + 0.3 * Math.sin(tt * 1.4 * speed + fg.seed) + 0.1 * Math.sin(tt * 3.2 * speed + fg.seed * 3);
     let target = fg.marker;
     if (input.targetX !== null) target = Math.max(0, Math.min(1, input.targetX / COLUMN));
     if (input.axis) target = fg.marker + input.axis * 1.6 * dt;
     fg.marker += Math.max(-2.6 * dt, Math.min(2.6 * dt, target - fg.marker));
     fg.marker = Math.max(0, Math.min(1, fg.marker));
     const off = Math.abs(fg.marker - fg.fishPos), win = fg.zoneHalf * FOLLOW_WIN;
-    if (ready) fg.progress += (off <= win ? 0.27 : off <= win * 2 ? -0.1 : -0.22) * dt;
+    if (ready) fg.progress += (off <= win ? 0.24 : off <= win * 1.8 ? -0.17 : -0.3) * dt;
   } else {
     // timing: a ring closes on the fish; tap when it meets the gold circle
     const period = 1.0 / speed;

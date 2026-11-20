@@ -458,3 +458,9 @@ body:has(.panel:not(.hidden):not(#reveal)) #guide { display: none; }
 }
 .crow2 .cbtns .btn.big { min-width: 0; padding: 4px 4px; } .crow2 .cbtns { gap: 5px; } #crewList { width: min(84vw, 460px); }
 body:has(#reveal:not(.hidden)) #guide { bottom: auto; top: 92px; }
+/* the dock row never runs off the screen: when it does not fit it wraps onto a second, centred line */
+@media (orientation: portrait) and (max-width: 520px) {
+  #dockRow { flex-wrap: wrap; justify-content: center; max-width: 100%; padding: 0 4px; row-gap: 4px; }
+  #dock { left: 4px; right: 4px; }
+  #zones .zone { max-width: 118px; }
+}
