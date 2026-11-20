@@ -1,4 +1,4 @@
-import { COLUMN, ICE_HOLE, type Dive, type LiveFish } from "../core/dive.ts";
+import { COLUMN, FIGHT_GRACE, ICE_HOLE, type Dive, type LiveFish } from "../core/dive.ts";
 import type { ActiveEvent } from "../core/events.ts";
 import type { WeatherId } from "../core/weather.ts";
 import { sfx } from "../platform/audio.ts";
@@ -146,6 +146,9 @@ export class Renderer {
   }
   shakeIt(amount: number) { this.shake = Math.max(this.shake, amount); }
   flashIt(k = 1) { this.flash = Math.max(this.flash, k); }
+  private floats: { x: number; y: number; text: string; color: string; life: number; size: number }[] = [];
+  /** a reward or label that pops at a world point and floats up */
+  floatText(x: number, y: number, text: string, color: string, size = 1) { this.floats.push({ x, y, text, color, life: 0, size }); }
   /** quick camera punch-in on a world point (rare catch, boss landed) */
   punch(x: number, y: number, k = 0.12) { this.zoom = Math.max(this.zoom, k); this.zoomAt = { x, y }; }
 
@@ -234,6 +237,8 @@ export class Renderer {
     this.shake = Math.max(0, this.shake - dt * 30);
     this.flash = Math.max(0, this.flash - dt * 2.5);
     this.zoom = Math.max(0, this.zoom - dt * 0.35);
+    for (const f of this.floats) { f.life += dt; f.y -= 38 * dt; }
+    this.floats = this.floats.filter((f) => f.life < 1.3);
   }
 
   private weatherNow: WeatherId = "sunny";
@@ -282,6 +287,7 @@ export class Renderer {
     this.drawBoat(c, s);
     if (s.dive && s.mode === "dive") this.drawHook(c, s.dive, s.t, s.pose);
     this.drawParticles(c);
+    this.drawFloats(c);
     this.drawForeground(c, s, top, bottom, left, right);
     c.restore();
     this.drawDarkness(s);
@@ -467,6 +473,19 @@ export class Renderer {
       c.scale(a.dir, 1);
       c.drawImage(im, -w / 2, -h / 2, w, h);
       c.restore();
+    }
+    c.restore();
+  }
+
+  private drawFloats(c: Ctx) {
+    c.save();
+    c.textAlign = "center";
+    for (const f of this.floats) {
+      const pop = f.life < 0.15 ? 0.6 + (f.life / 0.15) * 0.6 : 1.2 - Math.min(0.2, (f.life - 0.15) * 0.5);
+      c.globalAlpha = Math.max(0, 1 - Math.max(0, f.life - 0.8) / 0.5);
+      c.font = `700 ${Math.round(15 * f.size * pop)}px Fredoka, system-ui, sans-serif`;
+      c.lineWidth = 4; c.strokeStyle = "#0d1e45"; c.lineJoin = "round";
+      c.strokeText(f.text, f.x, f.y); c.fillStyle = f.color; c.fillText(f.text, f.x, f.y);
     }
     c.restore();
   }
@@ -1023,38 +1042,89 @@ export class Renderer {
 
   private drawFight(d: Dive, t: number) {
     const c = this.ctx, v = this.view, fg = d.fight!;
-    const H = Math.min(v.h * 0.55, 380), W = 38;
-    const x = v.ox + COLUMN * v.scale - W - 18, y = (v.h - H) / 2;
-    const inZone = Math.abs(fg.marker - fg.zone) <= fg.zoneHalf;
+    const cx = v.ox + COLUMN * v.scale * (fg.kind === "hold" ? 0.42 : 0.5), cy = v.h * 0.45, R = Math.min(96, v.w * 0.2);
     c.save();
     c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     const vg = c.createRadialGradient(v.w / 2, v.h / 2, Math.min(v.w, v.h) * 0.2, v.w / 2, v.h / 2, Math.max(v.w, v.h) * 0.7);
     vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,20,0.55)");
     c.fillStyle = vg; c.fillRect(0, 0, v.w, v.h);
-    // meter: a chunky rounded tube
-    c.fillStyle = "#1b2b4a"; c.strokeStyle = "#0d1630"; c.lineWidth = 4;
-    roundRect(c, x - 5, y - 5, W + 10, H + 10, 18); c.fill(); c.stroke();
-    const zy = y + (1 - fg.zone - fg.zoneHalf) * H, zh = fg.zoneHalf * 2 * H;
-    const zg = c.createLinearGradient(x, 0, x + W, 0);
-    zg.addColorStop(0, inZone ? "#7dffa8" : "#4cd17a"); zg.addColorStop(1, inZone ? "#3fdc7c" : "#2fa45d");
-    c.fillStyle = zg; roundRect(c, x, zy, W, zh, 12); c.fill();
-    c.fillStyle = "rgba(255,255,255,0.35)"; roundRect(c, x + 5, zy + 4, 7, Math.max(0, zh - 8), 4); c.fill();
-    const my = y + (1 - fg.marker) * H;
-    c.fillStyle = "#ffffff"; c.strokeStyle = "#0d1630"; c.lineWidth = 3;
-    roundRect(c, x - 9, my - 6, W + 18, 12, 6); c.fill(); c.stroke();
-    // progress ring around the fighting fish
-    const cx = v.ox + COLUMN * v.scale * 0.42, cy = v.h * 0.45, R = Math.min(96, v.w * 0.2);
+    let good = false;
+    if (fg.kind === "hold") {
+      const H = Math.min(v.h * 0.55, 380), W = 38;
+      const x = v.ox + COLUMN * v.scale - W - 18, y = (v.h - H) / 2;
+      good = Math.abs(fg.marker - fg.zone) <= fg.zoneHalf;
+      c.fillStyle = "#1b2b4a"; c.strokeStyle = "#0d1630"; c.lineWidth = 4;
+      roundRect(c, x - 5, y - 5, W + 10, H + 10, 18); c.fill(); c.stroke();
+      const zy = y + (1 - fg.zone - fg.zoneHalf) * H, zh = fg.zoneHalf * 2 * H;
+      const zg = c.createLinearGradient(x, 0, x + W, 0);
+      zg.addColorStop(0, good ? "#7dffa8" : "#4cd17a"); zg.addColorStop(1, good ? "#3fdc7c" : "#2fa45d");
+      c.fillStyle = zg; roundRect(c, x, zy, W, zh, 12); c.fill();
+      const my = y + (1 - fg.marker) * H;
+      c.fillStyle = "#ffffff"; c.strokeStyle = "#0d1630"; c.lineWidth = 3;
+      roundRect(c, x - 9, my - 6, W + 18, 12, 6); c.fill(); c.stroke();
+    } else if (fg.kind === "follow") {
+      // a horizontal track under the fish: keep the net under the darting fish
+      const W = Math.min(v.w * 0.8, 420), H = 34, x = (v.w - W) / 2, y = cy + R + 34;
+      good = Math.abs(fg.marker - fg.fishPos) <= fg.zoneHalf * 0.65;
+      c.fillStyle = "#1b2b4a"; c.strokeStyle = "#0d1630"; c.lineWidth = 4;
+      roundRect(c, x - 5, y - 5, W + 10, H + 10, 18); c.fill(); c.stroke();
+      const zx = x + (fg.fishPos - fg.zoneHalf * 0.65) * W, zw = fg.zoneHalf * 1.3 * W;
+      c.fillStyle = good ? "#7dffa8" : "#4cd17a"; roundRect(c, zx, y, zw, H, 12); c.fill();
+      c.font = "22px system-ui"; c.textAlign = "center"; c.fillText("🐟", x + fg.fishPos * W, y + 25);
+      const mx = x + fg.marker * W;
+      c.fillStyle = "#ffffff"; c.strokeStyle = "#0d1630"; c.lineWidth = 3;
+      roundRect(c, mx - 6, y - 10, 12, H + 20, 6); c.fill(); c.stroke();
+    } else {
+      // timing: gold target circle and a white ring closing in
+      const target = R * 0.3 + 40, ringR = Math.max(4, fg.ring * R * 1.4 + 40);
+      good = Math.abs(fg.ring - 0.3) <= 0.06 + fg.zoneHalf * 0.12;
+      c.lineWidth = 10; c.strokeStyle = good ? "#7dffa8" : "#ffd84a";
+      c.beginPath(); c.arc(cx, cy, target, 0, Math.PI * 2); c.stroke();
+      if (fg.ring > -0.2) { c.lineWidth = 5; c.strokeStyle = "rgba(255,255,255,0.9)"; c.beginPath(); c.arc(cx, cy, ringR, 0, Math.PI * 2); c.stroke(); }
+      if (fg.flash) {
+        c.globalAlpha = Math.abs(fg.flash);
+        c.font = "700 34px Fredoka, sans-serif"; c.textAlign = "center"; c.lineWidth = 5; c.strokeStyle = "#0d1e45";
+        const txt = fg.flash > 0 ? "PERFECT!" : "MISS";
+        c.strokeText(txt, cx, cy - R - 20); c.fillStyle = fg.flash > 0 ? "#7dffa8" : "#ff6b7a"; c.fillText(txt, cx, cy - R - 20);
+        c.globalAlpha = 1;
+      }
+      // hit pips
+      for (let i = 0; i < fg.need; i++) {
+        c.fillStyle = i < fg.hits ? "#ffe066" : "rgba(255,255,255,0.25)";
+        c.beginPath(); c.arc(cx - (fg.need - 1) * 12 + i * 24, cy + R + 30, 8, 0, Math.PI * 2); c.fill();
+      }
+    }
+    // line health / catch progress ring
     c.lineCap = "round";
     c.lineWidth = 12; c.strokeStyle = "rgba(255,255,255,0.18)";
     c.beginPath(); c.arc(cx, cy, R, 0, Math.PI * 2); c.stroke();
+    const prog = fg.kind === "timing" ? fg.hits / fg.need : fg.progress;
     c.strokeStyle = RARITY_COLOR[fg.fish.def.rarity];
-    c.beginPath(); c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.001, fg.progress)); c.stroke();
-    c.translate(cx + Math.sin(t * 13) * (inZone ? 2 : 9), cy);
+    c.beginPath(); c.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0.001, prog)); c.stroke();
+    if (fg.kind === "timing") {
+      // line health hearts
+      const hearts = Math.max(0, Math.ceil(fg.progress / 0.34));
+      c.font = "20px system-ui"; c.textAlign = "center";
+      c.fillText("❤️".repeat(hearts) + "🤍".repeat(Math.max(0, 3 - hearts)), cx, cy - R - 50);
+    }
+    // the fish
+    c.save();
+    c.translate(cx + Math.sin(t * 13) * (good ? 2 : 9), cy);
     c.rotate(Math.sin(t * 6) * 0.25);
     const size = Math.min(R * 1.25, fg.fish.size * 1.5) / SPRITE_SCALE * 1.2;
     this.drawFishSprite(c, fg.fish.def, fg.fish.mut, size, t, true, 2.5, 1.8);
     c.restore();
+    // get-ready countdown
+    if (fg.t < FIGHT_GRACE) {
+      const n = Math.ceil(FIGHT_GRACE - fg.t), k = (FIGHT_GRACE - fg.t) % 1;
+      c.font = `700 ${Math.round(70 + k * 40)}px Fredoka, sans-serif`; c.textAlign = "center";
+      c.lineWidth = 8; c.strokeStyle = "#0d1e45"; c.globalAlpha = 0.5 + k * 0.5;
+      c.strokeText(String(n), cx, cy - R - 60); c.fillStyle = "#ffe066"; c.fillText(String(n), cx, cy - R - 60);
+      c.globalAlpha = 1;
+    }
+    c.restore();
   }
+
 }
 
 function hexToTriplet(h: string) { const n = parseInt(h.slice(1), 16); return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`; }

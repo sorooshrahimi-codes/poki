@@ -142,6 +142,24 @@ HATS = {"beanie": "a cozy blue knitted beanie with a white pom-pom", "rain": "a 
 for k, v in HATS.items():
     JOBS["kidhat_" + k] = (HATTED.replace("{hat}", v), "1:1", True, [BOAT_REF])
 
+JOBS.update({
+  "volcano_surface": ("Vertical game background for a fishing game, portrait composition: top 30% a dramatic but cute dusk sky with a friendly smoking volcano island glowing orange, warm pink clouds, "
+     "a calm dark-teal sea surface with steam wisps, below it a warm underwater volcanic world getting deeper and darker red-purple, glowing lava cracks and hot vents only at the far left and right edges, "
+     "the center open and uncluttered for gameplay, no fish, no boat, no characters, no text. " + STYLE, "2:3", False),
+  "volcano_floor": ("A wide horizontal game sprite strip on a fully transparent background: a volcanic seabed seen from the side, black rocks with glowing orange lava cracks, little bubbling vents, red sea plants; "
+     "the top edge irregular, everything above it transparent. No fish, no text. " + STYLE, "3:2", True),
+  "props_volcano": (SHEET + "Underwater volcanic decorations, each tall and vertical: top-left a black rock chimney vent puffing bubbles with glowing orange inside, top-right glowing red tube worms on a rock, "
+     "bottom-left a crystal geode rock with glowing purple crystals, bottom-right tall dark-red swaying sea plants with ember-like glowing tips. " + STYLE, "1:1", True),
+  "fish_volcano1": (SHEET + SIDE + "Top-left: a cute ember fish, orange-red with glowing coal-like spots. Top-right: a magma crab, black shell with glowing orange cracks, side-ish view. "
+     "Bottom-left: a lost rubber hot-water bottle, red (an object, not a creature). Bottom-right: a smiling obsidian pufferfish, glossy black with lava-orange spines. " + STYLE, "1:1", True),
+  "fish_volcano2": (SHEET + SIDE + "Top-left: a fiery salamander-fish with frilly orange gills. Top-right: a glowing lava jellyfish, translucent orange dome, flame-like tentacles. "
+     "Bottom-left: a sleek fire koi with flame-shaped fins. Bottom-right: a big friendly basalt grouper, dark grey with glowing magma veins. " + STYLE, "1:1", True),
+  "fish_phoenix": ("A single legendary boss creature game sprite on a fully transparent background, side view facing right, no text: 'Phoenix Fish', a majestic fish made of soft flames with wing-like fire fins, "
+     "golden-orange glow, proud kind eyes, sparkles. " + STYLE, "3:2", True),
+  "fish_magmadragon": ("A single secret mythical creature game sprite on a fully transparent background, side view facing right, no text: 'Magma Dragon', a cute baby sea dragon with obsidian scales and glowing "
+     "lava belly, tiny horns, happy smile, puffing a little smoke ring. " + STYLE, "3:2", True),
+})
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]

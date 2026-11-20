@@ -38,6 +38,7 @@ const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: nu
 function setPose(p: SceneState["pose"]) { if (scene.pose !== p) { scene.pose = p; scene.poseT = 0; } }
 /** slow motion: remaining real seconds and the time scale while it lasts */
 let slowmo = 0;
+let combo = 0, lastHookT = -9;
 
 const sessionStart = Date.now();
 let personalEventAt: number | null = null;
@@ -54,6 +55,7 @@ let pointerDown = false;
 canvas.addEventListener("pointerdown", (e) => {
   unlockAudio();
   pointerDown = true;
+  tapEdge = true;
   input.targetX = renderer.toWorldX(e.clientX);
   if (scene.mode === "dock") void cast();
 });
@@ -69,13 +71,17 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" || e.key === "p") { togglePause(); return; }
   if (e.repeat) return;
   keys.add(e.key.toLowerCase());
+  if (e.key === " " || e.key === "Enter" || e.key === "ArrowUp" || e.key === "w") tapEdge = true;
   if ((e.key === " " || e.key === "Enter") && scene.mode === "dock" && !anyPanelOpen()) void cast();
   if ((e.key === " " || e.key === "Enter") && scene.mode === "reveal" && !$("reveal").classList.contains("hidden")) void collect(false);
 });
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 window.addEventListener("blur", () => { keys.clear(); pointerDown = false; });
 
+let tapEdge = false;
 function readInput() {
+  input.tap = tapEdge;
+  tapEdge = false;
   input.axis = (keys.has("arrowright") || keys.has("d") ? 1 : 0) - (keys.has("arrowleft") || keys.has("a") ? 1 : 0);
   if (input.axis) input.targetX = null;
   input.hold = pointerDown || keys.has(" ") || keys.has("arrowup") || keys.has("w");
@@ -123,20 +129,40 @@ function handleFx(d: Dive) {
   for (const fx of d.fx) {
     if (fx.kind === "hook") {
       sfx.hook(fx.fish.def.rarity);
+      // combo: fish caught close together chain up and pay a bonus
+      combo = d.t - lastHookT < 1.6 ? combo + 1 : 1;
+      lastHookT = d.t;
+      const v = catchValue(fx.fish);
+      renderer.floatText(d.hookX + 18, d.hookY - 10, `+${v}`, "#ffe066", 1);
+      if (combo >= 2) {
+        const bonus = Math.round(v * 0.25 * (combo - 1));
+        d.bonusCoins += bonus;
+        renderer.floatText(d.hookX - 22, d.hookY - 34, `COMBO x${combo}!`, combo >= 4 ? "#ff7ad9" : "#7be495", 1.3 + combo * 0.08);
+        sfx.coin(combo);
+      }
       renderer.burst(d.hookX, d.hookY, fx.fish.mut ? "#ffe066" : RARITY_COLOR[fx.fish.def.rarity], fx.fish.def.rarity === "common" ? 8 : 18);
       if (fx.fish.def.rarity !== "common" || fx.fish.mut) {
         renderer.shakeIt(4);
         // the catch moment: a beat of slow motion and a punch-in, so a rare catch feels special
-        slowmo = 0.35; renderer.punch(d.hookX, d.hookY, 0.1);
+        renderer.punch(d.hookX, d.hookY, 0.07);
       }
-    } else if (fx.kind === "turn") { sfx.turn(); setPose("reel"); }
+    } else if (fx.kind === "turn") {
+      sfx.turn(); setPose("reel");
+      // depth record: the deepest you have ever been
+      const m = Math.round(d.hookY / 10);
+      if (m > (save.stats.maxDepth ?? 0)) {
+        if ((save.stats.maxDepth ?? 0) > 0) { renderer.floatText(d.hookX, d.hookY + 30, `📏 ${m} m RECORD!`, "#9be7ff", 1.4); sfx.newFish(); }
+        save.stats.maxDepth = m;
+      }
+    }
     else if (fx.kind === "fightWon") {
       save.stats.fightsWon++;
       sfx.reveal(fx.fish.def.rarity);
       renderer.burst(d.hookX, d.hookY, RARITY_COLOR[fx.fish.def.rarity], 40, 260);
       renderer.shakeIt(10);
       renderer.flashIt(1);
-      slowmo = 0.6; renderer.punch(d.hookX, d.hookY, 0.18);
+      renderer.punch(d.hookX, d.hookY, 0.14);
+      renderer.floatText(d.hookX, d.hookY - 30, `${tRarity(fx.fish.def.rarity)}!`, RARITY_COLOR[fx.fish.def.rarity], 1.6);
     } else if (fx.kind === "snap") {
       sfx.snap();
       renderer.shakeIt(12);
@@ -151,7 +177,7 @@ function handleFx(d: Dive) {
     } else if (fx.kind === "bottle") {
       toast(`🍾 ${t("map")} ${save.mapPieces + d.mapPieces}/3`); sfx.newFish(); renderer.burst(d.hookX, d.hookY, "#bdf3ff", 20);
     } else if (fx.kind === "chest") {
-      toast(`💰 +${fx.coins}`); sfx.reveal("legendary"); renderer.burst(d.hookX, d.hookY, "#ffd84a", 40, 260); renderer.flashIt(0.6); slowmo = 0.4;
+      toast(`💰 +${fx.coins}`); sfx.reveal("legendary"); renderer.burst(d.hookX, d.hookY, "#ffd84a", 40, 260); renderer.flashIt(0.6);
     } else if (fx.kind === "bonk") {
       sfx.bonk(); renderer.shakeIt(3);
     } else if (fx.kind === "whirlpool") {
@@ -1207,7 +1233,11 @@ function frame(now: number) {
       $("depthN").textContent = `${Math.round(d.hookY / 10)}m`;
       $("slots").textContent = "●".repeat(d.hooked.length) + "○".repeat(Math.max(0, d.capacity - d.hooked.length));
       $("reelHint").classList.toggle("hidden", d.phase !== "fight");
-      if (d.phase === "fight") $("reelHint").textContent = "👇 " + t("reel");
+      if (d.phase === "fight" && d.fight) {
+        const fg = d.fight, left = Math.ceil(2.6 - fg.t);
+        const how = fg.kind === "hold" ? "👇 " + t("reel") : fg.kind === "timing" ? "👆 " + t("fight.tap") : "↔️ " + t("fight.follow");
+        $("reelHint").textContent = left > 0 ? `${left}… ${how}` : how;
+      }
     } else $("reelHint").classList.add("hidden");
     scene.light = lanternRadius(save.gear.lantern);
     const tr = save.trial ? COSMETICS.find((c) => c.id === save.trial!.id) : null;
@@ -1295,4 +1325,4 @@ updateUi();
 requestAnimationFrame(frame);
 
 // debug handle for automated checks (harmless in production)
-(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, catchValue, updateUi, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };
+(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, catchValue, updateUi, FISH_BY_ID, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };

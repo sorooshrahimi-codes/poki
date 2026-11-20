@@ -31,7 +31,21 @@ export interface LiveFish {
   hooked: boolean;
 }
 
+/** three ways to land a big fish, so every fight is not the same */
+export type FightKind = "hold" | "timing" | "follow";
+/** seconds of "get ready" before a fight starts to cost line */
+export const FIGHT_GRACE = 2.6;
+
 export interface Fight {
+  kind: FightKind;
+  /** timing: hits landed / needed; ring phase 0..1 (1 = big, 0 = closed) */
+  hits: number;
+  need: number;
+  ring: number;
+  /** follow: where the fish is on the bar (0..1) */
+  fishPos: number;
+  /** last result flash for the renderer: +1 hit, -1 miss */
+  flash: number;
   fish: LiveFish;
   /** 0..1, where the green zone is centred */
   zone: number;
@@ -108,6 +122,8 @@ export interface DiveInput {
   axis: number;
   /** pointer down / space held: reels during a fight */
   hold: boolean;
+  /** pressed this frame (tap / space down): timing fights */
+  tap?: boolean;
 }
 
 export interface DiveContext {
@@ -329,22 +345,56 @@ function startFight(d: Dive, f: LiveFish, ctx: DiveContext) {
   d.resume = d.phase === "ascend" ? "ascend" : "descend";
   d.phase = "fight";
   const cfg = FIGHT[f.def.rarity]!;
-  d.fight = { fish: f, zone: 0.5, zoneHalf: cfg.half, speed: cfg.speed * (ctx.weather?.fight ?? 1), marker: 0.5, vel: 0, progress: 0.3, t: 0, seed: ctx.rng() * 100, retried: false };
+  // the fish's body decides how it fights: slippery eels and fast swimmers run, round ones snap
+  const shape = f.def.look.shape;
+  const kind: FightKind = shape === "eel" || f.def.speed >= 95 ? "follow" : shape === "puffer" || shape === "jelly" || shape === "crab" ? "timing" : "hold";
+  const need = f.def.rarity === "epic" ? 3 : f.def.rarity === "legendary" ? 4 : 5;
+  d.fight = { kind, hits: 0, need, ring: 1, fishPos: 0.5, flash: 0, fish: f, zone: 0.5, zoneHalf: cfg.half, speed: cfg.speed * (ctx.weather?.fight ?? 1),
+    marker: 0.5, vel: 0, progress: kind === "timing" ? 1 : 0.3, t: 0, seed: ctx.rng() * 100, retried: false };
 }
 
 function stepFight(d: Dive, dt: number, input: DiveInput) {
   const fg = d.fight!;
   fg.t += dt;
+  fg.flash = Math.max(0, Math.abs(fg.flash) - dt * 3) * Math.sign(fg.flash);
   const speed = fg.speed;
-  // the fish pulls the green zone around: two sines make it feel alive but readable
-  fg.zone = 0.5 + 0.3 * Math.sin(fg.t * 1.35 * speed + fg.seed) + 0.12 * Math.sin(fg.t * 3.3 * speed + fg.seed * 2);
-  fg.vel += (input.hold ? 2.9 : -2.5) * dt;
-  fg.vel *= Math.pow(0.12, dt);
-  fg.marker = Math.max(0, Math.min(1, fg.marker + fg.vel * dt));
-  if (fg.marker === 0 || fg.marker === 1) fg.vel = 0;
-  const inZone = Math.abs(fg.marker - fg.zone) <= fg.zoneHalf;
-  fg.progress += (inZone ? 0.3 : -0.25) * dt;
-  if (fg.progress >= 1) {
+  // a few seconds to get ready: everything moves gently and nothing is lost yet
+  const ready = fg.t >= FIGHT_GRACE;
+  const pace = ready ? 1 : 0.35;
+  const tt = ready ? fg.t - FIGHT_GRACE * 0.65 : fg.t * pace;
+  if (fg.kind === "hold") {
+    // the fish pulls the green zone around: two sines make it feel alive but readable
+    fg.zone = 0.5 + 0.3 * Math.sin(tt * 1.35 * speed + fg.seed) + 0.12 * Math.sin(tt * 3.3 * speed + fg.seed * 2);
+    fg.vel += (input.hold ? 2.9 : -2.5) * dt;
+    fg.vel *= Math.pow(0.12, dt);
+    fg.marker = Math.max(0, Math.min(1, fg.marker + fg.vel * dt));
+    if (fg.marker === 0 || fg.marker === 1) fg.vel = 0;
+    const inZone = Math.abs(fg.marker - fg.zone) <= fg.zoneHalf;
+    if (ready) fg.progress += (inZone ? 0.3 : -0.25) * dt;
+  } else if (fg.kind === "follow") {
+    // the fish darts left and right; keep your marker (steer like the hook) under it
+    fg.fishPos = 0.5 + 0.3 * Math.sin(tt * 1.5 * speed + fg.seed) + 0.12 * Math.sin(tt * 3.7 * speed + fg.seed * 3) + 0.06 * Math.sin(tt * 7.3 * speed + fg.seed);
+    let target = fg.marker;
+    if (input.targetX !== null) target = Math.max(0, Math.min(1, input.targetX / COLUMN));
+    if (input.axis) target = fg.marker + input.axis * 1.4 * dt;
+    fg.marker += Math.max(-1.25 * dt, Math.min(1.25 * dt, target - fg.marker));
+    fg.marker = Math.max(0, Math.min(1, fg.marker));
+    const on = Math.abs(fg.marker - fg.fishPos) <= fg.zoneHalf * 0.65;
+    if (ready) fg.progress += (on ? 0.26 : -0.3) * dt;
+  } else {
+    // timing: a ring closes on the fish; tap when it meets the gold circle
+    const period = 1.0 / speed;
+    fg.ring -= dt / period;
+    if (fg.ring < -0.25) fg.ring = 1; // missed the window entirely: it just comes round again
+    if (input.tap && ready) {
+      const good = Math.abs(fg.ring - 0.3) <= 0.06 + fg.zoneHalf * 0.12;
+      if (good) { fg.hits++; fg.flash = 1; fg.ring = 1; }
+      else { fg.progress -= 0.34; fg.flash = -1; }
+    }
+  }
+  // timing fights are won by hits (progress is the line's health there); the others by the bar
+  const won = fg.kind === "timing" ? fg.hits >= fg.need : fg.progress >= 1;
+  if (won) {
     fg.fish.hooked = true;
     d.hooked.push(fg.fish);
     d.fx.push({ kind: "fightWon", fish: fg.fish });
@@ -361,8 +411,9 @@ export function resolveSnap(d: Dive, retry: boolean) {
   if (d.phase !== "snapped" || !d.fight) return;
   if (retry && !d.fight.retried) {
     d.fight.retried = true;
-    d.fight.progress = 0.55;
-    d.fight.marker = d.fight.zone;
+    d.fight.progress = d.fight.kind === "timing" ? 0.67 : 0.55;
+    d.fight.marker = d.fight.kind === "follow" ? d.fight.fishPos : d.fight.zone;
+    d.fight.t = FIGHT_GRACE * 0.5; // a short new countdown
     d.fight.vel = 0;
     d.phase = "fight";
     return;

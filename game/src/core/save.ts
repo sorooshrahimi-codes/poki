@@ -33,7 +33,7 @@ export interface SaveData {
   aquariumAt: number;
   /** starter missions: index of the current one */
   mission: number;
-  stats: { catches: number; fightsWon: number };
+  stats: { catches: number; fightsWon: number; maxDepth?: number };
   seenGlimpse: boolean;
   tank: Tank;
   orders: Order[];

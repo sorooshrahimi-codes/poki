@@ -20,10 +20,22 @@ const OVERHEAD = 4;
 
 const bad = (f: { def: { rarity: Rarity; junk?: boolean } }) => f.def.junk || f.def.rarity === "common";
 
-function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; next: number; hold: boolean; stuck: number; lastY: number }): DiveInput {
+function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; next: number; hold: boolean; stuck: number; lastY: number; aim?: number }): DiveInput {
   if (d.phase === "fight" && d.fight) {
     // a human sees the zone late and over-corrects: decide every 0.12-0.35 s, aim with noise
     const fg = d.fight;
+    if (fg.kind === "timing") {
+      // a human taps a little early or late
+      // one decision per ring: a human picks a moment and commits to it
+      if (fg.ring > 0.9 || memo.aim === undefined) memo.aim = 0.3 + (rng() - 0.5) * (1 - skill) * 0.6;
+      const tap = fg.t > 2.6 && Math.abs(fg.ring - memo.aim) < 0.03 && d.t >= memo.next;
+      if (tap) memo.next = d.t + 0.5;
+      return { targetX: null, axis: 0, hold: false, tap };
+    }
+    if (fg.kind === "follow") {
+      if (d.t >= memo.next) { memo.next = d.t + 0.12 + (1 - skill) * 0.25; memo.x = (fg.fishPos + (rng() - 0.5) * (1 - skill) * 0.4) * COLUMN; }
+      return { targetX: memo.x, axis: 0, hold: false };
+    }
     if (d.t >= memo.next) {
       memo.next = d.t + 0.12 + (1 - skill) * 0.23;
       const aim = fg.zone + (rng() - 0.5) * (1 - skill) * 0.6;
@@ -68,6 +80,8 @@ function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; 
 
 interface Result { ice: number; surprises: number; firstSurprise: number; stolen: number; firstUpgrade: number; ocean: number; coins: number[]; rarities: Record<Rarity, number>; fights: number; won: number; dives: number; legFights: number; firstLegendary: number }
 
+const KSTAT: Record<string, [number, number]> = {};
+let curKind = "";
 function session(seed: number): Result {
   const rng = makeRng(seed);
   const skill = 0.45 + rng() * 0.45; // from distracted kid to focused player
@@ -89,11 +103,12 @@ function session(seed: number): Result {
       if (d.phase === "snapped") resolveSnap(d, false);
       if (d.phase === "fight" && !fighting) {
         fighting = true; fights++;
+        if (d.fight) { const k = d.fight.kind; KSTAT[k] = KSTAT[k] ?? [0, 0]; KSTAT[k][0]++; curKind = k; }
         if (d.fight && d.fight.fish.def.rarity !== "epic") { legFights++; if (firstLegendary < 0) firstLegendary = t + d.t; }
       }
       if (d.phase !== "fight") fighting = false;
       stepDive(d, DT, botInput(d, rng, skill, memo), ctx);
-      for (const fx of d.fx) { if (fx.kind === "fightWon") won++; if (fx.kind === "stolen") stolen++; }
+      for (const fx of d.fx) { if (fx.kind === "fightWon") { won++; if (curKind) KSTAT[curKind][1]++; } if (fx.kind === "stolen") stolen++; }
       d.fx.length = 0;
     }
     dives++;
@@ -140,16 +155,17 @@ for (const m of [1, 3, 5, 10, 15].filter((m) => m <= MINUTES)) console.log(`coin
 const tot = Object.fromEntries(RARITY_ORDER.map((r) => [r, results.reduce((a, x) => a + x.rarities[r], 0) / SESSIONS]));
 console.log("catches per session:", Object.entries(tot).map(([k, v]) => `${k} ${(v as number).toFixed(1)}`).join(", "));
 const fights = results.reduce((a, r) => a + r.fights, 0), won = results.reduce((a, r) => a + r.won, 0);
-console.log(`fights per session ${(fights / SESSIONS).toFixed(1)}, won ${(fights ? (won / fights) * 100 : 0).toFixed(0)}% (target 45-75%)`);
+console.log(`fights per session ${(fights / SESSIONS).toFixed(1)}, won ${(fights ? (won / fights) * 100 : 0).toFixed(0)}% (target 50-88%: kids should mostly win, with real near-misses)`);
 
 console.log(`legendary fights per session ${(results.reduce((a, r) => a + r.legFights, 0) / SESSIONS).toFixed(1)}, first one median ${fmt(median(results.map((r) => r.firstLegendary)))}, ${(results.filter((r) => r.firstLegendary >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions (target: most players meet one in the first session)`);
 
 const sur = results.reduce((a, r) => a + r.surprises, 0) / SESSIONS;
 console.log(`surprises per session ${sur.toFixed(1)} (one every ${((MINUTES * 60) / sur).toFixed(0)} s), first at ${fmt(median(results.map((r) => r.firstSurprise)))}, sharks stole ${(results.reduce((a, r) => a + r.stolen, 0) / SESSIONS).toFixed(1)} fish`);
 
+console.log("fight types:", Object.entries(KSTAT).map(([k, [n, w]]) => `${k} ${(w / n * 100).toFixed(0)}% of ${n}`).join(", "));
 const fails: string[] = [];
 if (!(first >= 25 && first <= 75)) fails.push("first upgrade out of range");
 if (!(ocean >= 270 && ocean <= 480)) fails.push("ocean unlock out of range");
-if (fights && !(won / fights >= 0.4 && won / fights <= 0.8)) fails.push("fight win rate out of range");
+if (fights && !(won / fights >= 0.5 && won / fights <= 0.88)) fails.push("fight win rate out of range");
 if (fails.length) { console.log("FAIL: " + fails.join("; ")); process.exit(1); }
 console.log("PASS");
