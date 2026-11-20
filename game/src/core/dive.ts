@@ -91,8 +91,9 @@ export interface Surprise {
 /** puffers are puffed up for this part of their breathing cycle */
 export const pufferInflated = (t: number, ph: number) => Math.sin(t * 2.2 + ph) > 0.2;
 export const CRAB_TAPS = 6, CRAB_TIME = 3.4;
+const LUCK_SHARE: Partial<Record<string, number>> = { rare: 1, epic: 0.6, legendary: 0.35, secret: 0.35 };
 /** follow fights: half-width of the "on the fish" window, in fight-zone units */
-export const FOLLOW_WIN = 0.72;
+export const FOLLOW_WIN = 0.68;
 
 export type DivePhase = "descend" | "fight" | "snapped" | "ascend" | "done";
 
@@ -122,6 +123,8 @@ export interface Dive {
   treasure: boolean;
   /** reef zone: horizontal water currents (y = top, h = height, v = push speed) */
   currents: Current[];
+  /** fights started this dive */
+  fights: number;
   /** volcano zone: hot vents */
   vents: Vent[];
   /** seconds before a vent can hit again */
@@ -183,7 +186,9 @@ export function spawnFish(zone: ZoneId, y: number, ctx: DiveContext): LiveFish |
       * (ctx.bait?.attracts?.includes(f.id) ? 4 : 1)
       * (ctx.spot?.attracts.includes(f.id) ? 3 : 1) * (ctx.spot?.rare && (f.rarity === "legendary" || f.rarity === "epic") ? ctx.spot.rare : 1);
     // junk is a joke, not a nuisance: it shows up, but rarely
-    return base * (f.rarity === "common" ? 1 : luck) * ev * (f.junk ? 0.3 : 1);
+    // luck mostly brings rares; it helps the big ones a little, so legends stay legendary
+    const lk = 1 + (luck - 1) * (LUCK_SHARE[f.rarity] ?? 0);
+    return base * lk * ev * (f.junk ? 0.3 : 1);
   }, ctx.rng);
   if (!def) return null;
   const mut = def.junk ? null : rollMutation(ctx);
@@ -219,7 +224,7 @@ export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind
   const d: Dive = {
     zone, phase: "descend", resume: "descend", hookX: COLUMN / 2, hookY: 0, bottom,
     capacity: capacity(ctx.upgrades), fish, hooked: [], fight: null, t: 0, escaped: null, fx: [],
-    surprise: null, bonusCoins: 0, mapPieces: 0, slabs: [], hole: null, treasure: false, currents: [], vents: [], ventCool: 0,
+    surprise: null, bonusCoins: 0, mapPieces: 0, slabs: [], hole: null, treasure: false, currents: [], vents: [], ventCool: 0, fights: 0,
   };
   if (z.currents) {
     for (let y = 220; y < bottom - 40; y += 230 + ctx.rng() * 160) {
@@ -607,7 +612,9 @@ export function stepDive(d: Dive, dt: number, input: DiveInput, ctx: DiveContext
     const r = f.size * (f.def.look.shape === "eel" ? 0.3 : 0.42) + HOOK_R;
     const dx = f.x - d.hookX, dy = (f.y + Math.sin(f.bob) * 4) - d.hookY;
     if (dx * dx + dy * dy > r * r) continue;
-    if (FIGHT[f.def.rarity]) { startFight(d, f, ctx); return; }
+    // one fight per dive keeps dives flowing; legends always fight (they are the moment)
+    const big = f.def.rarity === "legendary" || f.def.rarity === "secret";
+    if (FIGHT[f.def.rarity] && (d.fights === 0 || big)) { d.fights++; startFight(d, f, ctx); return; }
     f.hooked = true;
     d.hooked.push(f);
     d.fx.push({ kind: "hook", fish: f });

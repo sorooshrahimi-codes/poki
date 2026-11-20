@@ -10,7 +10,7 @@ export const ZONES: Record<ZoneId, ZoneDef> = {
 export const ZONE_ORDER: ZoneId[] = ["lake", "ocean", "ice", "reef", "volcano"];
 
 /** spawn weight per rarity (before luck and events) */
-export const RARITY_WEIGHT: Record<Rarity, number> = { common: 70, rare: 12, epic: 5, legendary: 3.2, secret: 2.5 };
+export const RARITY_WEIGHT: Record<Rarity, number> = { common: 70, rare: 12, epic: 5, legendary: 1.6, secret: 2.5 };
 export const RARITY_COLOR: Record<Rarity, string> = {
   common: "#cfd8dc", rare: "#4fc3f7", epic: "#c77dff", legendary: "#ffc93c", secret: "#ff4d8d",
 };

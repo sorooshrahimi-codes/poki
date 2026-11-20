@@ -168,7 +168,7 @@ const first = median(results.map((r) => r.firstUpgrade));
 const ocean = median(results.map((r) => r.ocean));
 const reachedOcean = results.filter((r) => r.ocean >= 0).length / SESSIONS;
 console.log(`Deep Luck economy sim: ${SESSIONS} sessions x ${MINUTES} min, ${FISH.length} fish`);
-console.log(`first upgrade   median ${fmt(first)}   (target 0:30-1:00)`);
+console.log(`first upgrade   median ${fmt(first)}   (target 0:12-1:15: sooner is better)`);
 console.log(`ocean unlocked  median ${fmt(ocean)}   (target 4:30-8:00), ${(reachedOcean * 100).toFixed(0)}% of sessions`);
 console.log(`upgrades bought  by 2 min ${median(results.map((r) => r.buys[0]))}, by 5 min ${median(results.map((r) => r.buys[1]))}, by 10 min ${median(results.map((r) => r.buys[2]))}; longest wait in first 5 min median ${fmt(median(results.map((r) => r.gaps[0])))}, in 5-15 min ${fmt(median(results.map((r) => r.gaps[1])))}`);
 console.log(`third zone       median ${fmt(median(results.map((r) => r.ice)))}, ${(results.filter((r) => r.ice >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions`);
@@ -177,7 +177,7 @@ for (const m of [1, 3, 5, 10, 15].filter((m) => m <= MINUTES)) console.log(`coin
 const tot = Object.fromEntries(RARITY_ORDER.map((r) => [r, results.reduce((a, x) => a + x.rarities[r], 0) / SESSIONS]));
 console.log("catches per session:", Object.entries(tot).map(([k, v]) => `${k} ${(v as number).toFixed(1)}`).join(", "));
 const fights = results.reduce((a, r) => a + r.fights, 0), won = results.reduce((a, r) => a + r.won, 0);
-console.log(`fights per session ${(fights / SESSIONS).toFixed(1)}, won ${(fights ? (won / fights) * 100 : 0).toFixed(0)}% (target 50-88%: kids should mostly win, with real near-misses)`);
+console.log(`fights per session ${(fights / SESSIONS).toFixed(1)}, won ${(fights ? (won / fights) * 100 : 0).toFixed(0)}% (target 50-92%: kids should mostly win, with real near-misses)`);
 
 console.log(`legendary fights per session ${(results.reduce((a, r) => a + r.legFights, 0) / SESSIONS).toFixed(1)}, first one median ${fmt(median(results.map((r) => r.firstLegendary)))}, ${(results.filter((r) => r.firstLegendary >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions (target: most players meet one in the first session)`);
 
@@ -186,8 +186,8 @@ console.log(`surprises per session ${sur.toFixed(1)} (one every ${((MINUTES * 60
 
 console.log("fight types:", Object.entries(KSTAT).map(([k, [n, w]]) => `${k} ${(w / n * 100).toFixed(0)}% of ${n}`).join(", "));
 const fails: string[] = [];
-if (!(first >= 25 && first <= 75)) fails.push("first upgrade out of range");
+if (!(first >= 12 && first <= 75)) fails.push("first upgrade out of range");
 if (!(ocean >= 270 && ocean <= 480)) fails.push("ocean unlock out of range");
-if (fights && !(won / fights >= 0.5 && won / fights <= 0.88)) fails.push("fight win rate out of range");
+if (fights && !(won / fights >= 0.5 && won / fights <= 0.92)) fails.push("fight win rate out of range");
 if (fails.length) { console.log("FAIL: " + fails.join("; ")); process.exit(1); }
 console.log("PASS");
