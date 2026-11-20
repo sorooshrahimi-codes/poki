@@ -22,7 +22,7 @@ type Key =
 const T: Record<Lang, Partial<Record<Key, string>>> = {
   en: {
     "tank.tap": "Tap a fish to KEEP it (tank + orders) instead of selling", "tank.hint": "Kept fish earn while you are away. 3 of a kind merge into ★★, 3 ★★ into ★★★ (much stronger).", "tank.empty": "Your tank is empty. After a dive, tap fish cards to keep them.", "orders.note": "Customers pay much more than selling. Keep the fish they want, then deliver.", "orders.deliver": "Deliver",
-    "ward.note": "Just for looks: hats go on your fisher, pets ride your boat. Tap 👕 to wear.",
+    "ward.note": "Just for looks: hats and vests on your fisher, paint on your boat, pets ride along. Tap 👕 to wear.",
     "fx.casts": "casts", "fx.nextcasts": "active for your next {n} casts", "fx.attracts": "attracts special fish", "fx.secret": "secret fish can appear", "fx.lantern": "Lantern", "fx.sonar": "Sonar", "fx.lanternDo": "Bigger light in the dark deep", "fx.sonarDo": "Arrows point to hidden rare fish", "fx.mygear": "My gear (working now)", "fx.nobait": "No bait: buy one below", "fx.line": "go deeper, new fish live there", "fx.capacity": "catch more fish per dive", "fx.luck": "rare fish appear more often",
     record: "RECORD!", "sur.glimpse": "A legend swims below...",
     "wx.sunny": "Sunny", "wx.rain": "Rain: rare fish rise!", "wx.storm": "Storm! Electric fish!", "wx.fog": "Fog: hidden treasures...",
@@ -36,7 +36,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
   },
   es: {
     "tank.tap": "Toca un pez para GUARDARLO (pecera + pedidos) en vez de venderlo", "tank.hint": "Los peces guardados ganan mientras no estás. 3 iguales se fusionan en ★★, 3 ★★ en ★★★.", "tank.empty": "Tu pecera está vacía. Tras una bajada, toca peces para guardarlos.", "orders.note": "Los clientes pagan mucho más que la venta. Guarda los peces que piden y entrégalos.", "orders.deliver": "Entregar",
-    "ward.note": "Solo estética: los gorros van en tu pescador y las mascotas en tu barca. Toca 👕 para usar.",
+    "ward.note": "Solo estética: gorros y chalecos para tu pescador, pintura para tu barca y mascotas a bordo. Toca 👕 para usar.",
     "fx.casts": "lanzamientos", "fx.nextcasts": "activo en tus próximos {n} lanzamientos", "fx.attracts": "atrae peces especiales", "fx.secret": "pueden salir peces secretos", "fx.lantern": "Linterna", "fx.sonar": "Sonar", "fx.lanternDo": "Más luz en lo profundo", "fx.sonarDo": "Flechas hacia peces raros ocultos", "fx.mygear": "Mi equipo (activo)", "fx.nobait": "Sin cebo: compra uno abajo", "fx.line": "más profundo, peces nuevos", "fx.capacity": "más peces por bajada", "fx.luck": "peces raros más a menudo",
     record: "¡RÉCORD!", "sur.glimpse": "Una leyenda nada abajo...",
     "wx.sunny": "Soleado", "wx.rain": "Lluvia: ¡suben peces raros!", "wx.storm": "¡Tormenta! ¡Peces eléctricos!", "wx.fog": "Niebla: tesoros ocultos...",
@@ -50,7 +50,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
   },
   pt: {
     "tank.tap": "Toque num peixe para GUARDAR (aquário + pedidos) em vez de vender", "tank.hint": "Peixes guardados rendem enquanto você está fora. 3 iguais viram ★★, 3 ★★ viram ★★★.", "tank.empty": "Seu aquário está vazio. Depois de pescar, toque nos peixes para guardar.", "orders.note": "Clientes pagam bem mais que a venda. Guarde os peixes pedidos e entregue.", "orders.deliver": "Entregar",
-    "ward.note": "Só visual: chapéus vão no pescador e pets no barco. Toque 👕 para usar.",
+    "ward.note": "Só visual: chapéus e coletes no pescador, pintura no barco e pets a bordo. Toque 👕 para usar.",
     "fx.casts": "lançamentos", "fx.nextcasts": "ativo nos próximos {n} lançamentos", "fx.attracts": "atrai peixes especiais", "fx.secret": "peixes secretos podem aparecer", "fx.lantern": "Lanterna", "fx.sonar": "Sonar", "fx.lanternDo": "Mais luz no fundo escuro", "fx.sonarDo": "Setas para peixes raros escondidos", "fx.mygear": "Meu equipamento (ativo)", "fx.nobait": "Sem isca: compre uma abaixo", "fx.line": "mais fundo, peixes novos", "fx.capacity": "mais peixes por descida", "fx.luck": "peixes raros com mais frequência",
     record: "RECORDE!", "sur.glimpse": "Uma lenda nada lá embaixo...",
     "wx.sunny": "Ensolarado", "wx.rain": "Chuva: peixes raros sobem!", "wx.storm": "Tempestade! Peixes elétricos!", "wx.fog": "Neblina: tesouros escondidos...",
@@ -64,7 +64,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
   },
   hi: {
     "tank.tap": "बेचने की जगह रखने के लिए मछली पर टैप करें (टैंक + ऑर्डर)", "tank.hint": "रखी मछलियाँ आपकी गैरमौजूदगी में कमाती हैं। 3 एक जैसी मिलकर ★★, 3 ★★ मिलकर ★★★।", "tank.empty": "टैंक खाली है। शिकार के बाद मछली कार्ड पर टैप करें।", "orders.note": "ग्राहक बेचने से कहीं ज़्यादा देते हैं। उनकी मछली रखें और पहुँचाएँ।", "orders.deliver": "दें",
-    "ward.note": "सिर्फ़ दिखावट: टोपी मछुआरे पर, पालतू नाव पर। पहनने के लिए 👕 दबाएँ।",
+    "ward.note": "सिर्फ़ दिखावट: मछुआरे पर टोपी और जैकेट, नाव पर रंग, पालतू साथ में। पहनने के लिए 👕 दबाएँ।",
     "fx.casts": "बार", "fx.nextcasts": "अगले {n} बार के लिए चालू", "fx.attracts": "खास मछलियाँ खींचता है", "fx.secret": "रहस्य मछलियाँ आ सकती हैं", "fx.lantern": "लालटेन", "fx.sonar": "सोनार", "fx.lanternDo": "अँधेरी गहराई में ज़्यादा रोशनी", "fx.sonarDo": "छिपी दुर्लभ मछलियों की ओर तीर", "fx.mygear": "मेरा सामान (चालू)", "fx.nobait": "चारा नहीं: नीचे खरीदें", "fx.line": "और गहराई, नई मछलियाँ", "fx.capacity": "हर बार ज़्यादा मछलियाँ", "fx.luck": "दुर्लभ मछलियाँ ज़्यादा",
     record: "रिकॉर्ड!", "sur.glimpse": "नीचे एक दिग्गज तैर रहा है...",
     "wx.sunny": "धूप", "wx.rain": "बारिश: दुर्लभ मछलियाँ ऊपर!", "wx.storm": "तूफ़ान! बिजली वाली मछलियाँ!", "wx.fog": "कोहरा: छिपे खज़ाने...",
@@ -78,7 +78,7 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
   },
   ja: {
     "tank.tap": "魚をタップすると売らずに水槽にキープ(注文にも使える)", "tank.hint": "キープした魚は留守中も稼ぐ。同じ魚3匹で★★、★★3匹で★★★に合体。", "tank.empty": "水槽は空っぽ。釣った後に魚カードをタップしてキープしよう。", "orders.note": "お客さんは売るよりずっと高く買ってくれる。注文の魚をキープして届けよう。", "orders.deliver": "届ける",
-    "ward.note": "見た目だけ: 帽子は釣り人に、ペットはボートに乗るよ。👕で装備。",
+    "ward.note": "見た目だけ: 釣り人に帽子とベスト、ボートに塗装、ペットも一緒。👕で装備。",
     "fx.casts": "回", "fx.nextcasts": "次の{n}回キャストで有効", "fx.attracts": "特別な魚を引き寄せる", "fx.secret": "シークレットの魚が出るかも", "fx.lantern": "ランタン", "fx.sonar": "ソナー", "fx.lanternDo": "暗い深海でもっと明るく", "fx.sonarDo": "隠れたレア魚を矢印で表示", "fx.mygear": "装備中のアイテム", "fx.nobait": "エサなし: 下で買おう", "fx.line": "もっと深く、新しい魚がいる", "fx.capacity": "1回でもっと釣れる", "fx.luck": "レアな魚が出やすくなる",
     record: "新記録!", "sur.glimpse": "下に伝説の魚が...",
     "wx.sunny": "晴れ", "wx.rain": "雨: レアな魚が浮上!", "wx.storm": "嵐! 電気の魚!", "wx.fog": "霧: 隠れたお宝...",

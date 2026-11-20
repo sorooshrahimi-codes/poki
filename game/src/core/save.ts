@@ -27,7 +27,7 @@ export interface SaveData {
   bait: { id: string; uses: number } | null;
   gear: { lantern: number; sonar: number };
   owned: string[];
-  wear: { pet: string | null; hat: string | null };
+  wear: { pet: string | null; hat: string | null; outfit?: string | null; boat?: string | null };
   /** a rewarded-ad trial: cosmetic id and dives left */
   trial: { id: string; dives: number } | null;
   aquariumAt: number;

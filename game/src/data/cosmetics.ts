@@ -3,7 +3,7 @@ import { FISH } from "./fish.ts";
 // Cosmetics: pure show-off. No stats, so nothing is pay-to-win; they come from coins,
 // from collection milestones, or a rewarded-ad "try it" that lasts a few dives.
 
-export type CosmeticKind = "pet" | "hat";
+export type CosmeticKind = "pet" | "hat" | "outfit" | "boat";
 
 export interface CosmeticDef {
   id: string;
@@ -19,6 +19,8 @@ export interface CosmeticDef {
   rarity?: "legendary" | "secret";
   /** everyone owns it from the start */
   free?: boolean;
+  /** outfit / boat paint: target hue (degrees) and saturation/brightness tweaks */
+  tint?: { hue: number; sat?: number; light?: number };
 }
 
 export const COSMETICS: CosmeticDef[] = [
@@ -30,6 +32,19 @@ export const COSMETICS: CosmeticDef[] = [
   { id: "hat_straw", kind: "hat", art: "hat_straw", price: 900 },
   { id: "hat_pirate", kind: "hat", art: "hat_pirate", album: 10 },
   { id: "hat_crown", kind: "hat", art: "hat_crown", rarity: "legendary" },
+  // life-vest colours: the real art recoloured, so the style always matches
+  { id: "vest_blue", kind: "outfit", art: "", free: true, tint: { hue: 215 } },
+  { id: "vest_red", kind: "outfit", art: "", price: 600, tint: { hue: 0 } },
+  { id: "vest_green", kind: "outfit", art: "", price: 600, tint: { hue: 120 } },
+  { id: "vest_pink", kind: "outfit", art: "", price: 900, tint: { hue: 320 } },
+  { id: "vest_purple", kind: "outfit", art: "", album: 12, tint: { hue: 275 } },
+  { id: "vest_gold", kind: "outfit", art: "", album: 25, tint: { hue: 45, sat: 1.1, light: 1.25 } },
+  // boat paint: the hull stripe
+  { id: "paint_red", kind: "boat", art: "", free: true, tint: { hue: 0 } },
+  { id: "paint_blue", kind: "boat", art: "", price: 800, tint: { hue: 210 } },
+  { id: "paint_green", kind: "boat", art: "", price: 800, tint: { hue: 135 } },
+  { id: "paint_purple", kind: "boat", art: "", price: 1200, tint: { hue: 280 } },
+  { id: "paint_gold", kind: "boat", art: "", rarity: "legendary", tint: { hue: 45, sat: 1.1, light: 1.3 } },
   { id: "pet_cat", kind: "pet", art: "pet_cat", price: 800 },
   { id: "pet_dog", kind: "pet", art: "pet_dog", price: 1500 },
   { id: "pet_parrot", kind: "pet", art: "pet_parrot", album: 15 },

@@ -19,6 +19,7 @@ import "@fontsource/fredoka/latin-600.css";
 import "@fontsource/fredoka/latin-700.css";
 import { artUrl, img, loadAssets, spriteTinted } from "./render/assets.ts";
 import { drawFish } from "./render/fish.ts";
+import { recolor } from "./render/recolor.ts";
 import { Renderer, type SceneState } from "./render/scene.ts";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -29,7 +30,7 @@ setMuted(save.muted);
 
 const canvas = $<HTMLCanvasElement>("game");
 const renderer = new Renderer(canvas);
-const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id, light: 150, sonar: 0, pet: null, hat: null };
+const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9, weather: weatherAt(Date.now()).def.id, light: 150, sonar: 0, pet: null, hat: null, outfit: null, outfitId: null, paint: null, paintId: null };
 function setPose(p: SceneState["pose"]) { if (scene.pose !== p) { scene.pose = p; scene.poseT = 0; } }
 /** slow motion: remaining real seconds and the time scale while it lasts */
 let slowmo = 0;
@@ -470,22 +471,56 @@ function renderShop() {
 
 // ------------------------------------------------------------------ wardrobe (cosmetics)
 const isOwned = (c: CosmeticDef) => save.owned.includes(c.id) || (!c.price && milestoneMet(c, save.album));
+/** live preview of the fisher with everything currently worn */
+function renderWardPreview() {
+  const cv = $<HTMLCanvasElement>("wardPreview");
+  const x = cv.getContext("2d")!;
+  x.clearRect(0, 0, cv.width, cv.height);
+  const kid = img("kid_idle");
+  if (!kid) return;
+  const o = COSMETICS.find((c) => c.id === save.wear.outfit)?.tint, pt = COSMETICS.find((c) => c.id === save.wear.boat)?.tint;
+  const parts: { part: "vest" | "stripe"; tint: NonNullable<typeof o> }[] = [];
+  if (o && save.wear.outfit !== "vest_blue") parts.push({ part: "vest", tint: o });
+  if (pt && save.wear.boat !== "paint_red") parts.push({ part: "stripe", tint: pt });
+  const src = parts.length ? recolor(`idle|${save.wear.outfit}|${save.wear.boat}`, kid, parts) : kid;
+  const w = 190, h = (w * kid.height) / kid.width, ox = 25, oy = cv.height - h - 4;
+  x.drawImage(src, ox, oy, w, h);
+  const hat = img(save.wear.hat ?? "hat_cap");
+  if (hat) { const hw = w * 0.34, hh = (hw * hat.height) / hat.width; x.drawImage(hat, ox + 0.27 * w - hw / 2, oy + 0.13 * h - hh * 0.72, hw, hh); }
+  const pet = save.wear.pet ? img(save.wear.pet) : null;
+  if (pet) { const pw = 58, ph = (pw * pet.height) / pet.width; x.drawImage(pet, ox + 0.926 * w - pw * 0.72, oy + h - w * 0.2 * (w / 150) * 0.75 - ph + 6, pw, ph); }
+}
+
 function renderWardrobe() {
   $("wardNote").textContent = t("ward.note");
+  renderWardPreview();
   const box = $("wardGrid");
   box.innerHTML = "";
-  for (const c of COSMETICS) {
+  const KIND_LABEL: Record<string, string> = { hat: "🎩", outfit: "🦺", boat: "🚤", pet: "🐾" };
+  const order = ["hat", "outfit", "boat", "pet"];
+  let lastKind = "";
+  for (const c of [...COSMETICS].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind))) {
+    if (c.kind !== lastKind) { lastKind = c.kind; box.insertAdjacentHTML("beforeend", `<div class="wkind">${KIND_LABEL[c.kind]}</div>`); }
     const owned = isOwned(c);
-    const worn = save.wear[c.kind] === c.id || (c.id === "hat_cap" && !save.wear.hat);
+    const free0 = (c.id === "hat_cap" && !save.wear.hat) || (c.id === "vest_blue" && !save.wear.outfit) || (c.id === "paint_red" && !save.wear.boat);
+    const worn = save.wear[c.kind] === c.id || free0;
     const el = document.createElement("div");
     el.className = "offer" + (worn ? " worn" : "");
     el.style.setProperty("--tc", worn ? "#ffe066" : owned ? "#7be495" : "#7f93b5");
-    el.innerHTML = `<img class="bi${owned || c.price ? "" : " lockedimg"}" src="${artUrl(c.art)}" alt=""><div class="eff">${c.kind === "hat" ? "👦 🎩" : "🚣 🐾"}</div>`;
+    if (c.tint) {
+      // outfit / paint: a swatch of the real recoloured boat
+      const sw = document.createElement("div");
+      sw.className = "swatch" + (owned || c.price ? "" : " lockedimg");
+      sw.style.background = `hsl(${c.tint.hue}, ${c.kind === "outfit" ? 70 : 75}%, ${Math.round(50 * (c.tint.light ?? 1))}%)`;
+      sw.textContent = c.kind === "outfit" ? "🦺" : "🚤";
+      el.appendChild(sw);
+      el.insertAdjacentHTML("beforeend", `<div class="eff">${c.kind === "outfit" ? "👦 🦺" : "🚣 🎨"}</div>`);
+    } else el.innerHTML = `<img class="bi${owned || c.price ? "" : " lockedimg"}" src="${artUrl(c.art)}" alt=""><div class="eff">${c.kind === "hat" ? "👦 🎩" : "🚣 🐾"}</div>`;
     const btn = document.createElement("button");
     btn.className = "btn big buy " + (owned ? "ok" : c.price ? "gold" : "plain");
     if (owned) {
       btn.textContent = worn ? "✓" : "👕";
-      btn.onclick = () => { save.wear[c.kind] = worn ? null : c.id; sfx.buy(); writeSave(save); renderWardrobe(); };
+      btn.onclick = () => { save.wear[c.kind] = worn ? null : c.id; sfx.buy(); writeSave(save); renderWardrobe(); renderWardPreview(); };
     } else if (c.price) {
       btn.textContent = `🪙 ${c.price.toLocaleString()}`;
       btn.disabled = save.coins < c.price;
@@ -918,6 +953,10 @@ function frame(now: number) {
     const tr = save.trial ? COSMETICS.find((c) => c.id === save.trial!.id) : null;
     scene.pet = tr?.kind === "pet" ? tr.art : save.wear.pet;
     scene.hat = tr?.kind === "hat" ? tr.art : save.wear.hat;
+    const oid = tr?.kind === "outfit" ? tr.id : save.wear.outfit ?? null;
+    const pid = tr?.kind === "boat" ? tr.id : save.wear.boat ?? null;
+    scene.outfitId = oid; scene.outfit = oid ? COSMETICS.find((c) => c.id === oid)?.tint ?? null : null;
+    scene.paintId = pid; scene.paint = pid ? COSMETICS.find((c) => c.id === pid)?.tint ?? null : null;
     scene.sonar = sonarRange(save.gear.sonar);
     renderer.update(dt, scene);
     setMusicMood(scene.zone, scene.dive && scene.mode === "dive" ? scene.dive.hookY : 0, !!scene.event);

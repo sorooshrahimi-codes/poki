@@ -8,6 +8,7 @@ import { FISH } from "../data/fish.ts";
 import { RARITY_COLOR, ZONES } from "../data/world.ts";
 import { BG_WATERLINE, SHADOW_PAD, bgBottomColor, bgTopColor, drawGlint, img, propNames, spriteShadowed, spriteTinted } from "./assets.ts";
 import { drawFish } from "./fish.ts";
+import { recolor, type Tint } from "./recolor.ts";
 
 type Ctx = CanvasRenderingContext2D;
 
@@ -31,6 +32,11 @@ export interface SceneState {
   /** cosmetics: sprite names or null */
   pet: string | null;
   hat: string | null;
+  /** cosmetic recolours (null = the original art) */
+  outfit: Tint | null;
+  outfitId: string | null;
+  paint: Tint | null;
+  paintId: string | null;
   /** seconds since the pose changed: drives the squash-and-stretch pop */
   poseT: number;
 }
@@ -52,6 +58,18 @@ const POSE_GEO: Record<Pose, { hull: [number, number]; tip: [number, number]; he
   cheer: { hull: [0, 0.962], tip: [0.998, 0.022], head: [0.37, 0.14] },
 };
 export type Pose = "idle" | "cast" | "reel" | "cheer";
+/** per-hat fit on the head: width as a share of the sprite, vertical sink (share of height), x nudge */
+const HAT_FIT: Record<string, { w: number; dy: number; dx?: number }> = {
+  hat_cap: { w: 0.34, dy: 0.01 },
+  hat_beanie: { w: 0.3, dy: 0.035 },
+  hat_rain: { w: 0.36, dy: 0.02 },
+  hat_sailor: { w: 0.33, dy: 0.015 },
+  hat_frog: { w: 0.31, dy: 0.035 },
+  hat_straw: { w: 0.38, dy: 0.025 },
+  hat_pirate: { w: 0.37, dy: 0.02 },
+  hat_crown: { w: 0.26, dy: 0.045 },
+};
+
 /** shapes that do not bend when swimming */
 const NO_BEND = new Set(["boot", "can", "duck", "puffer", "jelly", "crab"]);
 /** fish that light up the dark */
@@ -219,6 +237,7 @@ export class Renderer {
 
   draw(s: SceneState) {
     const c = this.ctx, v = this.view;
+    this.looks = { outfit: s.outfit, outfitId: s.outfitId, paint: s.paint, paintId: s.paintId };
     this.weatherNow = s.weather;
     c.save();
     c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
@@ -672,7 +691,17 @@ export class Renderer {
   }
 
   // ------------------------------------------------------------- boat, hook
-  private boatImg(pose: Pose) { return img(`kid_${pose}`); }
+  private boatImg(pose: Pose): HTMLImageElement | HTMLCanvasElement | null { return img(`kid_${pose}`); }
+  private looks: { outfit: Tint | null; outfitId: string | null; paint: Tint | null; paintId: string | null } = { outfit: null, outfitId: null, paint: null, paintId: null };
+  /** the kid+boat sprite with the chosen vest colour and boat paint applied */
+  private dressed(pose: Pose, im: HTMLImageElement | HTMLCanvasElement) {
+    const L = this.looks;
+    const parts: { part: "vest" | "stripe"; tint: Tint }[] = [];
+    if (L.outfit && L.outfitId !== "vest_blue") parts.push({ part: "vest", tint: L.outfit });
+    if (L.paint && L.paintId !== "paint_red") parts.push({ part: "stripe", tint: L.paint });
+    if (!parts.length) return im;
+    return recolor(`${pose}|${L.outfitId}|${L.paintId}`, im, parts);
+  }
 
   /**
    * Boat geometry for a pose. Every pose sprite is scaled so its hull has the same width and sits
@@ -711,19 +740,29 @@ export class Renderer {
     c.translate(b.cx, b.bottomY);
     c.rotate(b.tilt);
     c.scale(1 - pop * 0.6, 1 + pop);
-    if (b.im) c.drawImage(b.im, b.left, -b.h, b.w, b.h);
+    if (b.im) c.drawImage(this.dressed(b.p, b.im), b.left, -b.h, b.w, b.h);
     // cosmetics: a hat over the cap, a pet on the bow
     // no hat chosen = the classic red cap
-    const hat = img(s.hat ?? "hat_cap");
+    const hatId = s.hat ?? "hat_cap";
+    const hat = img(hatId);
     if (hat) {
-      const hw = b.w * 0.33, hh = (hw * hat.height) / hat.width;
-      c.drawImage(hat, b.left + b.g.head[0] * b.w - hw / 2, -b.h + b.g.head[1] * b.h - hh * 0.72, hw, hh);
+      // every hat has its own fit: width (share of the sprite) and how far it sinks onto the hair
+      const fit = HAT_FIT[hatId] ?? { w: 0.33, dy: 0 };
+      const hw = b.w * fit.w, hh = (hw * hat.height) / hat.width;
+      const tilt = b.p === "cast" ? -0.12 : b.p === "cheer" ? 0.06 : 0;
+      c.save();
+      c.translate(b.left + b.g.head[0] * b.w, -b.h + (b.g.head[1] + fit.dy) * b.h);
+      c.rotate(tilt);
+      c.drawImage(hat, -hw / 2 + (fit.dx ?? 0) * b.w, -hh * 0.72, hw, hh);
+      c.restore();
     }
     const pet = s.pet ? img(s.pet) : null;
     if (pet) {
-      const pw = 40, ph = (pw * pet.height) / pet.width;
+      // sits on the bow, clear of the fisher's hands
+      const pw = 46, ph = (pw * pet.height) / pet.width;
       const hop = Math.max(0, Math.sin(s.t * 2.2)) > 0.97 ? -6 : 0; // an occasional happy hop
-      c.drawImage(pet, b.left + b.g.hull[1] * b.w - pw - 6, -BOAT_W * 0.2 - ph + 4 + hop, pw, ph);
+      const bowX = b.left + b.g.hull[1] * b.w - pw * 0.72;
+      c.drawImage(pet, bowX, -BOAT_W * 0.2 - ph + 6 + hop, pw, ph);
     }
     c.restore();
     // ripples around the hull
