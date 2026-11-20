@@ -43,6 +43,12 @@ function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; 
     }
     return { targetX: null, axis: 0, hold: memo.hold };
   }
+  // a crab holds the hook: tap as fast as a human does (4-7 taps a second)
+  if (d.surprise?.kind === "crab" && d.surprise.state === "active") {
+    const tap = d.t >= memo.next;
+    if (tap) memo.next = d.t + 0.14 + (1 - skill) * 0.12 + rng() * 0.05;
+    return { targetX: null, axis: 0, hold: false, tap };
+  }
   // ice: blocked by a slab -> go around it; near the surface -> aim for the hole
   if (d.slabs.length || d.hole) {
     if (Math.abs(d.hookY - memo.lastY) < 0.5) memo.stuck += 1 / 30; else memo.stuck = 0;

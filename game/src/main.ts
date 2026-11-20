@@ -187,6 +187,18 @@ function handleFx(d: Dive) {
       toast(`🍾 ${t("map")} ${save.mapPieces + d.mapPieces}/3`); sfx.newFish(); renderer.burst(d.hookX, d.hookY, "#bdf3ff", 20);
     } else if (fx.kind === "chest") {
       toast(`💰 +${fx.coins}`); sfx.reveal("legendary"); renderer.burst(d.hookX, d.hookY, "#ffd84a", 40, 260); renderer.flashIt(0.6);
+    } else if (fx.kind === "boing") {
+      sfx.boing(); renderer.shakeIt(5);
+      renderer.floatText(d.hookX, d.hookY - 24, "BOING!", "#ffe066", 1.2);
+    } else if (fx.kind === "crabOff") {
+      sfx.buy(); renderer.burst(d.hookX, d.hookY, "#ff9a6a", 20, 200);
+      renderer.floatText(d.hookX, d.hookY - 24, `🦀💨 ${t("crab.off")}`, "#9bffb0", 1.2);
+    } else if (fx.kind === "snipped") {
+      sfx.snap(); renderer.shakeIt(8);
+      renderer.floatText(d.hookX, d.hookY - 24, fx.fish ? `✂️ ${fishName(fx.fish.def)}!` : "✂️", "#ff8a8a", 1.2);
+    } else if (fx.kind === "gull") {
+      sfx.coin(2); sfx.newFish();
+      toast(`🐦 ${t("gull.paid").replace("{x}", fishName(fx.fish.def))} 🪙+${fx.coins}`, 2600);
     } else if (fx.kind === "vent") {
       sfx.snap(); renderer.shakeIt(9);
       renderer.burst(fx.x, fx.y, "#ff8a3a", 34, 280);
@@ -204,7 +216,7 @@ function handleFx(d: Dive) {
   d.fx.length = 0;
 }
 
-const SURPRISE_ICON: Record<string, string> = { golden_school: "✨", shark: "🦈", bottle: "🍾", whirlpool: "🌀", chest: "💰", shadow: "👀" };
+const SURPRISE_ICON: Record<string, string> = { golden_school: "✨", shark: "🦈", bottle: "🍾", whirlpool: "🌀", chest: "💰", shadow: "👀", ink: "🐙", puffers: "🐡", crab: "🦀", gull: "🐦" };
 let pendingBonus = 0;
 let activeBait: BaitDef | null = null;
 /** the next cast is a treasure-map dive (costs 3 map pieces) */

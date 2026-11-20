@@ -81,7 +81,16 @@ export interface Surprise {
   t: number;
   /** shark: how far below the hook it is */
   gap: number;
+  /** crab: taps so far */
+  n?: number;
+  /** puffers: each puffer's x and its own breathing phase */
+  pts?: { x: number; y: number; ph: number }[];
+  /** seconds before the next bounce can happen */
+  cool?: number;
 }
+/** puffers are puffed up for this part of their breathing cycle */
+export const pufferInflated = (t: number, ph: number) => Math.sin(t * 2.2 + ph) > 0.2;
+export const CRAB_TAPS = 6, CRAB_TIME = 3.4;
 
 export type DivePhase = "descend" | "fight" | "snapped" | "ascend" | "done";
 
@@ -122,7 +131,7 @@ export interface Dive {
 
 export type DiveFx = { kind: "hook"; fish: LiveFish } | { kind: "turn" } | { kind: "fightWon"; fish: LiveFish } | { kind: "snap"; fish: LiveFish } | { kind: "surface" }
   | { kind: "surprise"; surprise: SurpriseKind } | { kind: "stolen"; fish: LiveFish } | { kind: "sharkGone" }
-  | { kind: "bottle" } | { kind: "chest"; coins: number } | { kind: "whirlpool"; extra: number } | { kind: "bonk" } | { kind: "vent"; fish: LiveFish | null; x: number; y: number };
+  | { kind: "bottle" } | { kind: "chest"; coins: number } | { kind: "whirlpool"; extra: number } | { kind: "bonk" } | { kind: "boing" } | { kind: "crabOff" } | { kind: "snipped"; fish: LiveFish | null } | { kind: "gull"; fish: LiveFish; coins: number } | { kind: "vent"; fish: LiveFish | null; x: number; y: number };
 
 export interface DiveInput {
   /** absolute target x for pointer control (world units), or null */
@@ -270,6 +279,16 @@ function setupSurprise(d: Dive, kind: SurpriseKind, ctx: DiveContext) {
     s.x = 50 + r() * (COLUMN - 100);
   } else if (kind === "whirlpool") {
     s.y = d.bottom * (0.4 + r() * 0.3);
+  } else if (kind === "ink") {
+    s.y = d.bottom * (0.35 + r() * 0.3);
+    s.x = 60 + r() * (COLUMN - 120);
+  } else if (kind === "puffers") {
+    // a row of puffers across the way down: puffed up they bounce the hook aside
+    s.y = d.bottom * (0.3 + r() * 0.3);
+    s.pts = [0, 1, 2, 3].map((i) => ({ x: COLUMN * (0.14 + i * 0.24) + (r() - 0.5) * 30, y: s.y + (i % 2 ? 26 : -18), ph: r() * 6 }));
+    s.cool = 0;
+  } else if (kind === "crab") {
+    s.y = d.bottom; s.n = 0;
   } else if (kind === "glimpse") {
     // a legendary drifts past just below the hook's reach: "one day that will be mine"
     s.y = d.bottom + 70;
@@ -286,7 +305,7 @@ function setupSurprise(d: Dive, kind: SurpriseKind, ctx: DiveContext) {
   }
 }
 
-function stepSurprise(d: Dive, dt: number) {
+function stepSurprise(d: Dive, dt: number, input: DiveInput) {
   const s = d.surprise;
   if (!s || s.state === "done") return;
   s.t += dt;
@@ -317,6 +336,62 @@ function stepSurprise(d: Dive, dt: number) {
         if (extra > 40) { fillFishBelow(d, d.bottom + 160, d.bottom + extra + 160); d.bottom += extra; }
         d.fx.push({ kind: "whirlpool", extra });
       }
+      break;
+    case "ink":
+      // an octopus squirts ink as the hook passes: the cloud clings to the hook for a few seconds
+      if (s.state === "waiting" && Math.abs(d.hookY - s.y) < 50) { s.state = "active"; s.t = 0; s.x = d.hookX; d.fx.push({ kind: "surprise", surprise: "ink" }); }
+      if (s.state === "active") {
+        s.x += (d.hookX - s.x) * Math.min(1, dt * 3); s.y += (d.hookY - s.y) * Math.min(1, dt * 3);
+        if (s.t > 3.6) s.state = "done";
+      }
+      break;
+    case "puffers": {
+      if (s.state === "waiting" && Math.abs(d.hookY - s.y) < 260) { s.state = "active"; d.fx.push({ kind: "surprise", surprise: "puffers" }); }
+      if (s.state !== "active") break;
+      s.cool = Math.max(0, (s.cool ?? 0) - dt);
+      for (const p of s.pts ?? []) {
+        if (s.cool > 0 || !pufferInflated(s.t, p.ph)) continue;
+        if (Math.hypot(p.x - d.hookX, p.y - d.hookY) < 40) {
+          d.hookX = Math.max(12, Math.min(COLUMN - 12, d.hookX + (d.hookX >= p.x ? 1 : -1) * 85));
+          s.cool = 0.6;
+          d.fx.push({ kind: "boing" });
+        }
+      }
+      if (Math.abs(d.hookY - s.y) > 420) s.state = "done";
+      break;
+    }
+    case "crab":
+      // at the bottom a crab grabs the hook: tap fast to shake it off, or it snips your last fish
+      if (s.state === "waiting" && d.phase === "ascend" && d.hookY >= d.bottom - 30) {
+        s.state = "active"; s.t = 0; s.n = 0; s.y = d.hookY;
+        d.fx.push({ kind: "surprise", surprise: "crab" });
+      }
+      if (s.state === "active") {
+        d.hookY = s.y; // held
+        s.x = d.hookX;
+        if (input.tap) s.n = (s.n ?? 0) + 1;
+        if ((s.n ?? 0) >= CRAB_TAPS) { s.state = "done"; d.fx.push({ kind: "crabOff" }); }
+        else if (s.t > CRAB_TIME) {
+          s.state = "done";
+          const f = d.hooked.pop() ?? null;
+          if (f) d.fish = d.fish.filter((x) => x !== f);
+          d.fx.push({ kind: "snipped", fish: f });
+        }
+      }
+      break;
+    case "gull":
+      // near the surface a seagull swoops for any junk on the line, and pays for it
+      if (s.state === "waiting" && d.phase === "ascend" && d.hookY < 170) {
+        const junk = [...d.hooked].reverse().find((f) => f.def.junk);
+        if (!junk) { s.state = "done"; break; }
+        s.state = "active"; s.t = 0; s.x = d.hookX; s.y = d.hookY;
+        d.hooked = d.hooked.filter((f) => f !== junk);
+        d.fish = d.fish.filter((f) => f !== junk);
+        const coins = Math.round(depthValue(d.zone, d.bottom) * 2.5);
+        d.bonusCoins += coins;
+        d.fx.push({ kind: "gull", fish: junk, coins });
+      }
+      if (s.state === "active" && s.t > 1.6) s.state = "done";
       break;
     case "shark":
       // appears below the hook on the way up, closes in, steals the last fish unless you dodge
@@ -449,7 +524,7 @@ export function stepDive(d: Dive, dt: number, input: DiveInput, ctx: DiveContext
   if (d.phase === "done" || d.phase === "snapped") return;
   d.t += dt;
   pendingFillCtx = ctx;
-  if (d.phase !== "fight") stepSurprise(d, dt);
+  if (d.phase !== "fight") stepSurprise(d, dt, input);
   // fish keep swimming during a fight, it looks dead otherwise
   for (const f of d.fish) {
     if (f.hooked || f === d.fight?.fish) continue;

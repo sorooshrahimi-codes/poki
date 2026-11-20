@@ -1,5 +1,5 @@
 import { EYES } from "../data/eyes.ts";
-import { COLUMN, FIGHT_GRACE, ICE_HOLE, VENT_ERUPT, VENT_WARN, ventCycle, type Dive, type LiveFish } from "../core/dive.ts";
+import { COLUMN, CRAB_TAPS, CRAB_TIME, FIGHT_GRACE, ICE_HOLE, pufferInflated, VENT_ERUPT, VENT_WARN, ventCycle, type Dive, type LiveFish } from "../core/dive.ts";
 import type { ActiveEvent } from "../core/events.ts";
 import type { WeatherId } from "../core/weather.ts";
 import { sfx } from "../platform/audio.ts";
@@ -294,6 +294,7 @@ export class Renderer {
     if (s.dive) this.drawSurprise(c, s.dive, s.t);
     this.drawBoat(c, s);
     if (s.dive && s.mode === "dive") this.drawHook(c, s.dive, s.t, s.pose);
+    if (s.dive) this.drawInk(c, s.dive, s.t);
     this.drawParticles(c);
     this.drawFloats(c);
     this.drawForeground(c, s, top, bottom, left, right);
@@ -833,6 +834,30 @@ export class Renderer {
     c.restore();
   }
 
+  /** octopus ink: drawn over the fish and the hook, it really hides the water for a moment */
+  private drawInk(c: Ctx, d: Dive, t: number) {
+    const sp = d.surprise;
+    if (!sp || sp.kind !== "ink" || sp.state !== "active") return;
+    {
+      // the octopus shoots away up and out, leaving a cloud of ink around the hook
+      const oc = img("octopus");
+      if (oc && sp.t < 1.4) {
+        const p = sp.t / 1.4, w = 70;
+        c.save(); c.globalAlpha = 1 - p * 0.6;
+        c.translate(sp.x + sp.dir * p * 160, sp.y - 30 - p * 140); c.rotate(sp.dir * 0.4);
+        c.drawImage(oc, -w / 2, -w / 2, w, (w * oc.height) / oc.width); c.restore();
+      }
+      const fade = sp.t < 0.4 ? sp.t / 0.4 : sp.t > 2.8 ? Math.max(0, (3.6 - sp.t) / 0.8) : 1;
+      for (let i = 0; i < 12; i++) {
+        const a = i * 0.7 + t * 0.6, r = 70 + (i % 3) * 30 + Math.sin(t * 2 + i) * 8;
+        const x = sp.x + Math.cos(a) * (30 + i * 6), y = sp.y + Math.sin(a * 1.3) * (24 + i * 5);
+        const g = c.createRadialGradient(x, y, 4, x, y, r);
+        g.addColorStop(0, `rgba(12,4,24,${0.97 * fade})`); g.addColorStop(0.6, `rgba(40,16,70,${0.8 * fade})`); g.addColorStop(1, "rgba(60,30,100,0)");
+        c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill();
+      }
+    }
+  }
+
   private drawSurprise(c: Ctx, d: Dive, t: number) {
     const sp = d.surprise;
     if (!sp) return;
@@ -863,6 +888,43 @@ export class Renderer {
       c.drawImage(im, -w / 2, -h / 2, w, h);
       c.restore();
       if (Math.random() < 0.08) this.parts.push({ x: sp.x + (Math.random() - 0.5) * w, y: y - h / 2, vx: 0, vy: -20, life: 0, max: 0.8, color: "#fff6c0", size: 2, kind: "star" });
+    }
+    if (sp.kind === "puffers" && sp.state !== "done" && sp.pts) {
+      const im = img(d.zone === "volcano" ? "obsidian_puffer" : "puffer");
+      for (const p of sp.pts) {
+        const puffed = pufferInflated(sp.t, p.ph);
+        // ease the size so the puff-up is a squishy pop, not a jump
+        const k = (Math.sin(sp.t * 2.2 + p.ph) + 1) / 2, sc = 0.55 + (puffed ? 0.55 + 0.1 * Math.sin(t * 9) : k * 0.35);
+        const w = 64 * sc;
+        if (im) { c.save(); c.translate(p.x, p.y + Math.sin(t * 2 + p.ph) * 4); c.scale(p.x > COLUMN / 2 ? -1 : 1, 1); c.drawImage(im, -w / 2, -w / 2, w, (w * im.height) / im.width); c.restore(); }
+        if (!puffed && k > 0.45) { c.font = "16px system-ui"; c.textAlign = "center"; c.fillText("💢", p.x + 20, p.y - 22); }
+      }
+    }
+    if (sp.kind === "crab" && sp.state === "active") {
+      // the crab clamps the hook and shakes it; a ring shows how many taps are left
+      const im = img(d.zone === "volcano" ? "magma_crab" : "snow_crab");
+      const shake = Math.sin(t * 40) * 3;
+      if (im) { const w = 74; c.drawImage(im, sp.x - w / 2 + shake, sp.y - 6, w, (w * im.height) / im.width); }
+      const left = Math.max(0, 1 - sp.t / CRAB_TIME), done = (sp.n ?? 0) / CRAB_TAPS;
+      c.lineWidth = 7; c.lineCap = "round";
+      c.strokeStyle = "rgba(13,30,69,0.6)"; c.beginPath(); c.arc(sp.x, sp.y - 46, 26, 0, Math.PI * 2); c.stroke();
+      c.strokeStyle = left > 0.35 ? "#7cf29a" : "#ff6a6a";
+      c.beginPath(); c.arc(sp.x, sp.y - 46, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left); c.stroke();
+      c.font = "bold 20px Fredoka, system-ui"; c.textAlign = "center"; c.textBaseline = "middle";
+      c.fillStyle = "#fff"; c.strokeStyle = "#0d1e45"; c.lineWidth = 4;
+      const label = `👆${Math.max(0, CRAB_TAPS - (sp.n ?? 0))}`;
+      c.save(); c.translate(sp.x, sp.y - 46); c.scale(1 + done * 0.2 + Math.abs(Math.sin(t * 10)) * 0.08, 1 + done * 0.2 + Math.abs(Math.sin(t * 10)) * 0.08);
+      c.strokeText(label, 0, 1); c.fillText(label, 0, 1); c.restore();
+    }
+    if (sp.kind === "gull" && sp.state === "active") {
+      // swoops down from the sky, grabs, and flaps off to the side
+      const im = img("s_gull");
+      if (im) {
+        const p = Math.min(1, sp.t / 1.6), dip = p < 0.45 ? p / 0.45 : 1 - (p - 0.45) / 0.55;
+        const x = sp.x - 160 + p * 320, y = -140 + dip * (sp.y + 120), w = 90;
+        c.save(); c.translate(x, y); c.scale(1, 1 + Math.sin(t * 18) * 0.12);
+        c.drawImage(im, -w / 2, -w / 2, w, (w * im.height) / im.width); c.restore();
+      }
     }
     if (sp.kind === "shark" && sp.state === "active") {
       const im = img("s_shark");

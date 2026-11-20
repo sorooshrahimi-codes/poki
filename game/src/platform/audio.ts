@@ -124,6 +124,8 @@ export const sfx = {
   fightTick(inZone: boolean) { if (!ok()) return; noise(now(), 0.025, inZone ? 0.09 : 0.05, inZone ? 4200 : 1500, 5); },
   buy() { if (!ok()) return; const t = now(); [0, 4, 7, 12].forEach((n, i) => mallet(midi(76 + n), t + i * 0.06, 0.25, sfxBus!, 0.4)); },
   event() { if (!ok()) return; const t = now(); [0, 4, 7, 11, 14, 19].forEach((n, i) => bell(midi(76 + n), t + i * 0.1, 0.12, 1.2)); },
+  /** a rubbery bounce: pitch dives then springs back */
+  boing() { if (!ok()) return; const t = now(); bloop(220, 700, t, 0.3, 0.12); bloop(700, 330, t + 0.1, 0.2, 0.18); },
   bonk() { if (!ok()) return; const t = now(); bell(midi(91), t, 0.12, 0.35); bloop(600, 300, t, 0.15, 0.08); },
   thunder() {
     if (!ok()) return; const t = now();
