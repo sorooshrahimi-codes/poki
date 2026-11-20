@@ -7,6 +7,7 @@ import { FISH, FISH_BY_ID } from "./data/fish.ts";
 import { COSMETICS, TRY_DIVES, aquariumEarned, aquariumFish, aquariumRate, milestoneMet, type CosmeticDef } from "./data/cosmetics.ts";
 import { MERGE_COUNT, ORDER_SLOTS, canFill, fill, keep, matching, merge, newOrder, tankPower, type Order } from "./core/tank.ts";
 import { MISSIONS } from "./data/missions.ts";
+import { FEATURES } from "./features.ts";
 import { HARBOR, bestCatches, harborBuilt, harborNext, statueFish, tankFish, type HarborId } from "./data/harbor.ts";
 import type { HarborView } from "./render/harbor.ts";
 import { CREW, TRIPS, WHEEL, WHEEL_AD_SPINS, WHEEL_FREE_MS, spinWheel, tripCoins, wheelCoins, type WheelPrize } from "./core/extras.ts";
@@ -362,7 +363,7 @@ function showReveal(list: Catch[]) {
     card.appendChild(fishThumb(c.fish, c.mut, 70, 40));
     card.insertAdjacentHTML("beforeend", (special ? `<div class="cn">${fishName(def)}</div>` : "") + `<div class="cv">🪙${value}</div>` +
       (g.length > 1 ? `<div class="cx">×${g.length}</div>` : "") + (c.mut ? `<div class="cm">${MUT_ICON[c.mut]}</div>` : "") +
-      (isNew ? `<div class="newb">${t("new")}</div>` : isRecord ? `<div class="newb rec">🏆</div>` : "") + (wanted && !def.junk ? `<div class="wantb">📋</div>` : "") + `<div class="kp"></div>`);
+      (isNew ? `<div class="newb">${t("new")}</div>` : isRecord ? `<div class="newb rec">🏆</div>` : "") + (wanted && !def.junk && FEATURES.orders ? `<div class="wantb">📋</div>` : "") + `<div class="kp"></div>`);
     if (!def.junk) {
       // tap keeps one more of this fish; when all are kept, a tap releases them
       const idxs = g.map((x) => list.indexOf(x));
@@ -837,7 +838,7 @@ const MERGED: Record<string, string> = { ordersBtn: "aquaBtn", wardBtn: "shopBtn
 interface Tab { panel: string; icon: string; open: () => void; avail: () => boolean; badge?: () => string }
 const TAB_GROUPS: Tab[][] = [
   [{ panel: "aquarium", icon: "🐠", open: () => openAquarium(false), avail: () => true },
-   { panel: "orders", icon: "📋", open: () => { renderOrders(); $("orders").classList.remove("hidden"); }, avail: () => save.dives >= 8, badge: () => { const n = fillableOrders(); return n ? String(n) : ""; } }],
+   { panel: "orders", icon: "📋", open: () => { renderOrders(); $("orders").classList.remove("hidden"); }, avail: () => FEATURES.orders && save.dives >= 8, badge: () => { const n = fillableOrders(); return n ? String(n) : ""; } }],
   [{ panel: "shop", icon: "🛒", open: () => { renderShop(); $("shop").classList.remove("hidden"); }, avail: () => true },
    { panel: "wardrobe", icon: "🎩", open: () => { renderWardrobe(); $("wardrobe").classList.remove("hidden"); }, avail: () => save.dives >= 10 || save.prog.level >= 3 }],
   [{ panel: "wheel", icon: "🎡", open: () => openWheel(), avail: () => true, badge: () => (save.wheel === undefined || Date.now() >= (save.wheel?.next ?? 0) ? "!" : "") },
@@ -1492,8 +1493,8 @@ function updateUi() {
     ["aquaBtn", save.dives >= 8 || Object.keys(save.tank).length > 0],
     ["ordersBtn", save.dives >= 8],
     ["wardBtn", save.dives >= 10 || save.prog.level >= 3],
-    ["competeBtn", save.prog.level >= 3 || save.dives >= 14],
-    ["wheelBtn", save.dives >= 3],
+    ["competeBtn", FEATURES.compete && (save.prog.level >= 3 || save.dives >= 14)],
+    ["wheelBtn", FEATURES.gifts && save.dives >= 3],
     ["crewBtn", save.dives >= 12],
   ];
   for (const [id, open] of gates) {
@@ -1510,8 +1511,8 @@ function updateUi() {
   const fo = fillableOrders();
   $("ordersBadge").textContent = fo ? String(fo) : "";
   $("ordersBadge").classList.toggle("hidden", !fo);
-  $("aquaBadge").textContent = fo ? String(fo) : "";
-  $("aquaBadge").classList.toggle("hidden", !fo);
+  $("aquaBadge").textContent = fo && FEATURES.orders ? String(fo) : "";
+  $("aquaBadge").classList.toggle("hidden", !fo || !FEATURES.orders);
   const mb = $<HTMLButtonElement>("mapBtn");
   mb.classList.toggle("hidden", save.mapPieces < 1);
   mb.disabled = false;
