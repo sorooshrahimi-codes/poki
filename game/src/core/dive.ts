@@ -1,6 +1,7 @@
 import { FISH } from "../data/fish.ts";
 import { FIGHT, MUTATIONS, RARITY_WEIGHT, ZONES } from "../data/world.ts";
 import { ascendSpeed, capacity, descendSpeed, luckMult, maxDepth } from "./economy.ts";
+import type { SurpriseKind } from "./director.ts";
 import type { ActiveEvent } from "./events.ts";
 import { pickWeighted, type Rng } from "./rng.ts";
 import type { Catch, FishDef, MutationId, UpgradeLevels, ZoneId } from "./types.ts";
@@ -42,6 +43,19 @@ export interface Fight {
   retried: boolean;
 }
 
+/** an unexpected event inside a dive (picked by the director, played out by these rules) */
+export interface Surprise {
+  kind: SurpriseKind;
+  x: number;
+  y: number;
+  dir: 1 | -1;
+  /** waiting -> active -> done */
+  state: "waiting" | "active" | "done";
+  t: number;
+  /** shark: how far below the hook it is */
+  gap: number;
+}
+
 export type DivePhase = "descend" | "fight" | "snapped" | "ascend" | "done";
 
 export interface Dive {
@@ -61,9 +75,15 @@ export interface Dive {
   escaped: LiveFish | null;
   /** events the renderer turns into sound and particles; cleared by the caller */
   fx: DiveFx[];
+  surprise: Surprise | null;
+  /** coins found during the dive (chests) and map pieces (bottles) */
+  bonusCoins: number;
+  mapPieces: number;
 }
 
-export type DiveFx = { kind: "hook"; fish: LiveFish } | { kind: "turn" } | { kind: "fightWon"; fish: LiveFish } | { kind: "snap"; fish: LiveFish } | { kind: "surface" };
+export type DiveFx = { kind: "hook"; fish: LiveFish } | { kind: "turn" } | { kind: "fightWon"; fish: LiveFish } | { kind: "snap"; fish: LiveFish } | { kind: "surface" }
+  | { kind: "surprise"; surprise: SurpriseKind } | { kind: "stolen"; fish: LiveFish } | { kind: "sharkGone" }
+  | { kind: "bottle" } | { kind: "chest"; coins: number } | { kind: "whirlpool"; extra: number };
 
 export interface DiveInput {
   /** absolute target x for pointer control (world units), or null */
@@ -115,19 +135,122 @@ export function spawnFish(zone: ZoneId, y: number, ctx: DiveContext): LiveFish |
   };
 }
 
-export function startDive(zone: ZoneId, ctx: DiveContext): Dive {
+function fillFish(zone: ZoneId, from: number, to: number, ctx: DiveContext, into: LiveFish[]) {
+  for (let y = from; y < to; y += 34 + ctx.rng() * 30) {
+    const f = spawnFish(zone, y, ctx);
+    if (f) into.push(f);
+  }
+}
+
+export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind | null = null): Dive {
   const z = ZONES[zone];
   const bottom = Math.min(maxDepth(ctx.upgrades), z.floor);
   const fish: LiveFish[] = [];
   // fish all the way down, a little past the hook's reach so the deep end never looks empty
-  for (let y = 110; y < bottom + 160; y += 34 + ctx.rng() * 30) {
-    const f = spawnFish(zone, y, ctx);
-    if (f) fish.push(f);
-  }
-  return {
+  fillFish(zone, 110, bottom + 160, ctx, fish);
+  const d: Dive = {
     zone, phase: "descend", resume: "descend", hookX: COLUMN / 2, hookY: 0, bottom,
     capacity: capacity(ctx.upgrades), fish, hooked: [], fight: null, t: 0, escaped: null, fx: [],
+    surprise: null, bonusCoins: 0, mapPieces: 0,
   };
+  if (surprise) setupSurprise(d, surprise, ctx);
+  return d;
+}
+
+/** typical coin value of a fish at this depth: chests scale with how deep you are */
+function depthValue(zone: ZoneId, y: number) {
+  const near = FISH.filter((f) => f.zone === zone && !f.junk && f.rarity === "rare" && y >= f.depth[0] - 200 && y <= f.depth[1]);
+  return near.length ? near.reduce((a, f) => a + f.value, 0) / near.length : 30;
+}
+
+function setupSurprise(d: Dive, kind: SurpriseKind, ctx: DiveContext) {
+  const r = ctx.rng;
+  const s: Surprise = { kind, x: COLUMN / 2, y: 0, dir: r() < 0.5 ? 1 : -1, state: "waiting", t: 0, gap: 0 };
+  d.surprise = s;
+  if (kind === "golden_school") {
+    // a line of golden fish crossing the hook's path somewhere in the middle of the dive
+    s.y = d.bottom * (0.35 + r() * 0.35);
+    const pool = FISH.filter((f) => f.zone === d.zone && f.rarity === "common" && !f.junk && s.y >= f.depth[0] - 100 && s.y <= f.depth[1] + 100);
+    const def = pool[Math.floor(r() * pool.length)] ?? FISH.find((f) => f.zone === d.zone && !f.junk)!;
+    for (let i = 0; i < 7; i++) {
+      d.fish.push({ uid: uidCounter++, def, mut: "gold", x: (s.dir > 0 ? -60 : COLUMN + 60) - s.dir * i * 50, y: s.y + Math.sin(i * 1.7) * 26,
+        dir: s.dir, speed: 70, size: def.size, bob: i, hooked: false });
+    }
+  } else if (kind === "bottle" || kind === "chest") {
+    s.y = kind === "chest" ? d.bottom - 25 : d.bottom * (0.3 + r() * 0.5);
+    s.x = 50 + r() * (COLUMN - 100);
+  } else if (kind === "whirlpool") {
+    s.y = d.bottom * (0.4 + r() * 0.3);
+  } else if (kind === "shadow") {
+    // a huge shape drifts past far behind; this dive the zone's secret creature is in the water
+    s.y = d.bottom * (0.5 + r() * 0.3);
+    s.x = s.dir > 0 ? -200 : COLUMN + 200;
+    const secret = FISH.find((f) => f.zone === d.zone && f.rarity === "secret");
+    if (secret) {
+      const y = Math.min(d.bottom - 20, Math.max(secret.depth[0], d.bottom * 0.7));
+      d.fish.push({ uid: uidCounter++, def: secret, mut: null, x: r() * COLUMN, y, dir: s.dir, speed: secret.speed * 0.8, size: secret.size, bob: 0, hooked: false });
+    }
+  }
+}
+
+function stepSurprise(d: Dive, dt: number) {
+  const s = d.surprise;
+  if (!s || s.state === "done") return;
+  s.t += dt;
+  const touch = (r: number) => Math.hypot(s.x - d.hookX, s.y - d.hookY) < r;
+  switch (s.kind) {
+    case "golden_school":
+    case "shadow":
+      if (s.state === "waiting" && Math.abs(d.hookY - s.y) < 260) { s.state = "active"; d.fx.push({ kind: "surprise", surprise: s.kind }); }
+      if (s.kind === "shadow") s.x += s.dir * 60 * dt;
+      break;
+    case "bottle":
+    case "chest":
+      if (s.state === "waiting" && Math.abs(d.hookY - s.y) < 220) { s.state = "active"; d.fx.push({ kind: "surprise", surprise: s.kind }); }
+      if (s.state === "active" && touch(30)) {
+        s.state = "done";
+        if (s.kind === "bottle") { d.mapPieces++; d.bonusCoins += Math.round(depthValue(d.zone, s.y) * 1.5); d.fx.push({ kind: "bottle" }); }
+        else { const coins = Math.round(depthValue(d.zone, s.y) * 6); d.bonusCoins += coins; d.fx.push({ kind: "chest", coins }); }
+      }
+      break;
+    case "whirlpool":
+      if (s.state === "waiting" && d.phase === "descend" && d.hookY >= s.y - 20) {
+        s.state = "done";
+        // the current drags the hook deeper than the line can go: a peek at what lies below
+        const floor = ZONES[d.zone].floor;
+        const extra = Math.min(floor - d.bottom, Math.round(d.bottom * 0.35 + 120));
+        if (extra > 40) { fillFishBelow(d, d.bottom + 160, d.bottom + extra + 160); d.bottom += extra; }
+        d.fx.push({ kind: "whirlpool", extra });
+      }
+      break;
+    case "shark":
+      // appears below the hook on the way up, closes in, steals the last fish unless you dodge
+      if (s.state === "waiting" && d.phase === "ascend" && d.hookY > 90) {
+        s.state = "active"; s.gap = 170; s.x = d.hookX + s.dir * 120; s.t = 0;
+        d.fx.push({ kind: "surprise", surprise: "shark" });
+      }
+      if (s.state === "active") {
+        s.gap = Math.max(0, s.gap - 55 * dt);
+        s.y = d.hookY + 14 + s.gap;
+        const dx = d.hookX - s.x;
+        s.x += Math.sign(dx) * Math.min(Math.abs(dx), 150 * dt);
+        s.dir = dx >= 0 ? 1 : -1;
+        if (s.gap < 30 && Math.abs(dx) < 34 && d.hooked.length > 0) {
+          const f = d.hooked.pop()!;
+          s.state = "done";
+          d.fx.push({ kind: "stolen", fish: f });
+        } else if (s.t > 7 || d.phase !== "ascend" || d.hookY < 60) {
+          s.state = "done";
+          d.fx.push({ kind: "sharkGone" });
+        }
+      }
+      break;
+  }
+}
+
+let pendingFillCtx: DiveContext | null = null;
+function fillFishBelow(d: Dive, from: number, to: number) {
+  if (pendingFillCtx) fillFish(d.zone, from, to, pendingFillCtx, d.fish);
 }
 
 export function catchValue(f: LiveFish): number {
@@ -189,6 +312,8 @@ export function resolveSnap(d: Dive, retry: boolean) {
 export function stepDive(d: Dive, dt: number, input: DiveInput, ctx: DiveContext) {
   if (d.phase === "done" || d.phase === "snapped") return;
   d.t += dt;
+  pendingFillCtx = ctx;
+  if (d.phase !== "fight") stepSurprise(d, dt);
   // fish keep swimming during a fight, it looks dead otherwise
   for (const f of d.fish) {
     if (f.hooked || f === d.fight?.fish) continue;

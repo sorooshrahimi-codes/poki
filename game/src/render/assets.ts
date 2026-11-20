@@ -17,8 +17,8 @@ export const propNames = (z: ZoneId) => PROPS[z];
 export const BG_WATERLINE: Record<ZoneId, number> = { lake: 0.245, ocean: 0.228 };
 
 const NAMES = [
-  ...FISH.map((f) => f.id), "boat", "floor_lake", "floor_ocean", "bg_lake", "bg_ocean",
-  ...PROPS.lake, ...PROPS.ocean, "i_coin", "i_line", "i_hooks", "i_luck",
+  ...FISH.map((f) => f.id), "boat", "boat_cast", "boat_reel", "boat_cheer", "floor_lake", "floor_ocean", "bg_lake", "bg_ocean",
+  ...PROPS.lake, ...PROPS.ocean, "i_coin", "i_line", "i_hooks", "i_luck", "s_shark", "s_bottle", "s_chest", "s_gull",
 ];
 
 const raw = new Map<string, HTMLImageElement>();

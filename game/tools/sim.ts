@@ -3,7 +3,8 @@
 // AI-made content: run it after adding fish and it fails (exit 1) when pacing leaves the targets.
 //   node tools/sim.ts [sessions=200] [minutes=15]
 import { catchValue, COLUMN, resolveSnap, startDive, stepDive, type Dive, type DiveContext, type DiveInput } from "../src/core/dive.ts";
-import { UPGRADE_ORDER, upgradeCost } from "../src/core/economy.ts";
+import { newDirector, noteDive, noteSurprise, pickSurprise } from "../src/core/director.ts";
+import { maxDepth, UPGRADE_ORDER, upgradeCost, capacity as capOf } from "../src/core/economy.ts";
 import { makeRng } from "../src/core/rng.ts";
 import { newSave } from "../src/core/save.ts";
 import type { Rarity } from "../src/core/types.ts";
@@ -52,7 +53,7 @@ function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; 
   return { targetX: best, axis: 0, hold: false };
 }
 
-interface Result { firstUpgrade: number; ocean: number; coins: number[]; rarities: Record<Rarity, number>; fights: number; won: number; dives: number; legFights: number; firstLegendary: number }
+interface Result { surprises: number; firstSurprise: number; stolen: number; firstUpgrade: number; ocean: number; coins: number[]; rarities: Record<Rarity, number>; fights: number; won: number; dives: number; legFights: number; firstLegendary: number }
 
 function session(seed: number): Result {
   const rng = makeRng(seed);
@@ -61,10 +62,13 @@ function session(seed: number): Result {
   let t = 0, firstUpgrade = -1, ocean = -1;
   const coins: number[] = [];
   const rarities = Object.fromEntries(RARITY_ORDER.map((r) => [r, 0])) as Record<Rarity, number>;
-  let fights = 0, won = 0, dives = 0, earned = 0, legFights = 0, firstLegendary = -1;
+  let fights = 0, won = 0, dives = 0, earned = 0, legFights = 0, firstLegendary = -1, surprises = 0, firstSurprise = -1, stolen = 0;
+  const director = newDirector();
   while (t < MINUTES * 60) {
     const ctx: DiveContext = { upgrades: s.upgrades, event: null, night: false, rng };
-    const d = startDive(s.zone, ctx);
+    const kind = pickSurprise(director, t, { zone: s.zone, bottom: Math.min(maxDepth(s.upgrades), ZONES[s.zone].floor), floor: ZONES[s.zone].floor, capacity: capOf(s.upgrades) }, rng);
+    if (kind) { noteSurprise(director, kind, t); surprises++; if (firstSurprise < 0) firstSurprise = t; }
+    const d = startDive(s.zone, ctx, kind);
     const memo = { x: d.hookX, next: 0, hold: false };
     let fighting = false;
     while (d.phase !== "done" && d.t < 120) {
@@ -75,12 +79,14 @@ function session(seed: number): Result {
       }
       if (d.phase !== "fight") fighting = false;
       stepDive(d, DT, botInput(d, rng, skill, memo), ctx);
-      for (const fx of d.fx) if (fx.kind === "fightWon") won++;
+      for (const fx of d.fx) { if (fx.kind === "fightWon") won++; if (fx.kind === "stolen") stolen++; }
       d.fx.length = 0;
     }
     dives++;
     t += d.t + OVERHEAD;
     for (const f of d.hooked) { const v = catchValue(f); s.coins += v; earned += v; rarities[f.def.rarity]++; }
+    s.coins += d.bonusCoins; earned += d.bonusCoins;
+    noteDive(director, !!kind || d.hooked.some((f) => f.mut || f.def.rarity !== "common"));
     // spending: unlock the ocean as soon as it is affordable, otherwise the cheapest upgrade,
     // but stop buying small upgrades once the ticket is close
     const oceanLocked = !s.zones.includes("ocean");
@@ -96,7 +102,7 @@ function session(seed: number): Result {
     }
     while (coins.length < Math.floor(t / 60)) coins.push(earned);
   }
-  return { firstUpgrade, ocean, coins, rarities, fights, won, dives, legFights, firstLegendary };
+  return { firstUpgrade, ocean, coins, rarities, fights, won, dives, legFights, firstLegendary, surprises, firstSurprise, stolen };
 }
 
 const median = (a: number[]) => { const b = a.filter((x) => x >= 0).sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : NaN; };
@@ -117,6 +123,9 @@ const fights = results.reduce((a, r) => a + r.fights, 0), won = results.reduce((
 console.log(`fights per session ${(fights / SESSIONS).toFixed(1)}, won ${(fights ? (won / fights) * 100 : 0).toFixed(0)}% (target 45-75%)`);
 
 console.log(`legendary fights per session ${(results.reduce((a, r) => a + r.legFights, 0) / SESSIONS).toFixed(1)}, first one median ${fmt(median(results.map((r) => r.firstLegendary)))}, ${(results.filter((r) => r.firstLegendary >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions (target: most players meet one in the first session)`);
+
+const sur = results.reduce((a, r) => a + r.surprises, 0) / SESSIONS;
+console.log(`surprises per session ${sur.toFixed(1)} (one every ${((MINUTES * 60) / sur).toFixed(0)} s), first at ${fmt(median(results.map((r) => r.firstSurprise)))}, sharks stole ${(results.reduce((a, r) => a + r.stolen, 0) / SESSIONS).toFixed(1)} fish`);
 
 const fails: string[] = [];
 if (!(first >= 25 && first <= 75)) fails.push("first upgrade out of range");

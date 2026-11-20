@@ -20,6 +20,9 @@ export interface SceneState {
   event: ActiveEvent | null;
   t: number;
   hint: boolean;
+  pose: Pose;
+  /** seconds since the pose changed: drives the squash-and-stretch pop */
+  poseT: number;
 }
 
 interface Prop { name: string; x: number; y: number; h: number; flip: boolean; layer: 0 | 1 }
@@ -30,8 +33,16 @@ interface Ambient { name: string; x: number; y: number; z: number; dir: 1 | -1; 
 const SPRITE_SCALE = 1.35;
 const BOAT_W = 150;
 /** rod tip and waterline inside the boat sprite, as fractions of its size */
-const ROD_TIP = { x: 0.975, y: 0.02 };
-const BOAT_WATERLINE = 0.8;
+/** per pose sprite: hull extent and rod tip, as fractions of the sprite (measured on the art) */
+const POSE_GEO: Record<Pose, { hull: [number, number]; tip: [number, number] }> = {
+  idle: { hull: [0, 0.917], tip: [0.998, 0.024] },
+  cast: { hull: [0.155, 0.986], tip: [0, 0.029] },
+  reel: { hull: [0.002, 0.857], tip: [0.971, 0.245] },
+  cheer: { hull: [0, 0.988], tip: [0.967, 0.019] },
+};
+export type Pose = "idle" | "cast" | "reel" | "cheer";
+/** shapes that do not bend when swimming */
+const NO_BEND = new Set(["boot", "can", "duck", "puffer", "jelly"]);
 /** fish that light up the dark */
 const LUMINOUS = new Set(["glow_eel", "angler", "jelly", "moon_pike", "star_whale", "grand_marlin"]);
 
@@ -56,6 +67,8 @@ export class Renderer {
   /** visual facing per fish, eased so turning looks like a 2.5D card flip */
   private facing = new WeakMap<LiveFish, number>();
   private flash = 0;
+  private zoom = 0;
+  private zoomAt = { x: 0, y: 0 };
   private ambient = new Map<ZoneId, Ambient[]>();
 
   constructor(canvas: HTMLCanvasElement) {
@@ -98,6 +111,8 @@ export class Renderer {
   }
   shakeIt(amount: number) { this.shake = Math.max(this.shake, amount); }
   flashIt(k = 1) { this.flash = Math.max(this.flash, k); }
+  /** quick camera punch-in on a world point (rare catch, boss landed) */
+  punch(x: number, y: number, k = 0.12) { this.zoom = Math.max(this.zoom, k); this.zoomAt = { x, y }; }
 
   private propsFor(zone: ZoneId): Prop[] {
     let list = this.props.get(zone);
@@ -167,6 +182,7 @@ export class Renderer {
     if (this.parts.length > 400) this.parts.splice(0, this.parts.length - 400);
     this.shake = Math.max(0, this.shake - dt * 30);
     this.flash = Math.max(0, this.flash - dt * 2.5);
+    this.zoom = Math.max(0, this.zoom - dt * 0.35);
   }
 
   draw(s: SceneState) {
@@ -175,6 +191,10 @@ export class Renderer {
     c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     c.clearRect(0, 0, v.w, v.h);
     const sx = (Math.random() - 0.5) * this.shake, sy = (Math.random() - 0.5) * this.shake;
+    if (this.zoom > 0) {
+      const zx = v.ox + this.zoomAt.x * v.scale, zy = (this.zoomAt.y - this.camY) * v.scale, z = 1 + this.zoom;
+      c.translate(zx, zy); c.scale(z, z); c.translate(-zx, -zy);
+    }
     c.translate(v.ox + sx, sy);
     c.scale(v.scale, v.scale);
     c.translate(0, -this.camY);
@@ -190,9 +210,11 @@ export class Renderer {
     this.drawProps(c, s, 1, top, bottom, left, right);
     this.drawEdges(c, top, bottom, left, right);
     this.drawMarkers(c, top, bottom);
+    if (s.dive) this.drawShadow(c, s.dive, s.t);
     if (s.dive) this.drawDiveFish(c, s.dive, s.t, top, bottom);
+    if (s.dive) this.drawSurprise(c, s.dive, s.t);
     this.drawBoat(c, s);
-    if (s.dive && s.mode === "dive") this.drawHook(c, s.dive, s.t);
+    if (s.dive && s.mode === "dive") this.drawHook(c, s.dive, s.t, s.pose);
     this.drawParticles(c);
     c.restore();
     this.drawDarkness(s);
@@ -405,14 +427,30 @@ export class Renderer {
   }
 
   // ------------------------------------------------------------- fish
-  private drawFishSprite(c: Ctx, def: FishDef, mut: MutationId | null, size: number, t: number, glint: boolean) {
+  /**
+   * Draws a fish sprite. `bend` > 0 makes the body undulate: the sprite is cut into vertical
+   * slices that follow a travelling wave, strongest at the tail, still at the head: real swimming.
+   */
+  private drawFishSprite(c: Ctx, def: FishDef, mut: MutationId | null, size: number, t: number, glint: boolean, bend = 0, speed = 1) {
     const sp = spriteShadowed(def.id, mut);
     if (!sp) { drawFish(c, def, mut, size, t); return; }
     const inner = spriteTinted(def.id, mut ?? "giant")!; // plain copy for the glint mask
     const w = size * SPRITE_SCALE;
     const iw = sp.width - SHADOW_PAD * 2, ih = sp.height - SHADOW_PAD * 2;
     const k = w / iw, h = ih * k, pad = SHADOW_PAD * k;
-    c.drawImage(sp, -w / 2 - pad, -h / 2 - pad, w + pad * 2, h + pad * 2);
+    const rigid = NO_BEND.has(def.look.shape);
+    if (rigid && def.look.shape === "jelly") { const p = 1 + Math.sin(t * 3) * 0.07; c.scale(1 / p, p); }
+    if (bend <= 0 || rigid) {
+      c.drawImage(sp, -w / 2 - pad, -h / 2 - pad, w + pad * 2, h + pad * 2);
+    } else {
+      const N = 10, sw = sp.width / N, dw = (w + pad * 2) / N;
+      for (let i = 0; i < N; i++) {
+        const u = (i + 0.5) / N; // 0 = tail (sprites face right), 1 = head
+        const tail = Math.pow(1 - u, 1.6);
+        const dy = Math.sin(t * 7 * speed - u * 3.4) * bend * h * 0.16 * tail;
+        c.drawImage(sp, i * sw, 0, sw + 1, sp.height, -w / 2 - pad + i * dw, -h / 2 - pad + dy, dw + 0.6, h + pad * 2);
+      }
+    }
     if (glint) drawGlint(c, mut ? spriteTinted(def.id, mut)! : inner, -w / 2, -h / 2, w, h, t * 0.33 + def.value * 0.01, this.view.scale * this.view.dpr);
   }
 
@@ -434,9 +472,74 @@ export class Renderer {
     c.translate(f.x, y);
     c.rotate(Math.sin(t * 3 + f.uid) * 0.06);
     c.scale(face * (1 + Math.sin(t * 6 + f.uid) * 0.02), 1 - Math.sin(t * 6 + f.uid) * 0.02);
-    this.drawFishSprite(c, def, mut, f.size, t + f.uid, def.rarity !== "common" || !!mut);
+    this.drawFishSprite(c, def, mut, f.size, t + f.uid, def.rarity !== "common" || !!mut, 1, 0.6 + f.speed / 120);
     if (mut === "electric") this.sparks(c, f.size, t);
     c.restore();
+  }
+
+  /** the "something huge" teaser: a giant dark silhouette gliding far behind everything */
+  private drawShadow(c: Ctx, d: Dive, t: number) {
+    const sp = d.surprise;
+    if (!sp || sp.kind !== "shadow" || sp.state !== "active") return;
+    const secret = FISH.find((f) => f.zone === d.zone && f.rarity === "secret");
+    const im = secret ? img(secret.id) : null;
+    if (!im) return;
+    const w = 340, h = (w * im.height) / im.width;
+    c.save();
+    c.globalAlpha = 0.28;
+    c.filter = "brightness(0) blur(3px)";
+    c.translate(sp.x, sp.y + this.camY * 0.25 - d.hookY * 0.25 + Math.sin(t) * 8);
+    c.scale(sp.dir, 1);
+    c.drawImage(im, -w / 2, -h / 2, w, h);
+    c.restore();
+  }
+
+  private drawSurprise(c: Ctx, d: Dive, t: number) {
+    const sp = d.surprise;
+    if (!sp) return;
+    if (sp.kind === "whirlpool" && sp.state === "waiting") {
+      c.save();
+      c.translate(COLUMN / 2, sp.y);
+      c.scale(1, 0.45);
+      for (let i = 0; i < 6; i++) {
+        c.strokeStyle = `rgba(220,250,255,${0.5 - i * 0.07})`;
+        c.lineWidth = 4 - i * 0.4;
+        c.beginPath();
+        c.arc(0, 0, 30 + i * 26, t * (3 - i * 0.3) + i, t * (3 - i * 0.3) + i + Math.PI * 1.3);
+        c.stroke();
+      }
+      c.restore();
+    }
+    if ((sp.kind === "bottle" || sp.kind === "chest") && sp.state !== "done") {
+      const im = img(sp.kind === "bottle" ? "s_bottle" : "s_chest");
+      if (!im) return;
+      const w = sp.kind === "bottle" ? 38 : 72, h = (w * im.height) / im.width;
+      const y = sp.y + Math.sin(t * 2) * (sp.kind === "bottle" ? 6 : 1.5);
+      const g = c.createRadialGradient(sp.x, y, 0, sp.x, y, w);
+      g.addColorStop(0, sp.kind === "bottle" ? "rgba(180,240,255,0.45)" : "rgba(255,215,90,0.5)"); g.addColorStop(1, "rgba(0,0,0,0)");
+      c.fillStyle = g; c.beginPath(); c.arc(sp.x, y, w, 0, Math.PI * 2); c.fill();
+      c.save();
+      c.translate(sp.x, y);
+      c.rotate(sp.kind === "bottle" ? Math.sin(t * 1.5) * 0.3 : 0);
+      c.drawImage(im, -w / 2, -h / 2, w, h);
+      c.restore();
+      if (Math.random() < 0.08) this.parts.push({ x: sp.x + (Math.random() - 0.5) * w, y: y - h / 2, vx: 0, vy: -20, life: 0, max: 0.8, color: "#fff6c0", size: 2, kind: "star" });
+    }
+    if (sp.kind === "shark" && sp.state === "active") {
+      const im = img("s_shark");
+      if (!im) return;
+      const w = 120, h = (w * im.height) / im.width;
+      c.save();
+      c.translate(sp.x, sp.y + 30);
+      c.rotate(-0.5 * sp.dir); // nose up: it is coming for you
+      c.scale(sp.dir, 1);
+      const N = 8, sw = im.width / N, dw = w / N;
+      for (let i = 0; i < N; i++) {
+        const u = (i + 0.5) / N, dy = Math.sin(t * 12 - u * 3.4) * h * 0.12 * Math.pow(1 - u, 1.5);
+        c.drawImage(im, i * sw, 0, sw + 1, im.height, -w / 2 + i * dw, -h / 2 + dy, dw + 0.6, h);
+      }
+      c.restore();
+    }
   }
 
   private sparks(c: Ctx, len: number, t: number) {
@@ -456,43 +559,60 @@ export class Renderer {
   }
 
   // ------------------------------------------------------------- boat, hook
-  private boatPos(t: number) {
-    const im = img("boat");
-    const h = im ? (BOAT_W * im.height) / im.width : 100;
+  private boatImg(pose: Pose) { return img(pose === "idle" ? "boat" : `boat_${pose}`); }
+
+  /**
+   * Boat geometry for a pose. Every pose sprite is scaled so its hull has the same width and sits
+   * at the same place: only the character and rod change, the boat never jumps.
+   */
+  private boatGeo(t: number, pose: Pose) {
+    let p = pose, im = this.boatImg(p);
+    if (!im) { p = "idle"; im = img("boat"); }
+    const g = POSE_GEO[p];
+    const hullW = BOAT_W * 0.917;
+    const w = hullW / (g.hull[1] - g.hull[0]);
+    const h = im ? (w * im.height) / im.width : 100;
     const bob = Math.sin(t * 1.8) * 2.2, tilt = Math.sin(t * 1.3) * 0.03;
-    return { x: COLUMN / 2 - 10, y: -h * BOAT_WATERLINE + bob + 6, h, tilt };
+    const cx = COLUMN / 2 - 10;
+    // hull bottom sits a little under the waterline
+    const bottomY = 14 + bob;
+    const left = -(g.hull[0] + g.hull[1]) / 2 * w;
+    return { im, p, w, h, cx, bottomY, left, tilt, g };
   }
 
-  private rodTip(t: number) {
-    const b = this.boatPos(t);
-    const lx = -BOAT_W / 2 + ROD_TIP.x * BOAT_W, ly = ROD_TIP.y * b.h;
-    return { x: b.x + lx * Math.cos(b.tilt) - ly * Math.sin(b.tilt), y: b.y + lx * Math.sin(b.tilt) + ly * Math.cos(b.tilt) };
+  private rodTip(t: number, pose: Pose) {
+    const b = this.boatGeo(t, pose);
+    const lx = b.left + b.g.tip[0] * b.w, ly = -b.h + b.g.tip[1] * b.h;
+    return { x: b.cx + lx * Math.cos(b.tilt) - ly * Math.sin(b.tilt), y: b.bottomY + lx * Math.sin(b.tilt) + ly * Math.cos(b.tilt) };
   }
 
   private drawBoat(c: Ctx, s: SceneState) {
-    const im = img("boat");
-    const b = this.boatPos(s.t);
+    const b = this.boatGeo(s.t, s.pose);
     // soft water shadow under the hull
     c.save();
     c.fillStyle = "rgba(0,40,70,0.18)";
-    c.beginPath(); c.ellipse(b.x, 8, BOAT_W * 0.42, 6, 0, 0, Math.PI * 2); c.fill();
-    c.translate(b.x, b.y);
+    c.beginPath(); c.ellipse(b.cx, 8, BOAT_W * 0.42, 6, 0, 0, Math.PI * 2); c.fill();
+    // squash and stretch when the pose changes: the character "pops" into it
+    const pop = s.poseT < 0.35 ? Math.sin((s.poseT / 0.35) * Math.PI) * 0.08 : 0;
+    c.translate(b.cx, b.bottomY);
     c.rotate(b.tilt);
-    if (im) c.drawImage(im, -BOAT_W / 2, 0, BOAT_W, b.h);
+    c.scale(1 - pop * 0.6, 1 + pop);
+    if (b.im) c.drawImage(b.im, b.left, -b.h, b.w, b.h);
     c.restore();
     // ripples around the hull
     c.save();
+    const bx = this.boatGeo(s.t, s.pose).cx;
     c.strokeStyle = "rgba(255,255,255,0.55)"; c.lineWidth = 1.5;
     for (let i = 0; i < 2; i++) {
       const k = (s.t * 0.5 + i * 0.5) % 1;
       c.globalAlpha = 1 - k;
-      c.beginPath(); c.ellipse(b.x, 6, BOAT_W * (0.45 + k * 0.35), 4 + k * 3, 0, 0, Math.PI * 2); c.stroke();
+      c.beginPath(); c.ellipse(bx, 6, BOAT_W * (0.45 + k * 0.35), 4 + k * 3, 0, 0, Math.PI * 2); c.stroke();
     }
     c.restore();
   }
 
-  private drawHook(c: Ctx, d: Dive, t: number) {
-    const tip = this.rodTip(t);
+  private drawHook(c: Ctx, d: Dive, t: number, pose: Pose) {
+    const tip = this.rodTip(t, pose);
     c.save();
     c.strokeStyle = "rgba(255,255,255,0.9)"; c.lineWidth = 1.3;
     c.beginPath(); c.moveTo(tip.x, tip.y); c.quadraticCurveTo(tip.x + 10, 10, d.hookX, d.hookY - 16); c.stroke();
@@ -501,7 +621,7 @@ export class Renderer {
       c.save();
       c.translate(d.hookX + Math.sin(t * 5 + i) * 5, d.hookY + 18 + i * 9);
       c.rotate(Math.PI / 2 + Math.sin(t * 6 + i) * 0.15);
-      this.drawFishSprite(c, f.def, f.mut, f.size * 0.85, t, false);
+      this.drawFishSprite(c, f.def, f.mut, f.size * 0.85, t + i, false, 2.2, 1.6); // hooked fish wriggle hard
       c.restore();
     });
     // cute lure: red-white bobber weight + silver hook
@@ -580,6 +700,9 @@ export class Renderer {
       if (LUMINOUS.has(fish.def.id) || fish.mut === "electric" || fish.mut === "ghost") hole(fish.x, fish.y, fish.size * 1.1, 0.85);
       else if (fish.def.rarity !== "common" || fish.mut) hole(fish.x, fish.y, fish.size * 0.8, 0.45);
     }
+    const sp = d?.surprise;
+    if (sp && (sp.kind === "bottle" || sp.kind === "chest") && sp.state !== "done") hole(sp.x, sp.y, 70, 0.9);
+    if (sp && sp.kind === "shark" && sp.state === "active") hole(sp.x, sp.y + 30, 80, 0.7);
     const c = this.ctx;
     c.save();
     c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
@@ -634,7 +757,7 @@ export class Renderer {
     c.translate(cx + Math.sin(t * 13) * (inZone ? 2 : 9), cy);
     c.rotate(Math.sin(t * 6) * 0.25);
     const size = Math.min(R * 1.25, fg.fish.size * 1.5) / SPRITE_SCALE * 1.2;
-    this.drawFishSprite(c, fg.fish.def, fg.fish.mut, size, t, true);
+    this.drawFishSprite(c, fg.fish.def, fg.fish.mut, size, t, true, 2.5, 1.8);
     c.restore();
   }
 }

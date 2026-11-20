@@ -1,5 +1,6 @@
 import { catchValue, diveCatches, resolveSnap, startDive, stepDive, type Dive, type DiveInput } from "./core/dive.ts";
-import { UPGRADES, UPGRADE_ORDER, capacity, upgradeCost } from "./core/economy.ts";
+import { noteDive, noteSurprise, pickSurprise } from "./core/director.ts";
+import { UPGRADES, UPGRADE_ORDER, capacity, maxDepth, upgradeCost } from "./core/economy.ts";
 import { currentEvent, isNight, nextWorldEvent, personalEventDue, type ActiveEvent } from "./core/events.ts";
 import type { Catch, UpgradeId, ZoneId } from "./core/types.ts";
 import { FISH, FISH_BY_ID } from "./data/fish.ts";
@@ -23,7 +24,10 @@ setMuted(save.muted);
 
 const canvas = $<HTMLCanvasElement>("game");
 const renderer = new Renderer(canvas);
-const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0 };
+const scene: SceneState = { mode: "dock", zone: save.zone, dive: null, event: null, t: 0, hint: save.dives === 0, pose: "idle", poseT: 9 };
+function setPose(p: SceneState["pose"]) { if (scene.pose !== p) { scene.pose = p; scene.poseT = 0; } }
+/** slow motion: remaining real seconds and the time scale while it lasts */
+let slowmo = 0;
 
 const sessionStart = Date.now();
 let personalEventAt: number | null = null;
@@ -79,10 +83,16 @@ async function cast() {
   if (paused) return;
   gameplayStart();
   const ctx = { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: Math.random };
-  scene.dive = startDive(scene.zone, ctx);
+  const playSec = save.playMs / 1000;
+  const floor = ZONES[scene.zone].floor;
+  const surprise = forcedSurprise ?? pickSurprise(save.director, playSec, { zone: scene.zone, bottom: Math.min(maxDepth(save.upgrades), floor), floor, capacity: capacity(save.upgrades) }, Math.random);
+  if (surprise) noteSurprise(save.director, surprise, playSec);
+  scene.dive = startDive(scene.zone, ctx, surprise);
   scene.mode = "dive";
   scene.hint = false;
   sfx.cast();
+  setPose("cast");
+  setTimeout(() => { if (scene.mode === "dive") setPose("idle"); }, 650);
   renderer.splash(scene.dive.hookX);
   updateUi();
 }
@@ -92,17 +102,35 @@ function handleFx(d: Dive) {
     if (fx.kind === "hook") {
       sfx.hook(fx.fish.def.rarity);
       renderer.burst(d.hookX, d.hookY, fx.fish.mut ? "#ffe066" : RARITY_COLOR[fx.fish.def.rarity], fx.fish.def.rarity === "common" ? 8 : 18);
-      if (fx.fish.def.rarity !== "common") renderer.shakeIt(4);
-    } else if (fx.kind === "turn") sfx.turn();
+      if (fx.fish.def.rarity !== "common" || fx.fish.mut) {
+        renderer.shakeIt(4);
+        // the catch moment: a beat of slow motion and a punch-in, so a rare catch feels special
+        slowmo = 0.35; renderer.punch(d.hookX, d.hookY, 0.1);
+      }
+    } else if (fx.kind === "turn") { sfx.turn(); setPose("reel"); }
     else if (fx.kind === "fightWon") {
       sfx.reveal(fx.fish.def.rarity);
       renderer.burst(d.hookX, d.hookY, RARITY_COLOR[fx.fish.def.rarity], 40, 260);
       renderer.shakeIt(10);
       renderer.flashIt(1);
+      slowmo = 0.6; renderer.punch(d.hookX, d.hookY, 0.18);
     } else if (fx.kind === "snap") {
       sfx.snap();
       renderer.shakeIt(12);
       showSnap(fx.fish.def.id, fx.fish.mut, d.fight?.retried ?? true);
+    } else if (fx.kind === "surprise") {
+      toast(`${SURPRISE_ICON[fx.surprise]} ${t(`sur.${fx.surprise}` as Parameters<typeof t>[0])}`, 2200);
+      if (fx.surprise === "shark" || fx.surprise === "shadow") sfx.snap(); else sfx.event();
+    } else if (fx.kind === "stolen") {
+      toast(`🦈 ${t("stolen")}`); sfx.snap(); renderer.shakeIt(10);
+    } else if (fx.kind === "sharkGone") {
+      toast(`😎 ${t("escaped")}`); sfx.buy();
+    } else if (fx.kind === "bottle") {
+      toast(`🍾 ${t("map")} ${save.mapPieces + d.mapPieces}/3`); sfx.newFish(); renderer.burst(d.hookX, d.hookY, "#bdf3ff", 20);
+    } else if (fx.kind === "chest") {
+      toast(`💰 +${fx.coins}`); sfx.reveal("legendary"); renderer.burst(d.hookX, d.hookY, "#ffd84a", 40, 260); renderer.flashIt(0.6); slowmo = 0.4;
+    } else if (fx.kind === "whirlpool") {
+      renderer.shakeIt(8); sfx.turn();
     } else if (fx.kind === "surface") {
       sfx.splash();
       renderer.splash(d.hookX);
@@ -111,12 +139,25 @@ function handleFx(d: Dive) {
   d.fx.length = 0;
 }
 
+const SURPRISE_ICON: Record<string, string> = { golden_school: "✨", shark: "🦈", bottle: "🍾", whirlpool: "🌀", chest: "💰", shadow: "👀" };
+let pendingBonus = 0;
+/** test hook: force the next dive's surprise */
+let forcedSurprise: Parameters<typeof noteSurprise>[1] | null = null;
+
 function finishDive(d: Dive) {
   gameplayStop();
   pending = diveCatches(d);
+  pendingBonus = d.bonusCoins;
+  save.mapPieces += d.mapPieces;
+  noteDive(save.director, !!d.surprise || d.hooked.some((f) => f.mut || f.def.rarity !== "common"));
   scene.mode = "reveal";
   save.dives++;
-  showReveal(pending);
+  const best = pending.reduce((m, c) => Math.max(m, RARITY_ORDER.indexOf(FISH_BY_ID[c.fish].rarity) + (c.mut ? 1 : 0)), -1);
+  setPose(best >= 1 ? "cheer" : "idle");
+  const star = pending.filter((c) => RARITY_ORDER.indexOf(FISH_BY_ID[c.fish].rarity) >= 3)
+    .sort((a, b) => b.value - a.value)[0];
+  if (star) showLegend(star, () => showReveal(pending));
+  else showReveal(pending);
 }
 
 async function collect(double: boolean) {
@@ -135,11 +176,14 @@ async function collect(double: boolean) {
     e.best = Math.max(e.best, c.value);
     if (c.mut && !e.muts.includes(c.mut)) e.muts.push(c.mut);
   }
+  total += pendingBonus;
+  pendingBonus = 0;
   if (double) total *= 2;
   save.coins += total;
   pending.forEach((_, i) => setTimeout(() => sfx.coin(i), i * 40));
   pending = [];
   $("reveal").classList.add("hidden");
+  setPose("idle");
   scene.mode = "dock";
   scene.dive = null;
   writeSave(save);
@@ -197,11 +241,31 @@ function showReveal(list: Catch[]) {
     setTimeout(() => { sfx.reveal(def.rarity); if (isNew) sfx.newFish(); }, i * 180);
     total += c.value;
   });
-  $("totalN").textContent = String(total);
+  $("totalN").textContent = String(total + pendingBonus);
+  $("bonusN").textContent = pendingBonus ? `💰 +${pendingBonus}` : "";
   $("collectBtn").textContent = list.length ? t("collect") : "OK";
   // the x2 offer only when there is something worth doubling
   $("doubleBtn").classList.toggle("hidden", total < 40);
   $("reveal").classList.remove("hidden");
+}
+
+/** cinematic moment for legendary and secret catches: rays, spotlight, big sprite, then the cards */
+function showLegend(c: Catch, done: () => void) {
+  const def = FISH_BY_ID[c.fish];
+  const el = $("legend");
+  el.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
+  $("legendRarity").textContent = tRarity(def.rarity);
+  $("legendName").textContent = fishName(def) + (c.mut ? " " + MUT_ICON[c.mut] : "");
+  const holder = $("legendFish");
+  holder.innerHTML = "";
+  holder.appendChild(fishThumb(c.fish, c.mut, 300, 170));
+  el.classList.remove("hidden");
+  sfx.reveal(def.rarity);
+  setTimeout(() => sfx.event(), 350);
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; el.classList.add("hidden"); done(); };
+  el.onclick = close;
+  setTimeout(close, 2600);
 }
 
 const MUT_ICON: Record<string, string> = { gold: "✨", rainbow: "🌈", giant: "⬆️", ghost: "👻", electric: "⚡" };
@@ -369,10 +433,13 @@ let last = performance.now();
 let reelTick = 0;
 let uiTick = 0;
 function frame(now: number) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const realDt = Math.min(0.05, (now - last) / 1000);
+  let dt = realDt;
+  if (slowmo > 0) { slowmo -= realDt; dt = realDt * 0.3; }
   last = now;
   if (!paused && !isAdPlaying()) {
     scene.t += dt;
+    scene.poseT += realDt;
     readInput();
     const d = scene.dive;
     if (scene.mode === "dive" && d) {
@@ -435,4 +502,4 @@ updateUi();
 requestAnimationFrame(frame);
 
 // debug handle for automated checks (harmless in production)
-(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, catchValue, updateUi };
+(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, catchValue, updateUi, showLegend, force: (k: typeof forcedSurprise) => { forcedSurprise = k; } };

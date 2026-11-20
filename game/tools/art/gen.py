@@ -45,8 +45,8 @@ JOBS = {
      "bottom-left a pair of shiny silver fishing hooks, bottom-right a lucky green four-leaf clover with a sparkle. " + STYLE, "1:1", True),
 }
 
-def gen(out, name, prompt, aspect, transparent):
-    body = {"prompt": prompt, "model": MODEL, "aspect_ratio": aspect, "resolution": "1K", "refs": [STYLE_REF]}
+def gen(out, name, prompt, aspect, transparent, refs=None):
+    body = {"prompt": prompt, "model": MODEL, "aspect_ratio": aspect, "resolution": "1K", "refs": refs or [STYLE_REF]}
     if transparent: body["extra"] = {"background": "transparent", "output_format": "png"}
     req = urllib.request.Request(URL, data=json.dumps(body).encode(), headers={"content-type": "application/json", "x-art-key": os.environ["ART_KEY"]})
     r = json.load(urllib.request.urlopen(req, timeout=400))
@@ -54,6 +54,33 @@ def gen(out, name, prompt, aspect, transparent):
         print(name, "FAILED", r, flush=True); return
     urllib.request.urlretrieve(r["url"], os.path.join(out, name + ".png"))
     print(name, "ok", r.get("credits"), r["url"], flush=True)
+
+
+BOAT_REF = "https://media.base44.com/images/public/6aea41c732ebf572da66fc50/de88de4d4_generated_487ed234.png"
+POSE = ("Exactly the same character, same small white-and-red wooden rowboat, same art style, same size and same side-view framing as the reference image, "
+        "on a fully transparent background, no water, no text. ")
+JOBS.update({
+  "boat_cast": (POSE + "Pose: the kid swings the fishing rod back over the shoulder to cast, leaning back, excited open-mouth smile, rod pointing up and back to the upper LEFT. " + STYLE, "3:2", True, [BOAT_REF]),
+  "boat_reel": (POSE + "Pose: the kid cranks the reel hard with determined face, tongue out, the rod bent in a strong curve with its tip pointing to the right and slightly down. " + STYLE, "3:2", True, [BOAT_REF]),
+  "boat_cheer": (POSE + "Pose: the kid celebrates, standing up in the boat with both arms raised high, rod held up in one hand, huge happy smile, eyes closed with joy, little sparkles. " + STYLE, "3:2", True, [BOAT_REF]),
+  "surprises": (SHEET + "Top-left: a cute goofy grey shark with a big toothy grin and mischievous eyes, side view facing right. Top-right: a glass message bottle with a cork and a rolled old paper map inside, slightly glowing. "
+     "Bottom-left: an open wooden treasure chest overflowing with gold coins and gems. Bottom-right: a cheeky white seagull flying, wings spread, facing right. " + STYLE, "1:1", True),
+  "ice_surface": ("Vertical game background for a fishing game, portrait composition: top 30% a pastel arctic sky with soft aurora ribbons, snowy mountains and an ice shelf with a cute igloo far away, "
+     "a calm icy-blue sea surface with small floating ice chunks, below it the cold underwater gradually getting deeper and darker teal-blue, icicle-like ice formations only at the far left and right edges, "
+     "the center open and uncluttered, no fish, no boat, no characters, no text. " + STYLE, "2:3", False),
+  "ice_floor": ("A wide horizontal game sprite strip on a fully transparent background: the icy arctic seabed seen from the side, blue-white ice rocks, frozen crystals, pale sea plants, a frozen old anchor; "
+     "the top edge irregular, everything above it transparent. No fish, no text. " + STYLE, "3:2", True),
+  "props_ice": (SHEET + "Underwater arctic decorations, each tall and vertical: top-left a cluster of glowing blue ice crystals, top-right a big frosty ice boulder with snow on top, "
+     "bottom-left tall pale-green arctic kelp, bottom-right a hanging ice formation with icicles. " + STYLE, "1:1", True),
+  "fish_ice1": (SHEET + SIDE + "Top-left: a round chubby pale-blue ice cod with frosty speckles. Top-right: an arctic char, olive back with pink-red belly and pale spots. "
+     "Bottom-left: a cute snow crab, pale orange with white snowy shell, side-ish view. Bottom-right: a lost red knitted mitten with a white snowflake pattern (an object, not a creature). " + STYLE, "1:1", True),
+  "fish_ice2": (SHEET + "Top-left: an adorable baby penguin swimming underwater, side view facing right. Top-right: a frost jellyfish, icy cyan translucent dome with snowflake patterns and crystal tentacles. "
+     "Bottom-left: a crystal trout whose body looks like clear blue glass with facets, side view facing right. Bottom-right: a cute smiling white beluga whale, side view facing right. " + STYLE, "1:1", True),
+  "fish_narwhal": ("A single legendary boss creature game sprite on a fully transparent background, side view facing right, no text: 'Narwhal King', a majestic but cute narwhal with a long spiral glowing tusk, "
+     "icy blue-white spotted body, a tiny ice crown, proud expression. " + STYLE, "3:2", True),
+  "fish_aurora": ("A single secret mythical creature game sprite on a fully transparent background, side view facing right, no text: 'Aurora Ray', a graceful manta ray whose wings shimmer with green, teal and violet "
+     "aurora light ribbons, starry speckles, kind eyes, magical. " + STYLE, "3:2", True),
+})
 
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
