@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Critter Vac</title>
+    <script src="https://game-cdn.poki.com/scripts/v2/poki-sdk.js"></script>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="ui">
+      <div id="top">
+        <div class="pill"><span class="ico" id="coinIco">🪙</span><b id="coinsN">0</b></div>
+        <div class="pill">📖 <b id="indexN">0/12</b></div>
+        <div class="spacer"></div>
+        <button class="pill btn round" id="muteBtn">🔊</button>
+      </div>
+      <div id="fieldUi">
+        <div id="hint">👆 Hold &amp; aim to suck up critters!</div>
+        <div id="jarBox"><span id="jarIco">🫙</span><div id="jarBar"><i id="jarFill"></i></div><b id="jarN">0/5</b></div>
+        <button class="btn big park" id="parkBtn">🏡 Park</button>
+      </div>
+      <div id="parkUi" class="hidden">
+        <div id="parkTop"><b>🏡 Critter Park</b> <span id="incomeN"></span></div>
+        <div id="ups"></div>
+        <div class="row"><button class="btn big ad" id="lureBtn">🎬 ✨ Golden lure</button><button class="btn big go" id="goBtn">🌿 Catch more!</button></div>
+      </div>
+      <div id="toast" class="hidden"></div>
+    </div>
+    <div id="loading"><div class="logo">🫙 Critter Vac</div><div class="bar"><i id="loadBar"></i></div></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

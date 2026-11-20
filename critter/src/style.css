@@ -1,0 +1,45 @@
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #2a6b3a; font-family: Fredoka, system-ui, sans-serif; color: #fff; touch-action: none; }
+#game { position: fixed; inset: 0; display: block; }
+#ui { position: fixed; inset: 0; pointer-events: none; }
+#ui button, #ui .pill { pointer-events: auto; }
+.hidden { display: none !important; }
+.pill, .btn { text-shadow: 0 2px 0 rgba(13, 22, 48, 0.55); }
+#top { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 6px; align-items: center; }
+.spacer { flex: 1; }
+.pill { background: linear-gradient(#2c4f86, #1b345f); border: 3px solid #0d1e45; border-radius: 999px; padding: 3px 12px 3px 5px; display: flex; gap: 5px; align-items: center; font-size: 17px; box-shadow: inset 0 3px 0 rgba(255,255,255,.2), 0 3px 0 #0d1e45; }
+.pill b { color: #ffe066; }
+.ico img { width: 26px; height: 26px; display: block; }
+.pill.round { width: 40px; height: 40px; justify-content: center; padding: 0; }
+.btn { font-family: inherit; color: #fff; border: 3px solid #0d1e45; border-radius: 18px; cursor: pointer; font-weight: 700; box-shadow: inset 0 4px 0 rgba(255,255,255,.3), 0 4px 0 #0d1e45; }
+.btn:active { transform: translateY(2px); box-shadow: inset 0 4px 0 rgba(255,255,255,.3), 0 2px 0 #0d1e45; }
+.btn:disabled { filter: grayscale(.7) brightness(.85); }
+.btn.big { font-size: 19px; padding: 8px 16px; min-height: 50px; }
+.btn.park { background: linear-gradient(#ffcf5a, #ff9a1f); }
+.btn.go { background: linear-gradient(#7be495, #2fb35a); }
+.btn.ad { background: linear-gradient(#b48cff, #7a4ff0); }
+.pulse { animation: pulse 0.9s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.08); } }
+#fieldUi #hint { position: absolute; left: 50%; top: 22%; translate: -50% 0; background: rgba(13,30,69,.8); padding: 8px 16px; border-radius: 16px; font-size: 18px; white-space: nowrap; animation: pulse 1.2s infinite; }
+#jarBox { position: absolute; top: 56px; left: 8px; display: flex; align-items: center; gap: 6px; background: rgba(13,30,69,.65); border: 3px solid #0d1e45; border-radius: 16px; padding: 3px 10px 3px 4px; }
+#jarBox img { height: 30px; display: block; }
+#jarBar { width: 70px; height: 12px; border-radius: 6px; background: rgba(0,0,0,.4); position: relative; overflow: hidden; }
+#jarFill { position: absolute; left: 0; bottom: 0; top: 0; width: 100%; background: linear-gradient(90deg, #7be495, #ffe066); transform-origin: left; }
+#jarBox b { color: #ffe066; }
+#parkBtn { position: absolute; right: 10px; bottom: 12px; pointer-events: auto; }
+#parkUi { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+#parkTop { position: fixed; top: 54px; left: 50%; translate: -50% 0; background: rgba(13,30,69,.75); padding: 4px 14px; border-radius: 14px; font-size: 17px; white-space: nowrap; }
+#incomeN { color: #ffe066; margin-left: 6px; }
+#ups { display: flex; gap: 6px; }
+.btn.up { background: linear-gradient(#ffcf5a, #ff9a1f); width: 104px; padding: 4px 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 0; font-size: 13px; }
+.btn.up .ui { font-size: 24px; }
+.btn.up .un { font-size: 15px; }
+.btn.up .ul { font-size: 12px; color: #fff7d0; }
+.btn.up .uc { font-size: 15px; color: #fff; }
+.row { display: flex; gap: 8px; }
+#toast { position: absolute; left: 50%; top: 100px; translate: -50% 0; background: linear-gradient(#ff7aa8, #e8467d); border: 3px solid #0d1e45; border-radius: 16px; padding: 6px 16px; font-size: 16px; font-weight: 700; max-width: 90vw; text-align: center; }
+#loading { position: fixed; inset: 0; background: radial-gradient(circle at 50% 40%, #6fd36b, #1f6b3a); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; transition: opacity .4s; z-index: 10; }
+#loading.gone { opacity: 0; pointer-events: none; }
+#loading .logo { font-size: 40px; font-weight: 700; text-shadow: 0 4px 0 #0d1e45; }
+#loading .bar { width: 220px; height: 16px; border-radius: 8px; background: rgba(0,0,0,.3); overflow: hidden; border: 3px solid #0d1e45; }
+#loadBar { display: block; height: 100%; width: 0; background: #ffe066; }

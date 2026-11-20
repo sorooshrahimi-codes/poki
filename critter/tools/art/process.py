@@ -1,0 +1,42 @@
+"""Cut the Critter Vac sheets into sprites and export WebP into critter/public/art (reuses Deep Luck's trimming).
+Usage: python3 -I process.py RAW_DIR"""
+import importlib.util, os, sys
+from PIL import Image
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+_spec = importlib.util.spec_from_file_location("dl_proc", os.path.join(HERE, "..", "..", "..", "game", "tools", "art", "process.py"))
+dl = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(dl)
+OUT = os.path.join(HERE, "..", "..", "public", "art")
+
+SHEETS = {
+    "crit_meadow1": ["puffbun", "sprig", "mushi", "bumbo"],
+    "crit_meadow2": ["pebblo", "dewdrop", "snailo", "hootle"],
+    "crit_meadow3": ["clovy", "honeyblob", "sunpup", "prismane"],
+    "ui_props": ["pedestal", "jar", "coin", "nozzle"],
+}
+SINGLES = {"kid_vac": "kid_vac", "kid_vac_suck": "kid_vac_suck"}
+BGS = {"bg_meadow": "bg_meadow", "bg_park": "bg_park"}
+MAX = {"kid_": 360, "pedestal": 220, "jar": 200, "coin": 96, "nozzle": 128}
+
+def save(im, name):
+    m = next((v for k, v in MAX.items() if name.startswith(k)), 240)
+    im.thumbnail((m, m), Image.LANCZOS)
+    im.save(os.path.join(OUT, name + ".webp"), "WEBP", quality=86, method=6)
+    print(f"{name:14s} {im.size}")
+
+def main(raw):
+    os.makedirs(OUT, exist_ok=True)
+    for sheet, names in SHEETS.items():
+        im = Image.open(os.path.join(raw, sheet + ".png")).convert("RGBA"); w, h = im.size
+        for i, n in enumerate(names):
+            x, y = (i % 2) * w // 2, (i // 2) * h // 2
+            save(dl.trim(im.crop((x, y, x + w // 2, y + h // 2))), n)
+    for src, n in SINGLES.items():
+        save(dl.trim(Image.open(os.path.join(raw, src + ".png")).convert("RGBA")), n)
+    for src, n in BGS.items():
+        im = Image.open(os.path.join(raw, src + ".png")).convert("RGB"); im.thumbnail((720, 1080), Image.LANCZOS)
+        im.save(os.path.join(OUT, n + ".webp"), "WEBP", quality=80, method=6); print(n, im.size)
+    print("total KB", sum(os.path.getsize(os.path.join(OUT, f)) for f in os.listdir(OUT)) // 1024)
+
+if __name__ == "__main__":
+    main(sys.argv[1])
