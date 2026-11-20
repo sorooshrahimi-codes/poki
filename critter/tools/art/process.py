@@ -13,9 +13,12 @@ SHEETS = {
     "crit_meadow2": ["pebblo", "dewdrop", "snailo", "hootle"],
     "crit_meadow3": ["clovy", "honeyblob", "sunpup", "prismane"],
     "ui_props": ["pedestal", "jar", "coin", "nozzle"],
+    "crit_forest1": ["spora", "acornel", "mossling", "glowbug"],
+    "crit_forest2": ["toadstoo", "fernfox", "barkbear", "pinecub"],
+    "crit_forest3": ["lumoth", "crystalcap", "elderoak", "moonfawn"],
 }
 SINGLES = {"kid_vac": "kid_vac", "kid_vac_suck": "kid_vac_suck"}
-BGS = {"bg_meadow": "bg_meadow", "bg_park": "bg_park"}
+BGS = {"bg_meadow": "bg_meadow", "bg_park": "bg_park", "bg_forest": "bg_forest"}
 MAX = {"kid_": 360, "pedestal": 220, "jar": 200, "coin": 96, "nozzle": 128}
 
 def save(im, name):

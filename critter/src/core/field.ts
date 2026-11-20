@@ -1,6 +1,6 @@
 import { CONE, power, range, tankSize, type Upgrades } from "./economy.ts";
-import type { MutationId } from "./types.ts";
-import { CRITTERS, MUTATIONS, RARITY_WEIGHT, type CritterDef } from "../data/critters.ts";
+import type { BiomeId, MutationId } from "./types.ts";
+import { MUTATIONS, RARITY_WEIGHT, critterOf, type CritterDef } from "../data/critters.ts";
 import type { Rng } from "./rng.ts";
 
 // The catching field, as pure rules (the renderer only draws this state).
@@ -25,9 +25,13 @@ export interface Critter {
   born: number;
 }
 
-export type FieldEv = { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter };
+export type Surprise = "visitor" | "golden_rain" | "stampede";
+export type FieldEv = { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter };
 
 export interface Field {
+  biome: BiomeId;
+  /** seconds until the next surprise */
+  nextSurprise: number;
   W: number; H: number;
   /** ground band: far edge and near edge (feet y) */
   farY: number; nearY: number;
@@ -46,20 +50,21 @@ export interface Field {
 let uid = 1;
 export const depthK = (f: Field, y: number) => 0.62 + 0.38 * Math.max(0, Math.min(1, (y - f.farY) / (f.nearY - f.farY)));
 
-export function newField(W: number, H: number, up: Upgrades): Field {
-  return { W, H, farY: H * 0.6, nearY: H * 0.88, nozzle: { x: 0, y: 0 }, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
+  return { biome, nextSurprise: 22, W, H, farY: H * 0.6, nearY: H * 0.88, nozzle: { x: 0, y: 0 }, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
-function pick(rng: Rng): CritterDef {
+function pick(f: Field, rng: Rng): CritterDef {
+  const pool = critterOf(f.biome);
   let total = 0;
-  for (const d of CRITTERS) total += RARITY_WEIGHT[d.rarity];
+  for (const d of pool) total += RARITY_WEIGHT[d.rarity];
   let r = rng() * total;
-  for (const d of CRITTERS) { r -= RARITY_WEIGHT[d.rarity]; if (r <= 0) return d; }
-  return CRITTERS[0];
+  for (const d of pool) { r -= RARITY_WEIGHT[d.rarity]; if (r <= 0) return d; }
+  return pool[0];
 }
 
 export function spawn(f: Field, rng: Rng, opt: { def?: CritterDef; mut?: MutationId | null; x?: number; y?: number } = {}): Critter {
-  const def = opt.def ?? pick(rng);
+  const def = opt.def ?? pick(f, rng);
   let mut: MutationId | null = opt.mut === undefined ? null : opt.mut;
   if (opt.mut === undefined) {
     if (f.lure > 0) { mut = "gold"; f.lure--; }
@@ -88,16 +93,39 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
   f.aim.x = inp.x; f.aim.y = inp.y;
 
   // keep the meadow lively: a new critter every couple of seconds, up to a crowd
-  const want = 9;
+  const want = 7;
   f.spawnT -= dt;
-  if (f.spawnT <= 0 && f.critters.filter((c) => c.state !== "caught").length < want) { spawn(f, rng); f.spawnT = 0.8 + rng() * 1.4; }
+  if (f.spawnT <= 0 && f.critters.filter((c) => c.state !== "caught").length < want) { spawn(f, rng); f.spawnT = 1.4 + rng() * 1.6; }
   // the first minute is scripted: easy catches close by, then a golden one that fights back
+  const pool = critterOf(f.biome);
   if (f.script === 0) {
-    for (let i = 0; i < 4; i++) spawn(f, rng, { def: CRITTERS[i], mut: null, x: f.nozzle.x + 110 + i * 46, y: f.farY + (f.nearY - f.farY) * (0.35 + (i % 2) * 0.4) });
+    for (let i = 0; i < 4; i++) spawn(f, rng, { def: pool[i], mut: null, x: f.nozzle.x + 110 + i * 46, y: f.farY + (f.nearY - f.farY) * (0.35 + (i % 2) * 0.4) });
     f.script = 1;
   } else if (f.script === 1 && f.t > 7) {
-    spawn(f, rng, { def: CRITTERS[0], mut: "gold", x: f.nozzle.x + 170, y: f.farY + (f.nearY - f.farY) * 0.6 });
+    spawn(f, rng, { def: pool[0], mut: "gold", x: f.nozzle.x + 170, y: f.farY + (f.nearY - f.farY) * 0.6 });
     f.script = 2;
+  }
+
+  // surprises keep every visit different: a rare visitor, a shower of golden critters, a stampede
+  f.nextSurprise -= dt;
+  if (f.nextSurprise <= 0 && f.script >= 2) {
+    f.nextSurprise = 26 + rng() * 18;
+    const roll = rng();
+    if (roll < 0.45) {
+      const rares = pool.filter((d) => d.rarity !== "common");
+      const w = (d: CritterDef) => (d.rarity === "rare" ? 6 : d.rarity === "epic" ? 3 : 1);
+      let tot = rares.reduce((a, d) => a + w(d), 0), r = rng() * tot, def = rares[0];
+      for (const d of rares) { r -= w(d); if (r <= 0) { def = d; break; } }
+      const c = spawn(f, rng, { def, x: f.W - 30, y: f.farY + (f.nearY - f.farY) * (0.3 + rng() * 0.5) });
+      c.dir = -1;
+      f.ev.push({ kind: "surprise", s: "visitor", c });
+    } else if (roll < 0.75) {
+      for (let i = 0; i < 3; i++) spawn(f, rng, { mut: "gold", x: f.nozzle.x + 140 + i * 60, y: f.farY + (f.nearY - f.farY) * (0.2 + i * 0.3) });
+      f.ev.push({ kind: "surprise", s: "golden_rain" });
+    } else {
+      for (let i = 0; i < 6; i++) { const c = spawn(f, rng, { def: pool[Math.floor(rng() * 5)], mut: null, x: f.W + 20 + i * 30, y: f.farY + (f.nearY - f.farY) * rng() }); c.dir = -1; c.hopPer = 0.45; }
+      f.ev.push({ kind: "surprise", s: "stampede" });
+    }
   }
 
   const P = power(up), R = range(up);
@@ -108,21 +136,23 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
     const bx = c.x, by = c.y - c.lift - c.def.size * 0.4 * depthK(f, c.y);
     const dx = bx - f.nozzle.x, dy = by - f.nozzle.y, dist = Math.hypot(dx, dy);
     let da = Math.atan2(dy, dx) - ang; da = Math.atan2(Math.sin(da), Math.cos(da));
-    const inCone = f.beam && dist < R && Math.abs(da) < CONE;
+    // a critter already in a tug stays caught a little past the cone's reach: fair to a moving finger
+    const reach = c.state === "tug" ? R * 1.15 : R, spread = c.state === "tug" ? CONE * 1.1 : CONE;
+    const inCone = f.beam && dist < reach && Math.abs(da) < spread;
 
     if (c.state === "roam" || c.state === "tug") {
       if (inCone) {
         if (c.resist <= 1.5) c.state = "pulled";
         else {
           if (c.state !== "tug") { c.state = "tug"; f.ev.push({ kind: "tug", c }); }
-          c.grip += dt * (P / 260) / c.resist * 0.9;
+          c.grip += dt * (P / 230) / c.resist * 0.95;
           // it struggles: little scrambles sideways, trying to slip out of the cone
           c.x += Math.sin(f.t * 7 + c.uid) * 60 * dt;
           c.lift = Math.max(0, Math.sin(f.t * 11 + c.uid) * 6);
           if (c.grip >= 1) c.state = "pulled";
         }
       } else if (c.state === "tug") {
-        c.grip -= dt * 0.35;
+        c.grip -= dt * 0.5;
         if (c.grip <= 0) { c.grip = 0; c.state = "roam"; f.ev.push({ kind: "escape", c }); c.dir = dx > 0 ? 1 : -1; }
       }
     }

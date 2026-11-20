@@ -1,11 +1,13 @@
 import { depthK, type Critter, type Field } from "../core/field.ts";
 import { CONE, range, type Upgrades } from "../core/economy.ts";
 import type { MutationId } from "../core/types.ts";
-import { CRITTERS, RARITY_COLOR, STAR_MULT, starOf } from "../data/critters.ts";
+import { BIOMES, CRITTERS, RARITY_COLOR, STAR_MULT, critterOf, starOf } from "../data/critters.ts";
+import type { BiomeId } from "../core/types.ts";
+import { EYES } from "../data/eyes.ts";
 import type { SaveData } from "../core/save.ts";
 
 type Ctx = CanvasRenderingContext2D;
-const NAMES = [...CRITTERS.map((c) => c.art), "kid_vac", "kid_vac_suck", "bg_meadow", "bg_park", "pedestal", "jar", "coin", "nozzle"];
+const NAMES = [...CRITTERS.map((c) => c.art), "kid_vac", "kid_vac_suck", "bg_meadow", "bg_forest", "bg_park", "pedestal", "jar", "coin", "nozzle"];
 const imgs = new Map<string, HTMLImageElement>();
 export const img = (n: string) => imgs.get(n) ?? null;
 export function loadArt(onProgress: (k: number) => void) {
@@ -76,7 +78,7 @@ export class View {
   drawField(f: Field, up: Upgrades, t: number, dt: number) {
     this.begin();
     const c = this.c;
-    this.cover("bg_meadow");
+    this.cover(BIOMES.find((b) => b.id === f.biome)!.bg);
     // the fisher... the catcher: a kid with a vacuum, on the left, standing on the near ground
     const kid = img(f.beam ? "kid_vac_suck" : "kid_vac");
     const kw = 118, kh = kid ? (kw * kid.height) / kid.width : 130;
@@ -137,6 +139,8 @@ export class View {
     if (sp) {
       const w0 = (sp as HTMLImageElement).width, h0 = (sp as HTMLImageElement).height, w = s * 1.15, h = (w * h0) / w0;
       c.drawImage(sp, -w / 2, -h / 2, w, h);
+      if (cr.state === "roam") blink(c, cr.def.art, -w / 2, -h / 2, w, h, t, cr.uid);
+      else if (cr.state === "tug") blink(c, cr.def.art, -w / 2, -h / 2, w, h, t, cr.uid, 0.55); // squinting with effort
     } else { c.fillStyle = cr.def.color; c.beginPath(); c.arc(0, 0, s / 2, 0, Math.PI * 2); c.fill(); }
     c.restore();
     // tug: a ring above it fills while the cone holds it
@@ -190,21 +194,25 @@ export class View {
     this.shake = Math.max(0, this.shake - dt * 30);
   }
 
-  /** pedestal positions for the park: a 3-wide grid filling the lawn */
-  parkSlots() {
-    const cols = 3, rows = Math.ceil(CRITTERS.length / cols);
+  /** pedestal positions for one place's page of the park: a 3-wide grid filling the lawn */
+  parkSlots(biome: BiomeId) {
+    const list = critterOf(biome), cols = 3, rows = Math.ceil(list.length / cols);
     const top = 118, bottom = this.H - 250, gw = Math.min(this.W - 20, 420);
-    return CRITTERS.map((d, i) => ({ def: d, x: (this.W - gw) / 2 + gw * ((i % cols) + 0.5) / cols, y: top + (bottom - top) * (Math.floor(i / cols) + 0.75) / rows }));
+    return list.map((d, i) => ({ def: d, x: (this.W - gw) / 2 + gw * ((i % cols) + 0.5) / cols, y: top + (bottom - top) * (Math.floor(i / cols) + 0.75) / rows }));
   }
 
-  drawPark(save: SaveData, t: number, dt: number) {
+  /** critters flying out of the jar to their pedestals */
+  fliers: { art: string; x0: number; y0: number; x1: number; y1: number; t: number }[] = [];
+  fly(art: string, x0: number, y0: number, x1: number, y1: number, delay: number) { this.fliers.push({ art, x0, y0, x1, y1, t: -delay }); }
+
+  drawPark(save: SaveData, biome: BiomeId, t: number, dt: number) {
     this.begin();
     const c = this.c;
     this.cover("bg_park");
     const ped = img("pedestal");
-    for (const s of this.parkSlots()) {
+    for (const s of this.parkSlots(biome)) {
       const e = save.index[s.def.id], star = starOf(e?.count ?? 0);
-      const pw = 92, ph = ped ? (pw * ped.height) / ped.width : 60;
+      const pw = 84, ph = ped ? (pw * ped.height) / ped.width : 60;
       if (ped) c.drawImage(ped, s.x - pw / 2, s.y - ph * 0.35, pw, ph);
       const sp = img(s.def.art);
       if (!sp) continue;
@@ -212,9 +220,10 @@ export class View {
       const bob = Math.abs(Math.sin(t * 2.2 + s.x)) * 5;
       if (e) {
         c.drawImage(sp, s.x - w / 2, s.y - h - bob + 4, w, h);
+        blink(c, s.def.art, s.x - w / 2, s.y - h - bob + 4, w, h, t, s.x * 7 + s.y);
         c.font = "bold 14px Fredoka, system-ui"; c.textAlign = "center"; c.fillStyle = "#ffe066"; c.strokeStyle = "#0d1e45"; c.lineWidth = 4;
         const lbl = "★".repeat(star) + ` ${Math.round(s.def.income * STAR_MULT[star])}/s`;
-        c.strokeText(lbl, s.x, s.y + ph * 0.5); c.fillText(lbl, s.x, s.y + ph * 0.5);
+        c.strokeText(lbl, s.x, s.y + ph * 0.22); c.fillText(lbl, s.x, s.y + ph * 0.22);
       } else {
         // not caught yet: a dark silhouette with a question mark, something to chase
         c.save(); c.globalAlpha = 0.85; c.filter = "brightness(0) opacity(0.55)";
@@ -222,7 +231,39 @@ export class View {
         c.font = "bold 22px Fredoka, system-ui"; c.textAlign = "center"; c.fillStyle = "#fff"; c.fillText("?", s.x, s.y - h / 2 + 8);
       }
     }
+    for (const fl of this.fliers) {
+      fl.t += dt;
+      if (fl.t < 0) continue;
+      const k = Math.min(1, fl.t / 0.7), e = 1 - Math.pow(1 - k, 3), im = img(fl.art);
+      const x = fl.x0 + (fl.x1 - fl.x0) * e, y = fl.y0 + (fl.y1 - fl.y0) * e - Math.sin(k * Math.PI) * 120;
+      if (im) { const w = 30 + 30 * k, h = (w * im.height) / im.width; c.save(); c.translate(x, y); c.rotate((1 - k) * 6); c.drawImage(im, -w / 2, -h / 2, w, h); c.restore(); }
+      if (k >= 1 && fl.t < 0.8) this.burst(fl.x1, fl.y1, "#ffe066", 10, 120);
+    }
+    this.fliers = this.fliers.filter((fl) => fl.t < 0.8);
     this.particles(dt);
+  }
+}
+
+/** eyelids: blink now and then on each critter's own rhythm (eyes found by tools/art/eyes.py) */
+function blink(c: Ctx, name: string, x: number, y: number, w: number, h: number, t: number, seed: number, force = -1) {
+  const eyes = EYES[name];
+  if (!eyes) return;
+  let k = force;
+  if (k < 0) {
+    const per = 2.4 + (Math.abs(seed * 7919) % 23) / 10, ph = (t + (seed % 97) * 0.61) % per;
+    k = ph < 0.16 ? Math.sin((ph / 0.16) * Math.PI) : 0;
+  }
+  if (k < 0.05) return;
+  for (const [ex, ey, rx, ry, col] of eyes) {
+    const cx = x + ex * w, cy = y + ey * h, ax = rx * w, ay = ry * h;
+    c.save();
+    c.beginPath(); c.ellipse(cx, cy, ax, ay, 0, 0, Math.PI * 2); c.clip();
+    const up = cy - ay + ay * 1.15 * k;
+    c.fillStyle = col;
+    c.beginPath(); c.moveTo(cx - ax, cy - ay - 2); c.lineTo(cx + ax, cy - ay - 2); c.lineTo(cx + ax, up); c.quadraticCurveTo(cx, up + ay * 0.45 * k, cx - ax, up); c.closePath(); c.fill();
+    c.strokeStyle = "rgba(25,22,45,0.9)"; c.lineWidth = Math.max(1.2, ax * 0.22); c.lineCap = "round";
+    c.beginPath(); c.moveTo(cx - ax * 0.9, up); c.quadraticCurveTo(cx, up + ay * 0.45 * k, cx + ax * 0.9, up); c.stroke();
+    c.restore();
   }
 }
 

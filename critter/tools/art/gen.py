@@ -26,6 +26,15 @@ JOBS = {
      "a cheerful wooden welcome arch at the top with no letters, the middle area open and flat for placing pedestals. No characters, no creatures, no text. " + STYLE, "2:3", False),
   "ui_props": (SHEET + "Top-left: a round stone pedestal with a grassy top and a little golden trim, front view. Top-right: a big glass collection jar with a metal lid and a glowing swirl inside. "
      "Bottom-left: a shiny gold coin with a paw print. Bottom-right: a magic vacuum nozzle icon with a swirl of wind. " + STYLE, "1:1", True),
+  "crit_forest1": (SHEET + CRIT + "Top-left: 'Spora', a purple puffball mushroom critter releasing tiny glowing spores. Top-right: 'Acornel', a round acorn critter with a little cap. "
+     "Bottom-left: 'Mossling', a fuzzy green moss ball with a tiny flower. Bottom-right: 'Glowbug', a round firefly critter with a glowing yellow tail. " + STYLE, "1:1", True),
+  "crit_forest2": (SHEET + CRIT + "Top-left: 'Toadstoo', a chubby toad critter wearing a red mushroom cap hat. Top-right: 'Fernfox', a tiny fox ball with fern-leaf tail. "
+     "Bottom-left: 'Barkbear', a little bear cub ball with tree-bark fur. Bottom-right: 'Pinecub', a round pinecone hedgehog critter. " + STYLE, "1:1", True),
+  "crit_forest3": (SHEET + CRIT + "Top-left: 'Lumoth', a soft glowing blue moth puff, rare. Top-right: 'Crystalcap', a mushroom critter with a translucent crystal cap, epic. "
+     "Bottom-left: 'Elderoak', a wise little tree spirit ball with a leafy crown and tiny beard, legendary. Bottom-right: 'Moonfawn', a legendary white fawn-ball with glowing crescent-moon antlers. " + STYLE, "1:1", True),
+  "bg_forest": ("Vertical game background, portrait composition, side view: a magical glowing mushroom forest clearing at soft twilight. Top 45% giant friendly mushrooms and tall trees with fireflies and a soft purple-blue sky, "
+     "middle a wide open mossy clearing with small glowing mushrooms that stays uncluttered for gameplay, bottom 20% a flat mossy ground band with a dirt path, ferns only at the far left and right edges. "
+     "No characters, no creatures, no text. " + STYLE, "2:3", False),
 }
 
 if __name__ == "__main__":

@@ -6,7 +6,8 @@ import { newField, stepField, spawn, type Field } from "./core/field.ts";
 import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tankSize, upgradeCost, type UpgradeId } from "./core/economy.ts";
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
-import { CRITTERS, CRITTER_BY_ID, MUTATIONS, RARITY_COLOR, STAR_MULT, starOf } from "./data/critters.ts";
+import { BIOMES, CRITTERS, CRITTER_BY_ID, MUTATIONS, RARITY_COLOR, STAR_MULT, starOf } from "./data/critters.ts";
+import type { BiomeId } from "./core/types.ts";
 import { commercialBreak, gameplayStart, gameplayStop, initPoki, loadingFinished, rewardedBreak } from "./platform/poki.ts";
 import { setDucked, setMuted, setRain, sfx, unlockAudio } from "./platform/audio.ts";
 import { View, img, loadArt } from "./render/view.ts";
@@ -15,7 +16,9 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const save = loadSave();
 const view = new View($<HTMLCanvasElement>("game"));
 const rng = makeRng((Date.now() & 0xffff) + 1);
-let field: Field = newField(view.W, view.H, save.up);
+let field: Field = newField(view.W, view.H, save.up, save.biome);
+/** which place's page of the park is showing */
+let parkBiome: BiomeId = save.biome;
 let mode: "field" | "park" = "field";
 /** what is in the jar right now (species and mutation of each critter) */
 let jar: { id: string; mut: string | null }[] = [];
@@ -68,11 +71,16 @@ function handleEvents() {
       if (field.jar >= field.cap) { toast("🫙 Jar full! Bring them to the park", 2400); sfx.event(); }
     } else if (e.kind === "tug") {
       sfx.turn();
-      view.text(e.c.x, e.c.y - 70, e.c.mut === "gold" ? "✨ GOLDEN! Hold on!" : "💪 Hold on!", "#ffe066", 16);
+      view.text(e.c.x, e.c.y - 95, e.c.mut === "gold" ? "✨ GOLDEN! Hold on!" : "💪 Hold on!", "#ffe066", 16);
     } else if (e.kind === "escape") {
-      view.text(e.c.x, e.c.y - 60, "💨 escaped!", "#ffffff", 14); sfx.snap();
+      view.text(e.c.x, e.c.y - 40, "💨 escaped!", "#ffffff", 14); sfx.snap();
     } else if (e.kind === "full") {
       $("parkBtn").classList.add("pulse");
+    } else if (e.kind === "surprise") {
+      sfx.event(); view.shake = 4;
+      if (e.s === "visitor" && e.c) toast(`✨ A wild ${e.c.def.name} appeared!`, 2600);
+      else if (e.s === "golden_rain") toast("🌟 Golden critters! Quick!", 2400);
+      else toast("🏃 Stampede! Suck them all up!", 2400);
     } else if (e.kind === "spawn" && e.c.mut) {
       // a mutated one arrives: make sure the player notices it
       view.burst(e.c.x, e.c.y - 30, e.c.mut === "gold" ? "#ffd84a" : "#c9a7ff", 16, 120);
@@ -89,6 +97,12 @@ async function goPark() {
   mode = "park";
   // the jar empties onto the pedestals: each critter earns from now on
   const brought = jar.length;
+  parkBiome = save.biome;
+  const slots = view.parkSlots(parkBiome);
+  jar.forEach((j, i) => {
+    const s2 = slots.find((x) => x.def.id === j.id);
+    if (s2) view.fly(CRITTER_BY_ID[j.id].art, 40, 70, s2.x, s2.y - 30, 0.25 + i * 0.12);
+  });
   for (const j of jar) {
     const e = (save.index[j.id] ??= { count: 0, muts: [] });
     e.count++;
@@ -97,10 +111,7 @@ async function goPark() {
   jar = []; field.jar = 0;
   writeSave(save);
   $("parkBtn").classList.remove("pulse");
-  if (brought) {
-    sfx.reveal("rare");
-    for (const s of view.parkSlots()) if (save.index[s.def.id]) view.burst(s.x, s.y - 30, "#ffe066", 10, 100);
-  }
+  if (brought) { sfx.reveal("rare"); jarSounds(brought); }
   gameplayStop();
   busy = false;
   updateUi();
@@ -112,7 +123,7 @@ async function goField() {
   // the natural break between rounds: Poki decides whether an ad plays
   await commercialBreak();
   mode = "field";
-  field = newField(view.W, view.H, save.up);
+  field = newField(view.W, view.H, save.up, save.biome);
   field.script = 2; // the tutorial moments only happen once per visit... first visit keeps them
   for (let i = 0; i < 5; i++) spawn(field, rng);
   busy = false;
@@ -139,6 +150,31 @@ function buy(id: UpgradeId) {
   sfx.buy(); writeSave(save); updateUi();
 }
 
+/** a happy little coin sound for each critter landing on its pedestal */
+function jarSounds(n: number) { for (let i = 0; i < Math.min(n, 12); i++) setTimeout(() => sfx.coin(i), 450 + i * 120); }
+
+/** the places: tap one you own to see its park page (and catch there next); a locked one can be bought */
+let biomesKey = "";
+function renderBiomes() {
+  const key = `${parkBiome}|${save.biomes.join()}|${BIOMES.map((b) => save.coins >= b.price).join()}`;
+  if (key === biomesKey) return;
+  biomesKey = key;
+  const box = $("biomes");
+  box.innerHTML = "";
+  for (const b of BIOMES) {
+    const owned = save.biomes.includes(b.id);
+    const el = document.createElement("button");
+    el.className = "btn bio" + (b.id === parkBiome ? " on" : "") + (owned ? "" : " locked");
+    el.innerHTML = owned ? `${b.icon} ${b.name}` : `🔒 ${b.icon} 🪙${b.price.toLocaleString()}`;
+    el.disabled = !owned && save.coins < b.price;
+    el.onclick = () => {
+      if (!owned) { if (save.coins < b.price) return; save.coins -= b.price; save.biomes.push(b.id); sfx.reveal("legendary"); toast(`${b.icon} ${b.name} unlocked!`, 2400); }
+      parkBiome = b.id; save.biome = b.id; writeSave(save); biomesKey = ""; updateUi();
+    };
+    box.appendChild(el);
+  }
+}
+
 // ------------------------------------------------------------------ ui
 let toastT = 0;
 function toast(text: string, ms = 1800) {
@@ -156,11 +192,14 @@ const UP_NAME: Record<UpgradeId, string> = { power: "Suction", range: "Reach", t
 function updateUi() {
   $("coinsN").textContent = short(save.coins);
   $("indexN").textContent = `${Object.keys(save.index).length}/${CRITTERS.length}`;
+  const bi = BIOMES.find((b) => b.id === save.biome)!;
+  $("goBtn").textContent = `${bi.icon} Catch more!`;
   $("jarN").textContent = `${field.jar}/${field.cap}`;
   ($("jarFill") as HTMLElement).style.width = `${Math.round((field.jar / field.cap) * 100)}%`;
   $("fieldUi").classList.toggle("hidden", mode !== "field");
   $("parkUi").classList.toggle("hidden", mode !== "park");
   $("incomeN").textContent = `🪙 ${short(incomePerSec())}/s`;
+  renderBiomes();
   const box = $("ups");
   box.innerHTML = "";
   for (const id of UPGRADE_ORDER) {
@@ -195,11 +234,11 @@ function frame(now: number) {
     setRain(0);
     // little coins rise from earning pedestals
     if (Math.random() < dt * 3) {
-      const owned = view.parkSlots().filter((s) => save.index[s.def.id]);
+      const owned = view.parkSlots(parkBiome).filter((s) => save.index[s.def.id]);
       const s = owned[Math.floor(Math.random() * owned.length)];
       if (s) view.text(s.x, s.y - 50, `+${Math.round(s.def.income * STAR_MULT[starOf(save.index[s.def.id].count)])}`, "#ffe066", 13);
     }
-    view.drawPark(save, t, dt);
+    view.drawPark(save, parkBiome, t, dt);
   }
   uiT -= dt;
   if (uiT <= 0) { uiT = 0.25; updateUi(); }

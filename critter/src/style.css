@@ -43,3 +43,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #2a6b3a; fon
 #loading .logo { font-size: 40px; font-weight: 700; text-shadow: 0 4px 0 #0d1e45; }
 #loading .bar { width: 220px; height: 16px; border-radius: 8px; background: rgba(0,0,0,.3); overflow: hidden; border: 3px solid #0d1e45; }
 #loadBar { display: block; height: 100%; width: 0; background: #ffe066; }
+#biomes { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.btn.bio { background: linear-gradient(#2c4f86, #1b345f); font-size: 15px; padding: 5px 12px; }
+.btn.bio.on { background: linear-gradient(#7be495, #2fb35a); }
+.btn.bio.locked { background: linear-gradient(#ffcf5a, #ff9a1f); }

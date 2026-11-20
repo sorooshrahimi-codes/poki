@@ -1,14 +1,15 @@
 """Find the eyes in every character sprite so the game can make them blink.
 An eye = a roundish patch of near-white (the sclera) with a dark pupil inside it.
 Writes src/data/eyes.ts: per sprite, up to 2 ellipses (centre and radii as fractions of the sprite) and the eyelid colour.
-Usage: python3 -I eyes.py"""
-import os, json
+Usage: python3 -I eyes.py [ART_DIR OUT_TS front]   ("front": every sprite faces the viewer, two eyes each)"""
+import os, sys, json
 import numpy as np
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ART = os.path.join(HERE, "..", "..", "public", "art")
-OUT = os.path.join(HERE, "..", "..", "src", "data", "eyes.ts")
+ART = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "..", "public", "art")
+OUT = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "..", "..", "src", "data", "eyes.ts")
+ALL_FRONT = len(sys.argv) > 3 and sys.argv[3] == "front"
 SKIP = ("bg_", "floor_", "p_", "i_", "b_", "g_", "s_bottle", "s_chest", "hat_", "boat")
 JUNK = {"s_gull", "old_boot", "soda_can", "rubber_duck", "lost_mitten", "flip_flop", "hot_bottle"}
 
@@ -37,6 +38,8 @@ FRONT = {"jelly", "lava_jelly", "frost_jelly", "octopus", "puffer", "obsidian_pu
 
 def region_ok(name, cx, cy):
     """where eyes can be: in the head, not on a sleeve, belly or tail"""
+    if ALL_FRONT:
+        return 0.15 < cx < 0.85 and 0.15 < cy < 0.7
     if name.startswith("kid_"):
         return 0.25 < cx < 0.75 and 0.19 < cy < 0.45
     if name.startswith(("npc_", "pet_")):
@@ -57,7 +60,7 @@ def find_eyes(path, name):
     sat = a[..., :3].max(-1) - a[..., :3].min(-1)
     white = (lum > 205) & (sat < 45) & (al > 200)
     # characters have coloured irises (brown, green, blue): count those as the pupil too
-    head = name.startswith(("kid_", "npc_", "pet_"))
+    head = ALL_FRONT or name.startswith(("kid_", "npc_", "pet_"))
     dark = (lum < (128 if head else 95)) & (al > 200) & ((sat > 40) | (lum < 95))
     H, W = lum.shape
     area_all = (al > 200).sum()
@@ -94,7 +97,7 @@ def find_eyes(path, name):
         cands.append((score, gx0, gy0, gx1, gy1))
     cands.sort(reverse=True)
     eyes = []
-    side = not (name in FRONT or name.startswith(("kid_", "npc_", "pet_")))
+    side = not (ALL_FRONT or name in FRONT or name.startswith(("kid_", "npc_", "pet_")))
     for c in cands:
         if len(eyes) == (1 if side else 2):
             break
