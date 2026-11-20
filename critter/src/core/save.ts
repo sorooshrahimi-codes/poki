@@ -1,6 +1,7 @@
 import type { Upgrades } from "./economy.ts";
 import type { BiomeId } from "./types.ts";
 import type { Egg } from "./eggs.ts";
+import type { Lang } from "../i18n.ts";
 
 export interface SaveData {
   v: 1;
@@ -19,6 +20,8 @@ export interface SaveData {
   nest: Egg[];
   /** best 60-second rush score */
   rushBest?: number;
+  /** language the player picked; unset means follow the browser */
+  lang?: Lang | null;
 }
 
 export const newSave = (): SaveData => ({ v: 1, coins: 0, up: { power: 0, range: 0, tank: 0 }, index: {}, catches: 0, lastSeen: Date.now(), muted: false, tips: [], biome: "meadow", biomes: ["meadow"], nest: [] });

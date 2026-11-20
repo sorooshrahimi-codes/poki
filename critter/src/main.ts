@@ -6,7 +6,8 @@ import { newField, stepField, spawn, type Field } from "./core/field.ts";
 import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tankSize, upgradeCost, type UpgradeId } from "./core/economy.ts";
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
-import { BIOMES, CRITTERS, CRITTER_BY_ID, MUTATIONS, RARITY_COLOR, STAR_MULT, starOf } from "./data/critters.ts";
+import { BIOMES, CRITTERS, CRITTER_BY_ID, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
+import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
 import type { BiomeId } from "./core/types.ts";
 import { commercialBreak, gameplayStart, gameplayStop, initPoki, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
 import { setDucked, setMuted, setRain, sfx, unlockAudio } from "./platform/audio.ts";
@@ -15,6 +16,7 @@ import { EGG_ART, EGG_MINUTES, NEST_SLOTS, eggDrop, hatch } from "./core/eggs.ts
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const save = loadSave();
+setLang(save.lang ?? detectLang());
 const view = new View($<HTMLCanvasElement>("game"));
 const rng = makeRng((Date.now() & 0xffff) + 1);
 let field: Field = newField(view.W, view.H, save.up, save.biome);
@@ -55,7 +57,7 @@ function payOffline() {
   const away = Math.min(OFFLINE_CAP_MS, Date.now() - save.lastSeen);
   const earned = Math.floor((away / 1000) * incomePerSec());
   save.lastSeen = Date.now();
-  if (earned > 0 && away > 60_000) setTimeout(() => toast(`🏡 +🪙${earned.toLocaleString()} while you were away!`, 3200), 600);
+  if (earned > 0 && away > 60_000) setTimeout(() => toast(tf("offline", { n: earned.toLocaleString() }), 3200), 600);
   save.coins += earned;
 }
 
@@ -79,49 +81,49 @@ function handleEvents() {
       let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25));
       if (c.boss > 0) coins += Math.round(c.def.income * 60);
       if (rush) rush.score += coins; else { save.coins += coins; save.catches++; }
-      if (combo >= 3) { view.text(field.nozzle.x + 70, field.nozzle.y - 70, `COMBO ×${combo}!`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo)); sfx.coin(combo); }
-      if (c.boss > 0) { toast(`👑 You caught the giant ${c.def.name}! +🪙${coins.toLocaleString()}`, 3200); view.shake = 14; sfx.reveal("legendary"); }
+      if (combo >= 3) { view.text(field.nozzle.x + 70, field.nozzle.y - 70, tf("combo", { n: combo }), combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo)); sfx.coin(combo); }
+      if (c.boss > 0) { toast(tf("bossCaught", { name: critterName(c.def), n: coins.toLocaleString() }), 3200); view.shake = 14; sfx.reveal("legendary"); }
       if (c.boss > 0 || c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") view.cheer = 1.2;
       // special catches sometimes leave an egg in the nest
       const egg = c.boss > 0 ? "golden" : eggDrop(c.def.rarity, c.mut, rng);
       if (egg && !rush && save.nest.length < NEST_SLOTS) {
         save.nest.push({ tier: egg, biome: field.biome, readyAt: Date.now() + EGG_MINUTES[egg] * 60_000 });
-        view.text(field.nozzle.x + 60, field.nozzle.y - 90, "🥚 An egg!", "#fff4c0", 18);
+        view.text(field.nozzle.x + 60, field.nozzle.y - 90, tr("egg"), "#fff4c0", 18);
         sfx.newFish();
-        if (!save.tips.includes("egg")) { save.tips.push("egg"); setTimeout(() => toast(`🥚 It left an egg! It hatches in the park in ${EGG_MINUTES[egg]} min.`, 3200), 900); }
+        if (!save.tips.includes("egg")) { save.tips.push("egg"); setTimeout(() => toast(tf("eggTip", { n: EGG_MINUTES[egg] }), 3200), 900); }
       }
       const isNew = !rush && !save.index[c.def.id] && !jar.slice(0, -1).some((j) => j.id === c.def.id);
       sfx.hook(c.def.rarity === "legendary" ? "legendary" : c.def.rarity);
       view.burst(field.nozzle.x, field.nozzle.y, c.mut === "gold" ? "#ffd84a" : RARITY_COLOR[c.def.rarity], c.def.rarity === "common" && !c.mut ? 10 : 24);
-      view.text(field.nozzle.x + 40, field.nozzle.y - 34 - (field.jar % 2) * 22, isNew ? `NEW! ${c.def.name}` : `+🪙${coins}`, isNew ? "#ff9ad1" : "#ffe066", isNew ? 20 : 17);
+      view.text(field.nozzle.x + 40, field.nozzle.y - 34 - (field.jar % 2) * 22, isNew ? tf("newName", { name: critterName(c.def) }) : `+🪙${coins}`, isNew ? "#ff9ad1" : "#ffe066", isNew ? 20 : 17);
       if (c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") { view.shake = 8; sfx.reveal(c.def.rarity === "legendary" ? "legendary" : "epic"); }
       if (isNew) sfx.newFish();
-      if (!rush && field.jar >= field.cap) { toast("🫙 Jar full! Bring them to the park", 2400); sfx.event(); }
+      if (!rush && field.jar >= field.cap) { toast(tr("jarFull"), 2400); sfx.event(); }
     } else if (e.kind === "tug") {
       if (!fresh(e.c.uid, "tug")) continue;
       sfx.turn();
-      view.text(Math.min(view.W - 80, Math.max(80, e.c.x)), e.c.y - 95, e.c.mut === "gold" ? "✨ GOLDEN! Hold on!" : "💪 Hold on!", "#ffe066", 16);
+      view.text(Math.min(view.W - 80, Math.max(80, e.c.x)), e.c.y - 95, tr(e.c.mut === "gold" ? "holdGold" : "hold"), "#ffe066", 16);
     } else if (e.kind === "escape") {
       if (!fresh(e.c.uid, "esc")) continue;
-      view.text(e.c.x, e.c.y - 40, "💨 escaped!", "#ffffff", 14); sfx.snap();
+      view.text(e.c.x, e.c.y - 40, tr("escaped"), "#ffffff", 14); sfx.snap();
     } else if (e.kind === "full") {
       $("parkBtn").classList.add("pulse");
     } else if (e.kind === "surprise") {
       sfx.event(); view.shake = 4;
-      if (e.s === "visitor" && e.c) toast(`✨ A wild ${e.c.def.name} appeared!`, 2600);
-      else if (e.s === "boss" && e.c) { toast(`👑 A GIANT ${e.c.def.name} appeared! Catch it 3 times!`, 3200); view.shake = 10; sfx.snap(); }
-      else if (e.s === "golden_rain") toast("🌟 Golden critters! Quick!", 2400);
-      else toast("🏃 Stampede! Suck them all up!", 2400);
+      if (e.s === "visitor" && e.c) toast(tf("visitor", { name: critterName(e.c.def) }), 2600);
+      else if (e.s === "boss" && e.c) { toast(tf("boss", { name: critterName(e.c.def) }), 3200); view.shake = 10; sfx.snap(); }
+      else if (e.s === "golden_rain") toast(tr("goldenRain"), 2400);
+      else toast(tr("stampede"), 2400);
     } else if (e.kind === "split") {
-      view.burst(e.c.x, e.c.y - 30, "#7fd3ff", 14, 140); view.text(e.c.x, e.c.y - 70, "Split!", "#9be7ff", 15); sfx.boing();
+      view.burst(e.c.x, e.c.y - 30, "#7fd3ff", 14, 140); view.text(e.c.x, e.c.y - 70, tr("split"), "#9be7ff", 15); sfx.boing();
     } else if (e.kind === "hide") {
       sfx.bonk();
-      if (!save.tips.includes(e.c.def.behave)) { save.tips.push(e.c.def.behave); toast(e.c.def.behave === "shell" ? "🐚 It hid in its shell! Let go, wait for it to peek, then suck!" : "🕳️ It went underground! Catch it when it pops up.", 3000); }
+      if (!save.tips.includes(e.c.def.behave)) { save.tips.push(e.c.def.behave); toast(tr(e.c.def.behave === "shell" ? "tipShell" : "tipBurrow"), 3000); }
     } else if (e.kind === "flee") {
-      if (!save.tips.includes("shy")) { save.tips.push("shy"); toast("💨 Shy ones run from the wind! Sweep the cone onto them fast.", 3000); }
+      if (!save.tips.includes("shy")) { save.tips.push("shy"); toast(tr("tipShy"), 3000); }
     } else if (e.kind === "bossPhase") {
       view.shake = 12; sfx.snap(); view.burst(e.c.x, e.c.y - 60, "#ffd84a", 30, 220);
-      view.text(e.c.x, e.c.y - 110, `It broke free! ${e.c.boss} more!`, "#ffe066", 17);
+      view.text(e.c.x, e.c.y - 110, tf("bossPhase", { n: e.c.boss }), "#ffe066", 17);
     } else if (e.kind === "spawn" && e.c.mut) {
       // a mutated one arrives: make sure the player notices it
       view.burst(e.c.x, e.c.y - 30, e.c.mut === "gold" ? "#ffd84a" : "#c9a7ff", 16, 120);
@@ -144,7 +146,7 @@ async function startRush(seed: number, goal: number | null) {
   field.script = 2;
   for (let i = 0; i < 7; i++) spawn(field, rushRng);
   $("result").classList.add("hidden");
-  toast(goal ? `🏁 Beat ${goal.toLocaleString()} in 60 seconds!` : "🏁 Catch as many as you can in 60 seconds!", 2600);
+  toast(goal ? tf("rushGoal", { n: goal.toLocaleString() }) : tr("rushStart"), 2600);
   gameplayStart();
   updateUi();
 }
@@ -161,8 +163,8 @@ function endRush() {
   save.coins += prize;
   lastRush = { seed: r.seed, score: r.score };
   writeSave(save);
-  $("resTitle").textContent = r.goal === null ? "🏁 Rush over!" : won ? "🏆 You won!" : "😅 So close!";
-  $("resBody").innerHTML = `<div>🎯 <b>${r.score.toLocaleString()}</b></div>` + (r.goal !== null ? `<div>🤝 ${r.goal.toLocaleString()}</div>` : "") + `<div><small>⭐ Best ${best.toLocaleString()} · 🪙+${prize.toLocaleString()}</small></div>`;
+  $("resTitle").textContent = tr(r.goal === null ? "rushOver" : won ? "won" : "close");
+  $("resBody").innerHTML = `<div>🎯 <b>${r.score.toLocaleString()}</b></div>` + (r.goal !== null ? `<div>🤝 ${r.goal.toLocaleString()}</div>` : "") + `<div><small>${tf("best", { n: best.toLocaleString() })} · 🪙+${prize.toLocaleString()}</small></div>`;
   $("result").classList.remove("hidden");
   sfx.reveal(won || r.goal === null ? "epic" : "rare");
   mode = "park";
@@ -171,18 +173,18 @@ function endRush() {
 async function shareRush() {
   if (!lastRush) return;
   const url = await shareURL({ cvr: String(lastRush.seed), cvs: String(lastRush.score) });
-  const text = `🫙 Critter Vac: can you beat ${lastRush.score.toLocaleString()} in a 60-second Rush?`;
+  const text = tf("shareText", { n: lastRush.score.toLocaleString() });
   try { if (navigator.share) { await navigator.share({ text, url }); return; } } catch { /* cancelled */ }
-  try { await navigator.clipboard.writeText(`${text} ${url}`); toast("📋 Link copied! Send it to a friend.", 2400); } catch { toast(url, 6000); }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); toast(tr("copied"), 2400); } catch { toast(url, 6000); }
 }
 /** arriving from a friend's link: offer their race */
 function offerRush() {
   const seed = parseInt(urlParam("cvr"), 10), score = parseInt(urlParam("cvs"), 10);
   if (!(seed > 0) || !(score >= 0)) return;
-  $("resTitle").textContent = "🤝 A friend challenges you!";
-  $("resBody").innerHTML = `<div>🎯 <b>${score.toLocaleString()}</b> in 60 seconds</div><div><small>Same critters, same vacuum. Can you beat it?</small></div>`;
-  $("resShare").textContent = "🏁 Play!";
-  $("resShare").onclick = () => { $("resShare").textContent = "📤 Challenge a friend"; $("resShare").onclick = () => void shareRush(); void startRush(seed, score); };
+  $("resTitle").textContent = tr("challenged");
+  $("resBody").innerHTML = `<div>${tf("chScore", { n: `<b>${score.toLocaleString()}</b>` })}</div><div><small>${tr("chDesc")}</small></div>`;
+  shareIsPlay = true; applyLang();
+  $("resShare").onclick = () => { shareIsPlay = false; applyLang(); $("resShare").onclick = () => void shareRush(); void startRush(seed, score); };
   $("result").classList.remove("hidden");
 }
 
@@ -235,7 +237,7 @@ async function lure() {
   busy = false;
   if (!ok) return;
   field.lure += 3;
-  toast("✨ The next 3 critters will be GOLDEN!", 2600);
+  toast(tr("lureToast"), 2600);
   sfx.reveal("epic");
   await goField();
 }
@@ -284,7 +286,7 @@ function hatchEgg(i: number) {
   const slot = view.parkSlots(def.biome).find((s2) => s2.def.id === def.id);
   if (slot) view.fly(def.art, view.W / 2, view.H - 260, slot.x, slot.y - 30, 0.1);
   sfx.reveal(def.rarity === "legendary" ? "legendary" : def.rarity === "epic" ? "epic" : "rare");
-  toast(`🐣 ${mut === "gold" ? "A GOLDEN " : ""}${def.name} hatched!${isNew ? " NEW!" : ""}`, 2800);
+  toast(tf(mut === "gold" ? "hatchedGold" : "hatched", { name: critterName(def) }) + (isNew ? ` ${tr("new")}` : ""), 2800);
   writeSave(save); nestKey = ""; updateUi();
 }
 
@@ -303,10 +305,10 @@ function renderBiomes() {
     const owned = save.biomes.includes(b.id);
     const el = document.createElement("button");
     el.className = "btn bio" + (b.id === parkBiome ? " on" : "") + (owned ? "" : " locked");
-    el.innerHTML = owned ? `${b.icon} ${b.name}` : `🔒 ${b.icon} 🪙${b.price.toLocaleString()}`;
+    el.innerHTML = owned ? `${b.icon} ${biomeName(b)}` : `🔒 ${b.icon} 🪙${b.price.toLocaleString()}`;
     el.disabled = !owned && save.coins < b.price;
     el.onclick = () => {
-      if (!owned) { if (save.coins < b.price) return; save.coins -= b.price; save.biomes.push(b.id); sfx.reveal("legendary"); toast(`${b.icon} ${b.name} unlocked!`, 2400); }
+      if (!owned) { if (save.coins < b.price) return; save.coins -= b.price; save.biomes.push(b.id); sfx.reveal("legendary"); toast(`${b.icon} ${tf("unlocked", { name: biomeName(b) })}`, 2400); }
       parkBiome = b.id; save.biome = b.id; writeSave(save); biomesKey = ""; updateUi();
     };
     box.appendChild(el);
@@ -314,6 +316,22 @@ function renderBiomes() {
 }
 
 // ------------------------------------------------------------------ ui
+/** whether the result's left button starts a friend's race ("Play!") or shares yours */
+let shareIsPlay = false;
+/** the fixed labels; the rest is rewritten by updateUi */
+function applyLang() {
+  $("hint").textContent = tr("hint");
+  $("parkTitle").textContent = tr("parkTitle");
+  $("lureBtn").textContent = tr("lure");
+  $("rushBtn").textContent = tr("rush");
+  $("resOk").textContent = tr("ok");
+  $("resShare").textContent = tr(shareIsPlay ? "play" : "share");
+  $("langTitle").textContent = tr("lang");
+  $("langBtn").setAttribute("aria-label", tr("lang"));
+  const cur = getLang();
+  ($("langFlag") as HTMLImageElement).src = LANG_FLAG[cur];
+  for (const b of $("langList").children) (b as HTMLElement).classList.toggle("on", (b as HTMLElement).dataset.lang === cur);
+}
 let toastT = 0;
 function toast(text: string, ms = 1800) {
   const el = $("toast"); el.textContent = text; el.classList.remove("hidden");
@@ -325,13 +343,12 @@ const UP_LABEL: Record<UpgradeId, (l: number) => string> = {
   range: (l) => `${Math.round(range({ power: 0, range: l, tank: 0 }) / 10)}m`,
   tank: (l) => `${tankSize({ power: 0, range: 0, tank: l })}`,
 };
-const UP_NAME: Record<UpgradeId, string> = { power: "Suction", range: "Reach", tank: "Jar" };
 
 function updateUi() {
   $("coinsN").textContent = short(save.coins);
   $("indexN").textContent = `${Object.keys(save.index).length}/${CRITTERS.length}`;
   const bi = BIOMES.find((b) => b.id === save.biome)!;
-  $("goBtn").textContent = `${bi.icon} Catch more!`;
+  $("goBtn").textContent = `${bi.icon} ${tr("catchMore")}`;
   $("jarN").textContent = `${field.jar}/${field.cap}`;
   ($("jarFill") as HTMLElement).style.width = `${Math.round((field.jar / field.cap) * 100)}%`;
   $("fieldUi").classList.toggle("hidden", mode !== "field");
@@ -343,7 +360,7 @@ function updateUi() {
   renderNest();
   view.parkBottom = save.nest.length ? 330 : 272;
   const anyReady = save.nest.some((e) => Date.now() >= e.readyAt);
-  $("parkBtn").textContent = anyReady ? "🏡 Park 🐣" : "🏡 Park";
+  $("parkBtn").textContent = tr("park") + (anyReady ? " 🐣" : "");
   const box = $("ups");
   box.innerHTML = "";
   for (const id of UPGRADE_ORDER) {
@@ -351,7 +368,7 @@ function updateUi() {
     const b = document.createElement("button");
     b.className = "btn up";
     b.disabled = cost === null || cost > save.coins;
-    b.innerHTML = `<span class="ui">${UPGRADES[id].icon}</span><span class="un">${UP_NAME[id]}</span><span class="ul">⬆${UP_LABEL[id](save.up[id] + 1)}</span><span class="uc">${cost === null ? "MAX" : "🪙" + short(cost)}</span>`;
+    b.innerHTML = `<span class="ui">${UPGRADES[id].icon}</span><span class="un">${tr(`up.${id}`)}</span><span class="ul">⬆${UP_LABEL[id](save.up[id] + 1)}</span><span class="uc">${cost === null ? tr("max") : "🪙" + short(cost)}</span>`;
     b.onclick = () => buy(id);
     box.appendChild(b);
   }
@@ -363,7 +380,19 @@ $("resOk").onclick = () => { $("result").classList.add("hidden"); };
 $("resShare").onclick = () => void shareRush();
 $("goBtn").onclick = () => void goField();
 $("lureBtn").onclick = () => void lure();
+$("langBtn").onclick = () => { $("langPanel").classList.toggle("hidden"); };
+$("langPanel").onclick = (e) => { if (e.target === $("langPanel")) $("langPanel").classList.add("hidden"); };
+for (const l of LANGS) {
+  const b = document.createElement("button");
+  b.className = "btn lang";
+  b.dataset.lang = l;
+  b.innerHTML = `<img src="${LANG_FLAG[l]}" alt=""><span>${LANG_NAME[l]}</span>`;
+  b.onclick = () => { save.lang = l; setLang(l); writeSave(save); $("langPanel").classList.add("hidden"); biomesKey = ""; applyLang(); updateUi(); };
+  $("langList").appendChild(b);
+}
 $("muteBtn").onclick = () => { save.muted = !save.muted; setMuted(save.muted); $("muteBtn").textContent = save.muted ? "🔇" : "🔊"; writeSave(save); };
+
+applyLang();
 
 // ------------------------------------------------------------------ main loop
 let last = performance.now(), uiT = 0, coinAcc = 0;

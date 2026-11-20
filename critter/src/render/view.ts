@@ -200,7 +200,13 @@ export class View {
   burst(x: number, y: number, col: string, n = 14, sp = 160) {
     for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, v = sp * (0.4 + Math.random() * 0.6); this.parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 40, life: 0, max: 0.6 + Math.random() * 0.3, col, size: 3 + Math.random() * 3 }); }
   }
-  text(x: number, y: number, text: string, col: string, size = 18) { this.parts.push({ x, y, vx: 0, vy: -46, life: 0, max: 1.2, col, size, text }); }
+  text(x: number, y: number, text: string, col: string, size = 18) {
+    // keep the whole label on screen, whatever the language
+    this.c.font = `bold ${size}px Fredoka, system-ui`;
+    const half = this.c.measureText(text).width / 2 + 6;
+    x = Math.max(half, Math.min(this.W - half, x));
+    this.parts.push({ x, y, vx: 0, vy: -46, life: 0, max: 1.2, col, size, text });
+  }
 
   private particles(dt: number) {
     const c = this.c;

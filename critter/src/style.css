@@ -63,3 +63,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #2a6b3a; fon
 #result .rb b { color: #ffe066; font-size: 30px; }
 #result .rb small { font-size: 15px; color: #cfe3ff; }
 #parkUi .row .btn.big { font-size: 16px; padding: 6px 10px; }
+/* language picker: a flag button in the top bar opens a small list */
+#langBtn img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; display: block; border: 2px solid rgba(255,255,255,.8); }
+#langPanel { position: absolute; inset: 0; pointer-events: auto; background: rgba(8,16,40,.45); z-index: 5; }
+#langPanel .lt { position: absolute; top: 58px; right: 8px; width: 196px; text-align: center; font-size: 15px; font-weight: 700; color: #cfe3ff; background: linear-gradient(#2d5aa0, #1a3768); border: 3px solid #0d1e45; border-bottom: 0; border-radius: 18px 18px 0 0; padding: 6px 0 2px; }
+#langList { position: absolute; top: 88px; right: 8px; width: 196px; max-height: calc(100% - 100px); overflow-y: auto; display: flex; flex-direction: column; gap: 5px; background: linear-gradient(#1a3768, #142c55); border: 3px solid #0d1e45; border-top: 0; border-radius: 0 0 18px 18px; padding: 4px 8px 8px; box-shadow: 0 6px 0 #0d1e45; }
+.btn.lang { display: flex; align-items: center; gap: 10px; background: linear-gradient(#2c4f86, #1b345f); font-size: 16px; padding: 5px 10px; border-radius: 14px; text-align: left; }
+.btn.lang img { width: 30px; height: 20px; border-radius: 3px; display: block; flex: none; }
+.btn.lang.on { background: linear-gradient(#7be495, #2fb35a); }
