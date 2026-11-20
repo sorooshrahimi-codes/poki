@@ -44,6 +44,8 @@ export interface SaveData {
   voyage: number;
   /** rolling averages per dive, used to size derby rivals fairly */
   avg: { value: number; count: number; kg: number };
+  /** dock buttons the player has already been introduced to */
+  seenBtns: string[];
 }
 
 export const newSave = (): SaveData => ({
@@ -59,6 +61,7 @@ export const newSave = (): SaveData => ({
   daily: { day: -1, tries: 0, best: 0, streak: 0, lastDay: -1 },
   voyage: 0,
   avg: { value: 30, count: 3, kg: 1 },
+  seenBtns: [],
 });
 
 /** parse anything (old, partial or broken) into a valid save */

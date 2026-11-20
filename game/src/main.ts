@@ -27,6 +27,8 @@ import { Renderer, type SceneState } from "./render/scene.ts";
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
 const save = loadSave();
+// players from before the gradual unlock already know every button: no fanfare for them
+if (!save.seenBtns.length && save.dives > 14) save.seenBtns = ["shopBtn", "aquaBtn", "ordersBtn", "wardBtn", "competeBtn"];
 setLang(save.lang ?? detectLang());
 setMuted(save.muted);
 
@@ -1054,6 +1056,23 @@ function updateUi() {
   $("doubleLbl").textContent = t("double");
   const dock = scene.mode === "dock";
   renderMission();
+  // new players see only the essentials; each button arrives when it starts to matter
+  const gates: [string, boolean][] = [
+    ["shopBtn", save.dives >= 4],
+    ["aquaBtn", save.dives >= 8 || Object.keys(save.tank).length > 0],
+    ["ordersBtn", save.dives >= 8],
+    ["wardBtn", save.dives >= 10 || save.prog.level >= 3],
+    ["competeBtn", save.prog.level >= 3 || save.dives >= 14],
+  ];
+  for (const [id, open] of gates) {
+    const el = $(id);
+    el.classList.toggle("hidden", !open);
+    if (open && !save.seenBtns.includes(id)) {
+      save.seenBtns.push(id);
+      if (save.dives > 0) { el.classList.add("newbtn"); setTimeout(() => el.classList.remove("newbtn"), 6000); toast(`✨ ${el.textContent?.trim() || "🛒"} !`, 1800); }
+    }
+  }
+  $("lvlPill").classList.toggle("hidden", save.dives < 3);
   refillOrders();
   const fo = fillableOrders();
   $("ordersBadge").textContent = fo ? String(fo) : "";

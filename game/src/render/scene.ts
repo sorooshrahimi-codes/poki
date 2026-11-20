@@ -99,6 +99,7 @@ export class Renderer {
   private facing = new WeakMap<LiveFish, number>();
   private flash = 0;
   private zoom = 0;
+  private roll = 0;
   private lightning = 0;
   private nextBolt = 4;
   private boltX = 0;
@@ -250,6 +251,13 @@ export class Renderer {
       const zx = v.ox + this.zoomAt.x * v.scale, zy = (this.zoomAt.y - this.camY) * v.scale, z = 1 + this.zoom;
       c.translate(zx, zy); c.scale(z, z); c.translate(-zx, -zy);
     }
+    // a subtle camera roll: the fight tugs the view, currents lean it
+    let roll = 0;
+    const dv = s.dive;
+    if (dv && dv.phase === "fight") roll = Math.sin(s.t * 3.1) * 0.018;
+    else if (dv && dv.currents.length) { const q = dv.currents.find((u) => dv.hookY >= u.y - 60 && dv.hookY <= u.y + u.h + 60); if (q) roll = Math.sign(q.v) * 0.02; }
+    this.roll += (roll - this.roll) * 0.08;
+    if (Math.abs(this.roll) > 0.0005) { c.translate(v.w / 2, v.h / 2); c.rotate(this.roll); c.translate(-v.w / 2, -v.h / 2); }
     c.translate(v.ox + sx, sy);
     c.scale(v.scale, v.scale);
     c.translate(0, -this.camY);
@@ -274,6 +282,7 @@ export class Renderer {
     this.drawBoat(c, s);
     if (s.dive && s.mode === "dive") this.drawHook(c, s.dive, s.t, s.pose);
     this.drawParticles(c);
+    this.drawForeground(c, s, top, bottom, left, right);
     c.restore();
     this.drawDarkness(s);
     if (s.hint && s.mode === "dock") this.drawHint(s.t);
@@ -458,6 +467,40 @@ export class Renderer {
       c.scale(a.dir, 1);
       c.drawImage(im, -w / 2, -h / 2, w, h);
       c.restore();
+    }
+    c.restore();
+  }
+
+  /** near-camera layer: huge out-of-focus plants and bubbles drifting past in front of everything */
+  private drawForeground(c: Ctx, s: SceneState, top: number, bottom: number, left: number, right: number) {
+    if (bottom < 40) return;
+    const names = propNames(s.zone);
+    const par = 1.35, shift = this.camY * (1 - par);
+    c.save();
+    c.filter = "blur(5px) brightness(0.55) saturate(0.8)";
+    c.globalAlpha = 0.85;
+    for (let i = 0; i < 40; i++) {
+      const y = 380 + i * 520 + shift;
+      if (y < top - 200 || y - 360 > bottom + 200) continue;
+      const im = img(names[i % names.length]);
+      if (!im) continue;
+      const h = 300 + (i % 3) * 60, w = (h * im.width) / im.height;
+      const side = i % 2 ? 1 : -1;
+      const x = side < 0 ? left - w * 0.35 : right + w * 0.35;
+      c.save(); c.translate(x, y); if (side > 0) c.scale(-1, 1);
+      c.drawImage(im, -w / 2, -h, w, h); c.restore();
+    }
+    c.restore();
+    // big soft bubbles floating right in front of the lens
+    c.save();
+    for (let i = 0; i < 6; i++) {
+      const bx = left + ((i * 173 + s.t * (8 + i * 3)) % (right - left + 200)) - 100;
+      const by = top + ((i * 211 - s.t * (22 + i * 6)) % (bottom - top + 200) + (bottom - top + 200)) % (bottom - top + 200) - 100;
+      if (by < 0) continue;
+      const r = 14 + (i % 3) * 9;
+      const g = c.createRadialGradient(bx - r * 0.3, by - r * 0.3, 1, bx, by, r);
+      g.addColorStop(0, "rgba(255,255,255,0.28)"); g.addColorStop(0.7, "rgba(255,255,255,0.06)"); g.addColorStop(1, "rgba(255,255,255,0.12)");
+      c.fillStyle = g; c.beginPath(); c.arc(bx, by, r, 0, Math.PI * 2); c.fill();
     }
     c.restore();
   }
@@ -685,11 +728,18 @@ export class Renderer {
     }
   }
 
+  /** each fish swims at its own distance from the camera: far ones smaller and fainter, drawn first */
   private drawDiveFish(c: Ctx, d: Dive, t: number, top: number, bottom: number) {
-    for (const f of d.fish) {
-      if (f.hooked || f === d.fight?.fish) continue;
-      if (f.y < top - 90 || f.y > bottom + 90) continue;
+    const vis = d.fish.filter((f) => !f.hooked && f !== d.fight?.fish && f.y > top - 90 && f.y < bottom + 90);
+    const z = (f: LiveFish) => 0.88 + ((f.uid * 2654435761) % 1000) / 1000 * 0.24;
+    vis.sort((a, b) => z(a) - z(b));
+    for (const f of vis) {
+      const k = z(f);
+      c.save();
+      c.globalAlpha = k < 0.95 ? 0.82 : 1;
+      c.translate(f.x, f.y); c.scale(k, k); c.translate(-f.x, -f.y);
       this.drawSwimmer(c, f, t);
+      c.restore();
     }
   }
 
@@ -759,6 +809,32 @@ export class Renderer {
       c.drawImage(pet, bowX, -BOAT_W * 0.2 - ph + 6 + hop, pw, ph);
     }
     c.restore();
+    // reflection: the boat mirrored in the water, squashed and rippling (sells the water surface)
+    if (b.im && this.camY < 40) {
+      const src = this.dressed(b.p, b.im);
+      c.save();
+      c.globalAlpha = 0.22;
+      const slices = 10, rh = b.h * 0.45;
+      for (let i = 0; i < slices; i++) {
+        const sy0 = (i / slices) * src.height * 0.55, sh = (src.height * 0.55) / slices;
+        const dy = 2 + (i / slices) * rh, wob = Math.sin(s.t * 3 + i * 0.9) * (1 + i * 0.35);
+        c.save();
+        c.translate(b.cx + wob, dy);
+        c.scale(1, -1);
+        c.drawImage(src, 0, src.height - sy0 - sh, src.width, sh, b.left, -rh / slices, b.w, rh / slices + 0.5);
+        c.restore();
+      }
+      c.restore();
+      // the hull sits IN the water: a translucent water band over its lowest part
+      const wg = c.createLinearGradient(0, 0, 0, b.bottomY + 4);
+      wg.addColorStop(0, "rgba(120,215,240,0.25)"); wg.addColorStop(1, "rgba(40,140,200,0.75)");
+      c.fillStyle = wg;
+      c.beginPath();
+      const x0 = b.cx + b.left + b.g.hull[0] * b.w - 6, x1 = b.cx + b.left + b.g.hull[1] * b.w + 6;
+      c.moveTo(x0, 0);
+      for (let x = x0; x <= x1; x += 6) c.lineTo(x, Math.sin(x * 0.12 + s.t * 2.5) * 1.5);
+      c.lineTo(x1, b.bottomY + 4); c.lineTo(x0, b.bottomY + 4); c.closePath(); c.fill();
+    }
     // ripples around the hull
     c.save();
     const bx = this.boatGeo(s.t, s.pose).cx;
