@@ -1087,7 +1087,9 @@ function renderLevels() {
     }
     // one way forward: only the next level can be played (at the fork, both ways are offered)
     const fork = st[1] > 0 && !br && (i === 2 || i === 5);
-    const open = nodeOpen(b, i) && (i === next || fork) ;
+    // every level done but the bar is short: finished levels can be played again for coins
+    const grind = levelsDone(b) && barPower() < g.need && st[i] > 0 && i !== 5;
+    const open = nodeOpen(b, i) && (i === next || fork || grind);
     const done = st[i] > 0;
     let icon: string, cls = done ? " done" : "";
     if (i === 5) { icon = "🎰"; cls = " wheel"; }
@@ -1096,7 +1098,7 @@ function renderLevels() {
       icon = L.task === "species" && L.target ? ic(L.target) : L.task === "rival" ? `<img src="./art/kid_rival.webp" alt="">` : TASK_ICON[L.task];
       if (i === 6) { icon = `💀`; cls = " hard"; }
     }
-    return `<button class="node${cls}${open || done ? "" : " locked"}${open ? " next" : ""}" data-i="${i}" style="left:${x}%;top:${y}%"><span class="ni">${open || done ? icon : "🔒"}</span><span class="ns">${[0, 1, 2].map((k) => `<i class="${k < st[i] ? "on" : ""}">★</i>`).join("")}</span></button>`;
+    return `<button class="node${cls}${open || done ? "" : " locked"}${open ? " next" : ""}${grind ? " replay" : ""}" data-i="${i}" style="left:${x}%;top:${y}%"><span class="ni">${open || done ? icon : "🔒"}</span><span class="ns">${[0, 1, 2].map((k) => `<i class="${k < st[i] ? "on" : ""}">★</i>`).join("")}</span></button>`;
   }).join("");
   box.classList.remove("hidden");
   for (const el of box.querySelectorAll<HTMLElement>(".node")) el.onclick = () => { if (!el.classList.contains("next") && !el.classList.contains("go")) { sfx.nope(); return; } sfx.tap(); void startLevel(b, +el.dataset.i!); };
@@ -1182,7 +1184,8 @@ function gauge(g: { id: string; need: number; tier?: number }) {
 }
 const ic = (id: string) => `<img src="./art/${CRITTER_BY_ID[id].art}.webp" alt="">`;
 const COIN = `<img src="./art/coin.webp" alt="">`;
-const short = (n: number) => (n < 10_000 ? Math.floor(n).toLocaleString() : n < 1e6 ? `${(n / 1000).toFixed(1)}K` : `${(n / 1e6).toFixed(2)}M`);
+/** short numbers: 3 significant digits at most (9,870 · 12.3K · 394M · 1.25B) */
+const short = (n: number) => { if (n < 10_000) return Math.floor(n).toLocaleString(); const u = n < 1e6 ? [1e3, "K"] : n < 1e9 ? [1e6, "M"] : [1e9, "B"]; const v = n / (u[0] as number); return `${v >= 100 ? Math.round(v) : v.toPrecision(3)}${u[1]}`; };
 const UP_LABEL: Record<UpgradeId, (l: number) => string> = {
   power: (l) => `Lv${l + 1}`,
   range: (l) => `Lv${l + 1}`,
@@ -1295,6 +1298,7 @@ function frame(now: number) {
   field.giant = gH && lvl?.task === "giant" ? { id: gH.id, ready: L >= gH.need, resist: gH.resist, scale: gH.scale } : null;
   const teasing = field.critters.some((c) => c.tease && c.state !== "caught");
   const onMap = mode === "field" && !lvl && !$("levels").classList.contains("hidden");
+  view.mapMode = onMap;
   view.giant = gH && !teasing && !onMap ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need, k: Math.min(1, L / gH.need) } : null;
   view.vac = L;
   view.tier = tierOf(vacLevel(save.up));

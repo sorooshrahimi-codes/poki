@@ -117,6 +117,8 @@ export class View {
     c.translate(zx, zy); c.scale(this.zoom, this.zoom); c.translate(-zx, -zy);
     this.cover(BIOMES.find((b) => b.id === f.biome)!.bg, -f.kid.x * 0.14);
     c.filter = "none";
+    // the map is open: only the place's picture behind it (blurred by the page), nothing moving
+    if (this.mapMode) { this.particles(dt); return; }
     this.lastField = f;
     if (!f.critters.some((k) => k.boss > 0)) this.gloom(t, dt);
     // the fisher... the catcher: a kid with a vacuum, on the left, standing on the near ground
@@ -131,7 +133,7 @@ export class View {
     if (moving && Math.random() < dt * 8) this.dust(f.left + f.kid.x + 40 * kk, gy + 2);
     this.lastWalk = f.kid.walk;
     const step = moving ? Math.abs(Math.sin(f.kid.walk * 0.09)) * 5 : 0;
-    const grow = 1 + Math.min(0.3, this.vac * 0.01);
+    const grow = 1 + Math.min(0.08, this.vac * 0.004);
     const kw = 118 * kk * grow, kh = kid ? (kw * kid.height) / kid.width : 130 * kk;
     const kx = f.left + f.kid.x, ky = gy + 6 * kk - kh - step + Math.sin(t * 2.4) * 1.5;
     const face = f.kid.face;
@@ -200,6 +202,7 @@ export class View {
     }
   }
   tier = 0;
+  mapMode = false;
   /** event critters carry a sign above them, drawn on top of everything so a crowd never hides it */
   private signs(f: Field, t: number) {
     const c = this.c;

@@ -3,7 +3,8 @@
 Files in this folder:
 - `thumb_628.jpg`: square thumbnail (628 x 628)
 - `thumb_1280x720.jpg`: wide thumbnail / banner (1280 x 720)
-- `trailer_1280x720.mp4` / `trailer_540x960.mp4`: 22-second gameplay clips of the giant moment (no sound; recorded from the real game)
+- `trailer_1280x720.mp4`: 30-second trailer with music (title card, the map, a level with surprise events and the special move, a giant fighting back, the finale, end card), recorded from the real game
+- `trailer_540x960.mp4`: an older 22-second portrait clip of the giant moment (no sound)
 - The game build: `critter-vac-poki.zip` in the repository root (contents of `critter/dist`)
 
 ## Title

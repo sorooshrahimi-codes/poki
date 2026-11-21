@@ -625,3 +625,22 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
   #levels .placeTag { font-size: 28px; }
 }
 #levels.wide { left: 0; right: 0; translate: none; margin: 0 auto; width: auto; max-width: 980px; }
+/* the map over a calm, blurred picture */
+#levels::before { background: rgba(13,30,69,.35); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+#levels .node { width: 58px; height: 58px; }
+#levels .node .ni { font-size: 25px; }
+#levels .node .ni img { width: 34px; height: 34px; }
+#levels .node.giant { width: 84px; height: 84px; }
+#levels .node.giant img.gi { width: 64px; height: 64px; }
+#levels .node.done:not(.replay) { filter: saturate(.55) brightness(.9); }
+#levels .node.replay { animation: none; box-shadow: 0 5px 0 #1d4f9a, 0 0 12px 3px rgba(255,224,102,.55); }
+#levels .node.replay::after { content: "↻"; position: absolute; right: -6px; top: -6px; width: 22px; height: 22px; border-radius: 50%; background: #ffcf5a; color: #5a3000; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+#levels .mapKid { width: 36px; }
+#levels { left: 14px; right: 14px; top: 140px; bottom: 130px; }
+/* safe margins: nothing touches the screen edges */
+#top { top: 10px; left: 12px; right: 12px; }
+#upBar { bottom: 12px; width: calc(100% - 28px); max-width: 480px; justify-content: center; }
+.upb { flex: 1 1 0; min-width: 0; justify-content: center; }
+.upb .uc { font-size: 14px; white-space: nowrap; }
+.corner.left { left: 14px; } .corner.right { right: 14px; }
+@media (orientation: portrait) { .corner { bottom: 66px; } }
