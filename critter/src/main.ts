@@ -171,7 +171,8 @@ function renderTools() {
     const b = document.createElement("button");
     b.className = "btn tool" + (field.tool === tl ? " on" : "");
     b.innerHTML = TOOL_ICON[tl] + (tl === "bubble" ? `<small>${Math.floor(field.charges)}</small>` : "");
-    b.onpointerdown = (ev) => { ev.stopPropagation(); field.tool = tl; sfx.tap(); toolsKey = ""; renderTools(); };
+    b.dataset.tool = tl;
+    b.onpointerdown = (ev) => { ev.stopPropagation(); field.tool = tl; if (!save.tips.includes("used_" + tl)) save.tips.push("used_" + tl); sfx.tap(); toolsKey = ""; renderTools(); };
     box.appendChild(b);
   }
 }
@@ -520,11 +521,36 @@ function openSheet(p: Plot) {
   $("sheet").classList.remove("hidden");
   updateUi();
 }
+/** the first catches: a hand shows the move. It goes to the nearest critter, presses and holds there, so
+ *  "hold your finger on a critter" is understood without a word. It comes back if the player stops for a while. */
+let idleT = 0;
+function tutorialHand(dt: number) {
+  const h = $("tutHand");
+  idleT = input.on ? 0 : idleT + dt;
+  const show = mode === "field" && save.catches < 3 && idleT > (started ? 2.5 : 0.6) && $("result").classList.contains("hidden") && $("story").classList.contains("hidden");
+  const c = show ? field.critters.filter((k) => k.state === "roam" && !k.hidden && k.x > field.left + 20 && k.x < field.right - 20).sort((a, b) => Math.abs(a.x - field.nozzle.x - 160) - Math.abs(b.x - field.nozzle.x - 160))[0] : null;
+  if (!c) { h.classList.add("hidden"); return; }
+  const p = (t % 2.4) / 2.4;
+  const tx = c.x, ty = c.y - c.lift - c.def.size * 0.35;
+  const sx = field.nozzle.x + 40, sy = field.nozzle.y + 60;
+  const k = Math.min(1, p / 0.35), e = k * k * (3 - 2 * k);
+  const x = sx + (tx - sx) * e, y = sy + (ty - sy) * e;
+  h.classList.remove("hidden");
+  h.classList.toggle("press", p > 0.35 && p < 0.92);
+  h.style.opacity = String(p > 0.92 ? (1 - p) / 0.08 : 1);
+  h.style.left = `${x * view.scale}px`; h.style.top = `${y * view.scale}px`;
+}
+
 /** one bouncing arrow always points at the next useful step: the park when the jar is full,
  *  a place you can now build, an egg ready to hatch, an upgrade you can afford, then back to catching */
 function guideTarget(): HTMLElement | null {
   if (!started && mode === "field") return null;
-  if (mode === "field") return field.jar >= field.cap ? $("parkBtn") : null;
+  if (mode === "field") {
+    if (field.jar >= field.cap) return $("parkBtn");
+    // a tool you just got and have not tried yet
+    for (const tl of toolsOwned()) if (tl !== "vac" && !save.tips.includes("used_" + tl)) return document.querySelector<HTMLElement>(`#tools [data-tool="${tl}"]`);
+    return null;
+  }
   if (mode !== "park" || sheet || !$("result").classList.contains("hidden")) return null;
   for (const b of BIOMES) if (!save.biomes.includes(b.id) && save.coins >= b.price) return plotEls[b.id as Plot] ?? null;
   if (save.nest.some((e) => Date.now() >= e.readyAt)) return plotEls.nest?.querySelector<HTMLElement>(".eslot.ready") ?? null;
@@ -600,7 +626,7 @@ function coinStream(dt: number) {
 let shareIsPlay = false;
 /** the fixed labels; the rest is rewritten by updateUi */
 function applyLang() {
-  $("hint").innerHTML = `👆⏺ ➜ 🌀 ➜ <img src="./art/jar.webp" alt="">`;
+  $("hint").innerHTML = "";
   $("parkTitle").textContent = "🏡";
   $("lureBtn").textContent = "🎬 ✨";
   $("rushBtn").textContent = tr("rush");
@@ -725,6 +751,7 @@ function frame(now: number) {
     view.drawPark(save, parkBiome, t, dt);
     coinStream(dt);
   }
+  tutorialHand(dt);
   input.tap = false;
   // a full jar that is still being fed rattles: time to go to the park
   const over = mode === "field" && input.on && field.jar >= field.cap;
