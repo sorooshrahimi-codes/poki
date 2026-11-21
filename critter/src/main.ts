@@ -6,7 +6,6 @@ import { newField, sizeField, stepField, spawn, type Field } from "./core/field.
 import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tankSize, upgradeCost, type UpgradeId } from "./core/economy.ts";
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
-import { COMPANIONS } from "./core/field.ts";
 import { GIANTS, giantOf } from "./data/critters.ts";
 import { vacLevel } from "./core/economy.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
@@ -103,14 +102,6 @@ function handleEvents() {
       }
       if (c.boss > 0) { toast(`👑${ic(c.def.id)} ✔ ${COIN}+${short(coins)}`, 3200); view.shake = 14; sfx.reveal("legendary"); }
       if (c.boss > 0 || c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") view.cheer = 1.2;
-      // special catches sometimes leave an egg in the nest
-      const egg = c.boss > 0 ? "golden" : eggDrop(c.def.rarity, c.mut, rng);
-      if (egg && !rush && save.nest.length < NEST_SLOTS) {
-        save.nest.push({ tier: egg, biome: field.biome, readyAt: Date.now() + EGG_MINUTES[egg] * 60_000 });
-        view.text(field.nozzle.x + 60 * field.kid.face, field.nozzle.y - 90, "🥚!", "#fff4c0", 18);
-        sfx.newFish();
-        if (!save.tips.includes("egg")) { save.tips.push("egg"); setTimeout(() => toast(`<img src="./art/${EGG_ART[egg]}.webp" alt=""> ⏱${EGG_MINUTES[egg]}′ ➜ 🐣`, 3200), 900); }
-      }
       const isNew = !rush && !save.index[c.def.id] && !jar.slice(0, -1).some((j) => j.id === c.def.id);
       sfx.hook(c.def.rarity === "legendary" ? "legendary" : c.def.rarity);
       view.burst(field.nozzle.x, field.nozzle.y, c.mut === "gold" ? "#ffd84a" : RARITY_COLOR[c.def.rarity], c.def.rarity === "common" && !c.mut ? 10 : 24);
@@ -160,7 +151,8 @@ function handleEvents() {
 type Tool = Field["tool"];
 const TOOL_ICON: Record<Tool, string> = { vac: "🌀", bubble: "🫧", flute: "🎵" };
 /** tools grow with you: the bubble wand after 15 catches, the flute with the forest */
-const toolsOwned = (): Tool[] => ["vac", ...(save.catches >= 15 ? ["bubble" as Tool] : []), ...(save.biomes.includes("forest") ? ["flute" as Tool] : [])];
+/** only the vacuum: extra tools were cut, the game is about one clear thing */
+const toolsOwned = (): Tool[] => ["vac"];
 let toolsKey = "";
 function renderTools() {
   const own = toolsOwned();
@@ -189,18 +181,14 @@ function fuse(id: string) {
   const rc = RECIPES.find((r) => r.hybrid === id)!;
   const A = CRITTER_BY_ID[rc.a], B = CRITTER_BY_ID[rc.b];
   if ((save.index[rc.a]?.count ?? 0) < 3 || (save.index[rc.b]?.count ?? 0) < 3) { toast(`${ic(A.id)}×3 + ${ic(B.id)}×3`, 2600); sfx.tap(); return; }
-  if (save.nest.length >= NEST_SLOTS) { toast(`🥚 ${NEST_SLOTS}/${NEST_SLOTS} ✋`, 2200); return; }
+  // two of each go into the machine, the hybrid comes straight out
   save.index[rc.a].count -= 2; save.index[rc.b].count -= 2;
-  save.nest.push({ tier: "lab", biome: "lab", readyAt: Date.now() + EGG_MINUTES.lab * 60_000, hybrid: rc.hybrid });
-  toast(`${ic(A.id)} + ${ic(B.id)} ➜ <img src="./art/lab_egg.webp" alt=""> ⏱${EGG_MINUTES.lab}′`, 3000);
+  const fresh = !save.index[rc.hybrid];
+  (save.index[rc.hybrid] ??= { count: 0, muts: [] }).count++;
+  toast(`${ic(A.id)}×2 + ${ic(B.id)}×2 ➜ ${ic(rc.hybrid)}`, 3000);
   sfx.reveal("epic");
+  if (fresh) { closeSheet(); celebrating.add(rc.hybrid); mapKey = ""; updateUi(); void celebrate([rc.hybrid]); }
   writeSave(save); nestKey = ""; gridKey = ""; updateUi();
-}
-/** a legend comes along on the hunt (tap again to leave it home) */
-function toggleCompanion(id: string) {
-  save.companion = save.companion === id ? null : id;
-  if (save.companion) { toast(`${ic(id)} 🐾 ✔`, 2400); sfx.reveal("legendary"); }
-  writeSave(save); gridKey = ""; updateUi();
 }
 
 /** the collection as a tidy grid: same-size cards, caught ones in colour with stars and income, the rest as dark silhouettes */
@@ -220,13 +208,6 @@ function renderParkGrid() {
     card.style.setProperty("--rc", RARITY_COLOR[d.rarity]);
     if (e) {
       card.innerHTML = `<img src="./art/${d.art}.webp" alt=""><span class="st">${"★".repeat(star)}${"☆".repeat(3 - star)}</span><span class="inc">🪙${Math.round(d.income * STAR_MULT[star])}/s</span><span class="cnt">×${e.count}</span>`;
-      if (d.rarity === "legendary" && (COMPANIONS as string[]).includes(d.id)) {
-        const b = document.createElement("button");
-        b.className = "btn comp" + (save.companion === d.id ? " on" : "");
-        b.textContent = save.companion === d.id ? "✔🐾" : "🐾";
-        b.onclick = () => toggleCompanion(d.id);
-        card.appendChild(b);
-      }
     } else {
       card.innerHTML = `<img class="sil" src="./art/${d.art}.webp" alt=""><span class="st">?</span>`;
       const rc = RECIPES.find((r) => r.hybrid === d.id);
@@ -418,10 +399,11 @@ function jarSounds(n: number) { for (let i = 0; i < Math.min(n, 12); i++) setTim
 /** the park as a little place: one fenced pen per region with its critters living inside, a lab, a nest and a workshop.
  *  Locked pens show what they cost and how close you are. Tapping a building opens its page. */
 type Plot = "meadow" | "forest" | "frost" | "lab" | "nest" | "shop";
-const PLOTS: Plot[] = ["meadow", "forest", "frost", "lab", "nest", "shop"];
+/** what the park shows: the places, the workshop, and the lab once the first giant is caught */
+const plotsNow = (): Plot[] => labOpen() ? ["meadow", "forest", "frost", "lab", "shop"] : ["meadow", "forest", "frost", "shop"];
 let mapKey = "", sheet: Plot | null = null;
 const plotEls: Partial<Record<Plot, HTMLElement>> = {};
-const labOpen = () => Object.keys(save.index).length >= 6;
+const labOpen = () => false; // the lab was cut: it added a system without a clear need
 function plotIncome(p: Plot) { return CRITTERS.filter((d) => d.biome === p).reduce((a, d) => a + d.income * STAR_MULT[starOf(save.index[d.id]?.count ?? 0)], 0); }
 /** coins shown as a little stack of coin icons: 1 to 5, growing with the pen's income */
 const coinStack = (inc: number) => inc <= 0 ? "" : `<span class="stack">${'<img src="./art/coin.webp" alt="">'.repeat(Math.max(1, Math.min(5, Math.ceil(Math.log10(inc + 1) * 1.6))))}</span>`;
@@ -435,7 +417,9 @@ function renderMap() {
   mapKey = key;
   const box = $("parkMap");
   box.innerHTML = "";
-  for (const p of PLOTS) {
+  const plots = plotsNow();
+  box.className = `n${plots.length}`;
+  for (const p of plots) {
     const el = document.createElement("div");
     el.className = `plot p-${p}`;
     plotEls[p] = el;
@@ -678,7 +662,8 @@ const UP_LABEL: Record<UpgradeId, (l: number) => string> = {
 
 function updateUi() {
   $("coinsN").textContent = short(save.coins);
-  $("indexN").textContent = `${Object.keys(save.index).length}/${CRITTERS.length}`;
+  const wild = CRITTERS.filter((d) => d.biome !== "lab");
+  $("indexN").textContent = `${wild.filter((d) => save.index[d.id]).length}/${wild.length}`;
   const bi = BIOMES.find((b) => b.id === save.biome)!;
   $("goBtn").innerHTML = `${bi.icon} <img class="bi" src="./art/jar.webp" alt=""> ▶`;
   $("jarN").textContent = `${field.jar}/${field.cap}`;
@@ -689,9 +674,13 @@ function updateUi() {
   $("parkUi").classList.toggle("hidden", mode !== "park");
   $("incomeN").innerHTML = `${COIN} ${short(incomePerSec())}/s`;
   // the road ahead: every place, done or still locked, so the goal is clear from the first minute
+  // the whole idea in one line of pictures: critters make coins, coins make the vacuum stronger, a stronger vacuum catches the giant
+  const ngL = nextGiant();
+  const anyCritter = CRITTERS.find((d) => save.index[d.id]) ?? CRITTERS[0];
+  $("loopStrip").innerHTML = `${ic(anyCritter.id)}<i>➜</i>${COIN}<i>➜</i><span class="vacup">🌀⬆</span><i>➜</i>${ngL ? giantImg(ngL.id) : "🏆"}`;
   $("parkTitle").innerHTML = BIOMES.flatMap((b) => {
     const own = save.biomes.includes(b.id), g = giantOf(b.id), done = (save.restored ?? []).includes(b.id);
-    return [`<span class="step${own ? " own" : ""}">${b.icon}</span>`, g ? `<span class="step g${done ? " done" : own ? " own" : ""}">${giantImg(g.id, done ? "" : "sil")}${done ? "<i>✔</i>" : ""}</span>` : ""];
+    return [`<span class="step${own ? " own" : ""}${b.id === save.biome ? " here" : ""}">${b.icon}${b.id === save.biome ? '<img class="you" src="./art/kid_vac.webp" alt="">' : ""}</span>`, g ? `<span class="step g${done ? " done" : own ? " own" : ""}">${giantImg(g.id, done ? "" : "sil")}${done ? "<i>✔</i>" : ""}</span>` : ""];
   }).filter(Boolean).join("<em>━</em>");
   $("rushBtn").textContent = "🏁⏱" + (save.rushBest ? ` 🏆${short(save.rushBest)}` : "");
   if (mode === "park") renderMap(); else if (sheet) closeSheet();
@@ -706,7 +695,7 @@ function updateUi() {
   renderTools();
   placeGuide();
   // the first legend you own: tell the player it can come along
-  if (mode === "park" && !save.tips.includes("comp") && CRITTERS.some((d) => d.rarity === "legendary" && save.index[d.id])) { save.tips.push("comp"); toast("🐾 👆", 3000); }
+
   const anyReady = save.nest.some((e) => Date.now() >= e.readyAt);
   $("parkBtn").textContent = "🏡" + (anyReady ? " 🐣" : "");
   const box = $("ups");
@@ -757,7 +746,7 @@ function frame(now: number) {
   // grey until its giant is caught; the colour eases in when restored
   if (!(save.restored ?? []).includes(field.biome) && view.gloomFlee === 0) colourTarget = 0;
   view.colour += (colourTarget - view.colour) * Math.min(1, dt * 1.2);
-  field.companion = (save.companion as Field["companion"]) ?? null;
+  field.companion = null; // companions were cut
   const gH = mode === "rush" ? null : giantLeft(field.biome), L = vacLevel(save.up);
   field.giant = gH ? { id: gH.id, ready: L >= gH.need, resist: gH.resist } : null;
   view.giant = gH ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need } : null;
@@ -798,6 +787,8 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
   loadingFinished();
   $("loading").classList.add("gone");
   payOffline();
+  // eggs from older saves simply hatch
+  for (const e of save.nest.splice(0)) { const { def } = hatch(e, rng); (save.index[def.id] ??= { count: 0, muts: [] }).count++; }
   // the story, once: one short card, then straight into play
 
   setTimeout(offerRush, 700);

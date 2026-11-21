@@ -330,3 +330,36 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 #parkTitle .step img.gi { height: 26px; width: 26px; }
 #parkTitle .step.g.own img.gi { animation: wobble .8s infinite; }
 #parkTitle .step i { position: absolute; right: -4px; bottom: -4px; font-style: normal; font-size: 11px; color: #7be495; }
+/* the loop in pictures */
+#loopStrip { display: flex; align-items: center; gap: 6px; font-size: 18px; font-weight: 700; text-shadow: 0 0 6px rgba(13,30,69,.9); margin-top: -4px; }
+#loopStrip img { height: 30px; width: 30px; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)); }
+#loopStrip i { font-style: normal; color: #ffe066; font-size: 14px; }
+#loopStrip .vacup { background: rgba(13,30,69,.5); border-radius: 999px; padding: 0 6px; }
+#parkTitle .step.here { background: rgba(255,224,102,.35); border-radius: 999px; padding: 0 4px 0 6px; box-shadow: 0 0 10px rgba(255,224,102,.6); }
+#parkTitle img.you { height: 22px; margin-left: 1px; }
+/* 4 plots: 2x2; 5 plots: the workshop runs across the bottom */
+#parkMap.n4, #parkMap.n5 { grid-template-rows: repeat(2, 1fr) auto; }
+#parkMap.n4 { grid-template-rows: 1fr 1fr; }
+#parkMap.n5 .p-shop { grid-column: span 2; }
+#parkMap.n5 { grid-template-rows: 1fr 1fr 1fr; }
+@media (orientation: landscape) {
+  #parkMap.n4 { grid-template-columns: repeat(3, 1fr); grid-template-rows: 1.2fr 1fr; }
+  #parkMap.n4 .p-shop { grid-column: span 3; }
+  #parkMap.n5 { grid-template-columns: repeat(3, 1fr); grid-template-rows: 1.2fr 1fr; }
+  #parkMap.n5 .p-shop { grid-column: span 2; }
+  .p-shop .shop { flex-direction: row; gap: 6px; }
+  .p-shop .uprow { flex: 1; }
+  @media (max-height: 600px) { #loopStrip { display: none; } }
+}
+@media (orientation: portrait) { #parkMap.n4 .p-shop .shop, #parkMap.n5 .p-shop .shop { gap: 3px; } }
+@media (orientation: landscape) {
+  #parkMap.n4, #parkMap.n5 { grid-template-rows: 1.7fr 0.8fr; }
+  .p-shop { flex-direction: row; gap: 14px; padding-top: 24px; }
+  .p-shop .gauge { margin: 0; }
+  .p-shop .shop { flex: 1; }
+}
+.spot img { max-height: 74px; }
+.spot.empty { max-height: 44px; max-width: 44px; }
+.spot { flex-direction: column; }
+.spot img { height: auto; min-height: 0; flex: 0 1 auto; max-width: 100%; }
+.spot .stars { position: static; translate: none; line-height: 1; margin-top: -2px; }

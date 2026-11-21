@@ -311,7 +311,8 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
           c.grip += dt * (P / 230) / c.resist * 0.95 * (c.boss > 0 ? 1.6 : 1) * (f.companion === "elderoak" ? 1.6 : 1) * (c.frozen > 0 ? 2 : 1);
           // it struggles: little scrambles sideways, trying to slip out of the cone
           c.x += Math.sin(f.t * 7 + c.uid) * 60 * dt;
-          c.lift = Math.max(0, Math.sin(f.t * 11 + c.uid) * 6);
+          // (a flier keeps its height: dropping it would pull it out of the cone and it would flicker in and out)
+          c.lift = c.def.behave === "fly" && c.boss === 0 ? c.lift + (c.air - c.lift) * Math.min(1, dt * 0.5) + Math.sin(f.t * 11 + c.uid) * 0.4 : Math.max(0, Math.sin(f.t * 11 + c.uid) * 6);
           if (c.grip >= 1) {
             if (c.boss > 1) {
               // the boss breaks free and leaps away: two more rounds
