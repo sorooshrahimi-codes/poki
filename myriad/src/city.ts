@@ -20,7 +20,7 @@ export const COLOR = 512; // colour map resolution
 
 export type Kind = 0 | 1 | 2 | 3; // house, tree, tower, barn
 
-export interface Building { x: number; z: number; kind: Kind; seed: number; solid: number; eaten: number; collapseAt: number; h: number }
+export interface Building { x: number; z: number; kind: Kind; seed: number; solid: number; eaten: number; collapseAt: number; h: number; rubble?: number }
 
 const CUBE = `
 const vec3 CUBE_P[8] = vec3[8](vec3(0,0,0), vec3(1,0,0), vec3(1,1,0), vec3(0,1,0), vec3(0,0,1), vec3(1,0,1), vec3(1,1,1), vec3(0,1,1));
@@ -198,6 +198,12 @@ in float vW;
 out vec4 o;
 void main() { vec2 q = gl_PointCoord * 2.0 - 1.0; o = vec4(vW * uDt * 2.0 * max(0.0, 1.0 - dot(q, q))); }`;
 
+const SOLID_FS = `#version 300 es
+precision highp float;
+uniform float uAmount;
+out vec4 o;
+void main() { o = vec4(uAmount); }`;
+
 const CLAMP_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uSrc;
@@ -209,7 +215,7 @@ export class City {
   gl: GL;
   atlas: Target; counter: Target; color: Target; colorTmp: Target;
   grid: WebGLTexture; gridData = new Uint8Array(GRID * GRID);
-  vox: Program; eat: Program; paint: Program; clamp: Program;
+  vox: Program; eat: Program; paint: Program; clamp: Program; fill: Program;
   vao: WebGLVertexArrayObject;
   buildings: Building[] = [];
   bArr = new Float32Array(NB * 4); b2Arr = new Float32Array(NB * 4);
@@ -229,6 +235,7 @@ export class City {
     this.eat = program(gl, EAT_VS, EAT_FS, "eat");
     this.paint = program(gl, PAINT_VS, PAINT_FS, "paint");
     this.clamp = program(gl, FULLSCREEN_VS, CLAMP_FS, "clamp");
+    this.fill = program(gl, FULLSCREEN_VS, SOLID_FS, "fill");
     this.vao = gl.createVertexArray()!;
     this.pbo = gl.createBuffer()!;
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
@@ -267,13 +274,14 @@ export class City {
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.counter.fb); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.lastCount.fill(0);
+    this.gone.fill(0);
     this.syncUniforms();
   }
   syncUniforms() {
     this.bArr.fill(0); this.b2Arr.fill(0);
     for (let b = 0; b < NB; b++) {
       const B = this.buildings[b];
-      if (!B) { this.bArr[b * 4 + 3] = -1; this.b2Arr[b * 4] = -1; continue; }
+      if (!B || this.gone[b]) { this.bArr[b * 4 + 3] = -1; this.b2Arr[b * 4] = -1; continue; }
       this.bArr[b * 4] = B.x; this.bArr[b * 4 + 1] = B.z; this.bArr[b * 4 + 2] = B.kind; this.bArr[b * 4 + 3] = B.seed % 97;
       this.b2Arr[b * 4] = B.collapseAt; this.b2Arr[b * 4 + 1] = B.h;
     }
@@ -332,6 +340,23 @@ export class City {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
   }
+
+  /** rubble of a collapsed building melts away under the swarm (a subtractive pass over its atlas tile only) */
+  dissolve(b: number, amount: number) {
+    const gl = this.gl;
+    gl.bindVertexArray(this.vao);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.atlas.fb);
+    gl.viewport((b % 8) * 64, Math.floor(b / 8) * 64, 64, 64);
+    gl.disable(gl.DEPTH_TEST);
+    gl.enable(gl.BLEND); gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(this.fill.p); gl.uniform1f(this.fill.u.uAmount, amount);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.blendEquation(gl.FUNC_ADD); gl.disable(gl.BLEND);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+  /** a building that is fully gone stops costing anything */
+  remove(b: number) { this.bArr[b * 4 + 3] = -1; this.b2Arr[b * 4] = -1; this.buildings[b].kind = this.buildings[b].kind; this.gone[b] = 1; }
+  gone = new Uint8Array(NB);
 
   draw(vp: Float32Array, cam: Float32Array, light: WebGLTexture, t: number) {
     const gl = this.gl, u = this.vox.u;

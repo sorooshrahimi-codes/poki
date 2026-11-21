@@ -63,7 +63,7 @@ const cam = new Float32Array(3), camR = new Float32Array(3), camU = new Float32A
 const leader = new Float32Array([0, 0, 0]), leaderVel = new Float32Array(3);
 const target = new Float32Array([0, 0, 0]);
 let hasTarget = false, lastInput = -99;
-let camD = 20, camX = 0, camZ = 0;
+let camD = 20, camX = 0, camZ = 0, shake = 0;
 
 // ---------------------------------------------------------------- input: the finger (or mouse) is where the seed goes
 const ndc = new Float32Array(4), tmp4 = new Float32Array(4);
@@ -100,7 +100,7 @@ let meal = 0;
 city.onEat = (b, amount) => {
   meal += amount * 4; // every voxel eaten hatches new mites
   const B = city.buildings[b];
-  if (B.collapseAt < 0 && B.eaten > B.solid * 0.42) { B.collapseAt = time; city.syncUniforms(); }
+  if (B.collapseAt < 0 && B.eaten > B.solid * 0.42) { B.collapseAt = time; city.syncUniforms(); shake = 1; }
 };
 
 // ---------------------------------------------------------------- loop
@@ -131,17 +131,32 @@ function frame(now: number) {
 
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
   city.feed(swarm.state.tex[0], active, dt, time);
+  // rubble: once a building has fallen, the swarm melts what is left of it when it is close
+  for (let b = 0; b < city.buildings.length; b++) {
+    const B = city.buildings[b];
+    if (B.collapseAt < 0 || city.gone[b] || time < B.collapseAt + 2.2) continue;
+    const near = Math.hypot(B.x - leader[0], B.z - leader[2]) < 10 + Math.sqrt(active) * 0.08;
+    if (!near) continue;
+    const rate = 0.45 * dt;
+    city.dissolve(b, rate);
+    B.rubble = (B.rubble ?? 1) - rate;
+    meal += rate * (B.solid - B.eaten) * 3;
+    if (B.rubble <= 0) city.remove(b);
+  }
 
   // camera: behind and above the seed, pulling back as the swarm grows
   const want = 15 + Math.sqrt(active) * 0.13;
   camD += (want - camD) * Math.min(1, dt * 1.5);
   camX += (leader[0] - camX) * Math.min(1, dt * 3); camZ += (leader[2] - camZ) * Math.min(1, dt * 3);
   // a slow orbit gives parallax: the swarm reads as a volume, not a decal
-  const orb = Math.sin(time * 0.11) * 0.55;
-  cam[0] = camX + Math.sin(orb) * camD * 0.95; cam[1] = camD * 0.55; cam[2] = camZ + Math.cos(orb) * camD * 0.95;
+  const orb = Math.sin(time * 0.11) * 0.35;
+  cam[0] = camX + Math.sin(orb) * camD * 0.95; cam[1] = camD * 0.82; cam[2] = camZ + Math.cos(orb) * camD * 0.95;
   const aspect = cw / ch;
   perspective(proj, aspect < 1 ? 1.05 : 0.85, aspect, 0.3, 600);
-  lookAt(view, cam[0], cam[1], cam[2], camX, 0, camZ - camD * 0.12);
+  // a building coming down shakes the camera a little
+  shake = Math.max(0, shake - dt * 1.6);
+  const sk = shake * shake * 0.35;
+  lookAt(view, cam[0] + Math.sin(time * 61) * sk, cam[1] + Math.sin(time * 47) * sk, cam[2], camX, 0, camZ - camD * 0.12);
   mul(vp, proj, view); invert(inv, vp);
   camR[0] = view[0]; camR[1] = view[4]; camR[2] = view[8];
   camU[0] = view[1]; camU[1] = view[5]; camU[2] = view[9];
