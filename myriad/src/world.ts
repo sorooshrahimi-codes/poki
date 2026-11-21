@@ -43,10 +43,16 @@ float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
 void main() {
   vec2 p = vW.xz;
-  // petrified ground: grey stone slabs with cracks
-  vec2 cell = floor(p / 3.0), f = fract(p / 3.0);
-  float crack = smoothstep(0.0, 0.05, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
-  float n = vn(p * 0.35) * 0.5 + vn(p * 1.7) * 0.25 + h(cell) * 0.12;
+  // petrified ground: irregular stone slabs (voronoi) with dark cracks and grit
+  vec2 gp = p / 2.2, gi = floor(gp), gf = fract(gp);
+  float d1 = 9.0, d2 = 9.0; vec2 cell = gi;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 o2 = vec2(float(i), float(j)), pt = o2 + vec2(h(gi + o2), h(gi + o2 + 17.0)) * 0.9;
+    float dd = length(gf - pt);
+    if (dd < d1) { d2 = d1; d1 = dd; cell = gi + o2; } else if (dd < d2) d2 = dd;
+  }
+  float crack = smoothstep(0.0, 0.08, d2 - d1);
+  float n = vn(p * 0.35) * 0.5 + vn(p * 1.7) * 0.25 + h(cell) * 0.16 + vn(p * 6.0) * 0.08;
   vec3 stone = mix(vec3(0.20, 0.19, 0.23), vec3(0.38, 0.36, 0.40), n) * mix(0.55, 1.0, crack);
   // the swarm's own light, from the blurred density field
   vec2 uv = p / uWorld + 0.5;

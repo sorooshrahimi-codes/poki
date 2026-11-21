@@ -38,7 +38,7 @@ in vec2 vUv;
 out vec4 o;
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 void main() {
-  vec3 c = texture(uScene, vUv * uScale).rgb + texture(uBloom, vUv).rgb * 0.9;
+  vec3 c = texture(uScene, vUv * uScale).rgb + texture(uBloom, vUv).rgb * 0.7;
   c = aces(c * 1.1);
   vec2 q = vUv - 0.5;
   c *= 1.0 - dot(q, q) * 0.7;
@@ -86,7 +86,7 @@ export class Post {
       const d = this.chain[i];
       gl.bindFramebuffer(gl.FRAMEBUFFER, d.fb); gl.viewport(0, 0, d.w, d.h);
       bindTex(gl, 0, src, this.down.u.uSrc);
-      gl.uniform2f(this.down.u.uTexel, 1 / sw, 1 / sh); gl.uniform2f(this.down.u.uScale, sx, sy); gl.uniform1f(this.down.u.uThreshold, i === 0 ? 0.6 : 0);
+      gl.uniform2f(this.down.u.uTexel, 1 / sw, 1 / sh); gl.uniform2f(this.down.u.uScale, sx, sy); gl.uniform1f(this.down.u.uThreshold, i === 0 ? 0.9 : 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       src = d.tex[0]; sw = d.w; sh = d.h; sx = 1; sy = 1;
     }

@@ -5,12 +5,14 @@ import { Post } from "./post.ts";
 import { S, Swarm } from "./swarm.ts";
 import { World } from "./world.ts";
 import { City, type Kind } from "./city.ts";
+import { Grass } from "./grass.ts";
+import { Audio } from "./audio.ts";
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
 const hudCanvas = document.getElementById("hud") as HTMLCanvasElement;
 const hud = hudCanvas.getContext("2d")!;
 const params = new URLSearchParams(location.search);
-const showHud = params.get("hud") !== "0";
+const showHud = params.get("hud") === "1" || import.meta.env.MODE === "qa" && params.get("hud") !== "0";
 hudCanvas.style.display = showHud ? "block" : "none";
 
 const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, depth: true, powerPreference: "high-performance", preserveDrawingBuffer: false })!;
@@ -24,7 +26,13 @@ const swarm = new Swarm(gl);
 const world = new World(gl);
 const post = new Post(gl);
 const gov = new Governor();
+const forcedTier = params.get("tier");
+if (forcedTier !== null) gov.tier = Number(forcedTier);
 const city = new City(gl);
+const grass = new Grass(gl);
+const audio = new Audio();
+const MILESTONES = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000];
+let milestone = 0;
 
 // ---------------------------------------------------------------- a district: a petrified farm village
 function village(seed: number) {
@@ -83,10 +91,16 @@ function xform(out: Float32Array, m: Float32Array, v: Float32Array) {
   for (let i = 0; i < 4; i++) out[i] = m[i] * v[0] + m[4 + i] * v[1] + m[8 + i] * v[2] + m[12 + i] * v[3];
 }
 let down = false;
-canvas.addEventListener("pointerdown", (e) => { down = true; pick(e.clientX, e.clientY); });
+const hand = document.getElementById("hand")!, countN = document.getElementById("countN")!, countBox = document.getElementById("count")!, goalFill = document.getElementById("goalFill")!;
+let touched = false;
+canvas.addEventListener("pointerdown", (e) => {
+  audio.start(); down = true; pick(e.clientX, e.clientY);
+  if (!touched) { touched = true; hand.classList.add("gone"); }
+});
 addEventListener("pointermove", (e) => { if (down || e.pointerType === "mouse") pick(e.clientX, e.clientY); });
 addEventListener("pointerup", () => { down = false; });
 addEventListener("keydown", (e) => {
+  audio.start();
   if (e.key === " " || e.key.startsWith("Arrow")) e.preventDefault();
   if (e.key === "h") hudCanvas.style.display = hudCanvas.style.display === "none" ? "block" : "none";
 });
@@ -98,9 +112,13 @@ const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? 300);
 let meal = 0;
 city.onEat = (b, amount) => {
-  meal += amount * 4; // every voxel eaten hatches new mites
+  meal += amount * 1.2; // every voxel eaten hatches new mites
+  audio.eat(amount);
   const B = city.buildings[b];
-  if (B.collapseAt < 0 && B.eaten > B.solid * 0.42) { B.collapseAt = time; city.syncUniforms(); shake = 1; }
+  // a building is gone when (nearly) all of it, rubble included, has been eaten
+  if (!city.gone[b] && B.eaten > B.solid * 0.97) city.remove(b);
+  // the first big bites of a building shake the camera a little (things are coming down)
+  if (B.eaten > B.solid * 0.3 && B.collapseAt < 0) { B.collapseAt = time; shake = 0.8; audio.thump(B.kind === 1 ? 0.6 : 1); }
 };
 
 // ---------------------------------------------------------------- loop
@@ -113,11 +131,13 @@ function frame(now: number) {
   gov.push(ms);
   const dt = Math.min(1 / 30, ms / 1000);
   time += dt;
-  gov.update(dt);
+  if (forcedTier === null) gov.update(dt);
   const tier = TIERS[gov.tier];
 
   if (grow && active < CAP) active = Math.min(CAP, Math.round(100 * Math.pow(2, time / 3.6)));
   if (meal >= 1) { const add = Math.floor(meal); meal -= add; active = Math.min(CAP, active + add); }
+  while (milestone < MILESTONES.length && active >= MILESTONES[milestone]) audio.chime(milestone++);
+  audio.swarm(active, Math.hypot(leaderVel[0], leaderVel[2]));
   // the seed: to the finger, or a slow wander when nobody touches
   if (!hasTarget || time - lastInput > 4) {
     const a = time * 0.32;
@@ -131,18 +151,6 @@ function frame(now: number) {
 
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
   city.feed(swarm.state.tex[0], active, dt, time);
-  // rubble: once a building has fallen, the swarm melts what is left of it when it is close
-  for (let b = 0; b < city.buildings.length; b++) {
-    const B = city.buildings[b];
-    if (B.collapseAt < 0 || city.gone[b] || time < B.collapseAt + 2.2) continue;
-    const near = Math.hypot(B.x - leader[0], B.z - leader[2]) < 10 + Math.sqrt(active) * 0.08;
-    if (!near) continue;
-    const rate = 0.45 * dt;
-    city.dissolve(b, rate);
-    B.rubble = (B.rubble ?? 1) - rate;
-    meal += rate * (B.solid - B.eaten) * 3;
-    if (B.rubble <= 0) city.remove(b);
-  }
 
   // camera: behind and above the seed, pulling back as the swarm grows
   const want = 15 + Math.sqrt(active) * 0.13;
@@ -163,10 +171,20 @@ function frame(now: number) {
 
   post.begin(tier.scale);
   world.draw(vp, inv, cam, swarm.light, city.color.tex[0]);
-  city.draw(vp, cam, swarm.light, time);
+  city.draw(vp, cam, swarm.light);
+  grass.draw(vp, cam, camX, camZ - camD * 0.1, time, city.color.tex[0], swarm.light, swarm.light, 1);
+  city.shadows = gov.tier <= 2;
   swarm.draw(vp, camR, camU, time, active, 2 / (proj[5] * ch * tier.scale));
   post.end(tier.scale, time, tier.bloom, cw, ch);
 
+  // the wordless HUD: the swarm count, and how much of the village has its colour back
+  if ((gov.frames & 7) === 0) {
+    const txt = active >= 10000 ? `${(active / 1000).toFixed(active >= 100000 ? 0 : 1)}k` : String(active);
+    if (countN.textContent !== txt) { countN.textContent = txt; countBox.classList.remove("pop"); void countBox.offsetWidth; countBox.classList.add("pop"); }
+    let tot = 0, eat = 0;
+    for (const B of city.buildings) { tot += B.solid; eat += Math.min(B.solid, B.eaten); }
+    goalFill.style.width = `${Math.min(100, (eat / Math.max(1, tot)) * 100 * 1.15).toFixed(1)}%`;
+  }
   if (showHud && hudCanvas.style.display !== "none" && (gov.frames & 3) === 0) gov.graph(hud, `${active.toLocaleString()} mites  ${cw}x${ch} @${Math.round(tier.scale * 100)}%`);
 }
 requestAnimationFrame(frame);

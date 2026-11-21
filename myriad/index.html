@@ -7,12 +7,26 @@
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #05060a; touch-action: none; user-select: none; -webkit-user-select: none; }
       canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-      canvas#hud { position: fixed; left: 8px; top: 8px; pointer-events: none; }
+      canvas#hud { position: fixed; left: 8px; bottom: 8px; pointer-events: none; }
+      body { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff; }
+      #count { position: fixed; left: max(14px, env(safe-area-inset-left)); top: max(10px, env(safe-area-inset-top)); display: flex; align-items: center; gap: 8px; font-size: 28px; font-weight: 800; letter-spacing: 0.5px; text-shadow: 0 0 14px rgba(255, 190, 90, 0.8), 0 2px 6px rgba(0, 0, 0, 0.6); pointer-events: none; }
+      #count i { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle, #fff6c8, #ffb648 55%, rgba(255, 150, 40, 0) 70%); box-shadow: 0 0 18px 6px rgba(255, 170, 60, 0.6); animation: pulse 1.6s ease-in-out infinite; }
+      #count.pop { animation: bump 0.35s; }
+      #goal { position: fixed; left: 50%; top: max(16px, env(safe-area-inset-top)); translate: -50% 0; width: min(46vw, 360px); height: 10px; border-radius: 6px; background: rgba(120, 120, 140, 0.35); overflow: hidden; pointer-events: none; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12); }
+      #goal b { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #6fdc5a, #ffe17a, #ff9ad1); box-shadow: 0 0 12px rgba(160, 255, 120, 0.8); transition: width 0.4s; }
+      #hand { position: fixed; left: 50%; top: 62%; width: 64px; height: 64px; font-size: 54px; pointer-events: none; filter: drop-shadow(0 4px 8px rgba(0,0,0,.5)); animation: drag 2.4s ease-in-out infinite; }
+      @keyframes drag { 0% { transform: translate(-80px, 0); } 50% { transform: translate(70px, -30px); } 100% { transform: translate(-80px, 0); } }
+      @keyframes pulse { 50% { transform: scale(1.25); } }
+      @keyframes bump { 40% { transform: scale(1.18); } }
+      .gone { opacity: 0; transition: opacity 0.8s; }
     </style>
   </head>
   <body>
     <canvas id="gl"></canvas>
     <canvas id="hud" width="300" height="120"></canvas>
+    <div id="count"><i></i><span id="countN">300</span></div>
+    <div id="goal"><b id="goalFill"></b></div>
+    <div id="hand">👆</div>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

@@ -13,7 +13,7 @@ float h11(float p) { p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return f
 vec3 h31(float p) { vec3 p3 = fract(vec3(p) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xxy + p3.yzz) * p3.zyx); }
 `;
 
-const VS_W = 0.55;
+const VS_W = 0.28;
 const UPDATE_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uPos, uVel, uDen, uGrid, uAtlas;
@@ -26,9 +26,9 @@ layout(location = 0) out vec4 oPos;
 layout(location = 1) out vec4 oVel;
 ${HASH}
 float den(vec2 xz) { return texture(uDen, xz / uWorld + 0.5).r; }
-ivec2 atlasTexel(int b, ivec3 v) { return ivec2(b % 8, b / 8) * 64 + ivec2((v.z % 4) * 16 + v.x, (v.z / 4) * 16 + v.y); }
+ivec2 atlasTexel(int b, ivec3 v) { return ivec2((b % 8) * 256 + (v.z % 8) * 32 + v.x, (b / 8) * 128 + (v.z / 8) * 32 + v.y); }
 float solidAt(int b, ivec3 v) {
-  if (any(lessThan(v, ivec3(0))) || any(greaterThan(v, ivec3(15)))) return 0.0;
+  if (any(lessThan(v, ivec3(0))) || any(greaterThan(v, ivec3(31)))) return 0.0;
   return texelFetch(uAtlas, atlasTexel(b, v), 0).r;
 }
 void main() {
@@ -84,8 +84,8 @@ void main() {
   if (gi > 0.5) {
     int b = int(gi + 0.5) - 1;
     vec4 B = uB[b], B2 = uB2[b];
-    if (B2.x < 0.0) {
-      vec3 lp = (pos - vec3(B.x, 0.0, B.y)) / ${VS_W.toFixed(3)} + vec3(8.0, 0.0, 8.0);
+    if (B.w >= 0.0) {
+      vec3 lp = (pos - vec3(B.x, 0.0, B.y)) / ${VS_W.toFixed(3)} + vec3(16.0, 0.0, 16.0);
       float here = solidAt(b, ivec3(floor(lp)));
       float above = solidAt(b, ivec3(floor(lp + vec3(0.0, 1.0, 0.0))));
       if (here > 0.5) {
@@ -180,12 +180,21 @@ in vec3 vCol;
 in float vBright;
 out vec4 o;
 void main() {
-  float r2 = dot(vUv, vUv);
-  if (r2 > 0.85) discard;
-  // a little solid body (so the swarm has texture and depth), with a hot glowing core that feeds the bloom
-  float core = exp(-r2 * 14.0);
-  vec3 body = mix(vCol * 0.18, vCol * 0.55, vUv.y * 0.5 + 0.5);
-  o = vec4(body + vCol * core * 2.6 * vBright, 1.0);
+  // a firefly, seen from above: x runs along its flight (front = +x)
+  vec2 q = vUv;
+  float body = (q.x * q.x) / 0.85 + (q.y * q.y) / 0.12;
+  vec2 wl = vec2(q.x + 0.05, abs(q.y) - 0.42);
+  float wing = (wl.x * wl.x) / 0.22 + (wl.y * wl.y) / 0.09;
+  if (body > 1.0 && wing > 1.0) discard;
+  vec3 c;
+  if (body <= 1.0) {
+    float tail = smoothstep(0.1, -0.6, q.x);               // the glowing abdomen behind
+    float head = smoothstep(0.45, 0.8, q.x);
+    c = mix(vec3(0.10, 0.07, 0.05), vCol * 1.7 * vBright, tail) * (1.0 - head * 0.6);
+  } else {
+    c = mix(vec3(0.55, 0.70, 0.80), vCol, 0.3) * (0.35 + 0.35 * vBright); // thin bright wings
+  }
+  o = vec4(c, 1.0);
 }`;
 
 export class Swarm {
@@ -271,7 +280,7 @@ export class Swarm {
     bindTex(gl, 0, this.state.tex[0], u.uPos); bindTex(gl, 1, this.state.tex[1], u.uVel);
     gl.uniformMatrix4fv(u.uVP, false, vp);
     gl.uniform3fv(u.uCamR, camR); gl.uniform3fv(u.uCamU, camU);
-    gl.uniform1f(u.uS, S); gl.uniform1f(u.uSize, 0.11); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uMinPx, 1.15); gl.uniform1f(u.uPxScale, pxScale);
+    gl.uniform1f(u.uS, S); gl.uniform1f(u.uSize, 0.13); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uMinPx, 1.15); gl.uniform1f(u.uPxScale, pxScale);
     // opaque with a depth test: order-free, and near mites hide far ones, which gives the swarm volume
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
     gl.bindVertexArray(this.quad);
