@@ -12,7 +12,7 @@ import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
 import type { BiomeId } from "./core/types.ts";
 import { commercialBreak, gameplayStart, gameplayStop, initPoki, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
-import { setDucked, setMuted, setRain, sfx, unlockAudio } from "./platform/audio.ts";
+import { setDucked, setIntensity, setMuted, setVacuum, sfx, unlockAudio } from "./platform/audio.ts";
 import { View, img, loadArt } from "./render/view.ts";
 import { EGG_ART, EGG_MINUTES, NEST_SLOTS, eggDrop, hatch } from "./core/eggs.ts";
 
@@ -89,7 +89,7 @@ function handleEvents() {
       let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up)));
       if (c.boss > 0) coins += Math.round(c.def.income * 60);
       if (rush) rush.score += coins; else { save.coins += coins; save.catches++; }
-      if (combo >= 3) { view.text(field.nozzle.x + 70 * field.kid.face, field.nozzle.y - 70, `🔥×${combo}`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo)); sfx.coin(combo); }
+      if (combo >= 3) view.text(field.nozzle.x + 70 * field.kid.face, field.nozzle.y - 70, `🔥×${combo}`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo));
       if (c.boss > 0 && nextGiant().biome === field.biome) save.giantWins = (save.giantWins ?? 0) + 1;
       if (c.boss > 0 && !(save.restored ??= []).includes(field.biome)) {
         // the giant was Gloom's: the colour floods back into this place, for good
@@ -114,7 +114,7 @@ function handleEvents() {
         setTimeout(() => void nextPlace(), 4200);
       }
       if (c.boss > 0 || c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") view.cheer = 1.2;
-      sfx.hook(c.def.rarity === "legendary" ? "legendary" : c.def.rarity);
+      sfx.catchPop(combo, c.def.rarity);
       view.burst(field.nozzle.x, field.nozzle.y, c.mut === "gold" ? "#ffd84a" : RARITY_COLOR[c.def.rarity], c.def.rarity === "common" && !c.mut ? 10 : 24);
       view.text(field.nozzle.x + 40 * field.kid.face, field.nozzle.y - 34 - (save.catches % 2) * 22, `+🪙${short(coins)}`, "#ffe066", 17);
       if (!rush) flyCoins(field.nozzle.x, field.nozzle.y, Math.min(4, 1 + Math.floor(Math.log10(coins + 1))));
@@ -135,7 +135,7 @@ function handleEvents() {
     } else if (e.kind === "surprise") {
       sfx.event(); view.shake = 4;
       // surprises speak for themselves on the field: only a sound, and a shake for the giant
-      if (e.s === "boss") { view.shake = 10; sfx.snap(); } else sfx.event();
+      if (e.s === "boss") { view.shake = 10; sfx.rumble(); } else sfx.event();
     } else if (e.kind === "bubbled") {
       sfx.boing(); view.text(e.c.x, e.c.y - 80, "🫧", "#bfefff", 15);
     } else if (e.kind === "ability") {
@@ -276,6 +276,8 @@ function endRush() {
   const bar = (who: string, n: number, cls: string) => `<div class="vs ${cls}"><span>${who}</span><i style="width:${Math.max(4, Math.round((n / top) * 100))}%"></i><b>${n.toLocaleString()}</b></div>`;
   $("resBody").innerHTML = bar("🙂", r.score, "me") + bar(r.goal !== null ? "🤝" : "🏆", other, "them") + `<div class="prize">${COIN} +${short(prize)}</div>`;
   $("result").classList.remove("hidden");
+  // a record or a win: this is the moment to send it to a friend
+  $("resShare").classList.toggle("pulse", r.score >= best || won);
   sfx.reveal(won || r.goal === null ? "epic" : "rare");
   mode = "field";
   field = newField(view.W, view.H, save.up, save.biome); field.script = 2;
@@ -323,7 +325,7 @@ function flyCoins(wx: number, wy: number, n: number) {
     c.style.left = `${x0}px`; c.style.top = `${y0}px`;
     document.body.appendChild(c);
     setTimeout(() => requestAnimationFrame(() => { c.style.transform = `translate(${target.left - x0}px, ${target.top - y0}px) scale(.7)`; c.style.opacity = "0.5"; }), i * 70);
-    setTimeout(() => { c.remove(); const k = $("coinIco"); k.classList.remove("bump"); void k.offsetWidth; k.classList.add("bump"); }, 900 + i * 70);
+    setTimeout(() => { c.remove(); const k = $("coinIco"); k.classList.remove("bump"); void k.offsetWidth; k.classList.add("bump"); if (i === 0) sfx.coinTick(n); }, 900 + i * 70);
   }
 }
 /** the three upgrades, always at the bottom of the screen: what it is, how far it is, what the next step costs */
@@ -434,7 +436,7 @@ async function lure() {
 function buy(id: UpgradeId) {
   const cost = upgradeCost(save.up, id);
   if (cost === null) return;
-  if (cost > save.coins) { sfx.tap(); return; }
+  if (cost > save.coins) { sfx.nope(); return; }
   save.coins -= cost; save.up[id]++;
   sfx.buy(); writeSave(save); updateUi();
 }
@@ -853,16 +855,18 @@ function frame(now: number) {
     rush.left -= dt;
     stepField(field, dt, input, RUSH_UP, rushRng);
     handleEvents();
-    setRain(field.beam ? 0.9 : 0);
+    setVacuum(field.beam, 0.5, field.critters.some((c) => c.state === "tug"));
     view.drawField(field, RUSH_UP, t, dt);
     if (rush.left <= 0) endRush();
   } else if (mode === "field") {
     stepField(field, dt, input, save.up, rng);
     handleEvents();
-    setRain(field.beam ? 0.9 : 0); // the vacuum's whoosh
+    setVacuum(field.beam, Math.min(1, vacLevel(save.up) / 60), field.critters.some((c) => c.state === "tug"));
+    // the music picks up while a giant is on the field
+    setIntensity(field.critters.some((c) => c.boss > 0 && c.state !== "caught") ? 1 : 0);
     view.drawField(field, save.up, t, dt);
   } else {
-    setRain(0);
+    setVacuum(false, 0, false); setIntensity(0);
     view.drawPark(save, parkBiome, t, dt);
     coinStream(dt);
   }

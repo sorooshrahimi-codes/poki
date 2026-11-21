@@ -9,6 +9,8 @@ let musicBus: GainNode | null = null;
 let sfxBus: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let muted = false;
+/** the mix: music sits under everything, the catch sounds lead */
+const MUSIC_VOL = 0.22;
 let ducked = false;
 
 export function unlockAudio() {
@@ -18,7 +20,7 @@ export function unlockAudio() {
     master = ctx.createGain();
     const comp = ctx.createDynamicsCompressor();
     master.connect(comp).connect(ctx.destination);
-    musicBus = ctx.createGain(); musicBus.gain.value = 0.32; musicBus.connect(master);
+    musicBus = ctx.createGain(); musicBus.gain.value = MUSIC_VOL; musicBus.connect(master);
     sfxBus = ctx.createGain(); sfxBus.gain.value = 0.9; sfxBus.connect(master);
     noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noiseBuf.getChannelData(0);
@@ -133,13 +135,32 @@ export const sfx = {
   },
   tap() { if (!ok()) return; bloop(700, 1100, now(), 0.12, 0.06); },
   /** the giant goes in: a deep rubbery POP */
-  pop() { if (!ok()) return; const t = now(); bloop(900, 70, t, 0.5, 0.35); noise(t, 0.25, 0.35, 600, 1.2, 120); bloop(300, 900, t + 0.18, 0.25, 0.15); },
+  pop() { if (!ok()) return; const t = now(); duck(0.2, 2.2); bloop(900, 70, t, 0.5, 0.35); noise(t, 0.25, 0.35, 600, 1.2, 120); bloop(300, 900, t + 0.18, 0.25, 0.15); },
   /** ...and the kid burps */
   burp() {
     if (!ok()) return; const t = now();
     for (let i = 0; i < 5; i++) bloop(150 - i * 8 + (i % 2) * 25, 110 - i * 6, t + i * 0.07, 0.4, 0.09);
     noise(t, 0.4, 0.18, 260, 4, 160);
   },
+  /** a catch: a soft "fwoomp" into the nozzle, then a pop whose note climbs the scale with the combo */
+  catchPop(combo: number, r: Rarity) {
+    if (!ok()) return; const t = now(), k = Math.min(combo - 1, 12);
+    noise(t, 0.12, 0.12, 900, 1.5, 2400);
+    const n = 76 + PENTA[k % 5] + 12 * Math.floor(k / 5);
+    bloop(midi(n) * 0.5, midi(n), t + 0.04, 0.22, 0.09);
+    if (RANK[r] >= 1) bell(midi(n + 12), t + 0.08, 0.08 + RANK[r] * 0.03, 0.6);
+  },
+  /** a coin landing in the counter: tiny, high, never louder than the catch */
+  coinTick(i = 0) { if (!ok()) return; bell(midi(96 + PENTA[i % 5]), now(), 0.035, 0.25); },
+  /** the giant wakes up and comes down: a deep rumble and two heavy steps */
+  rumble() {
+    if (!ok()) return; const t = now();
+    noise(t, 1.4, 0.45, 90, 0.7, 50);
+    bloop(70, 45, t + 0.1, 0.5, 0.5); bloop(70, 45, t + 0.7, 0.5, 0.5);
+    duck(0.25, 1.6);
+  },
+  /** a gentle "not yet" when a grey button is tapped */
+  nope() { if (!ok()) return; const t = now(); bloop(420, 300, t, 0.08, 0.1); bloop(360, 260, t + 0.1, 0.07, 0.1); },
   newFish() { if (!ok()) return; const t = now(); [0, 7, 12].forEach((n, i) => bell(midi(88 + n), t + i * 0.07, 0.12, 0.8)); },
 };
 
@@ -153,6 +174,17 @@ let mood: { zone: ZoneId; depth: number; event: boolean } = { zone: "lake", dept
 let melody: number[] = [];
 
 export function setMusicMood(zone: ZoneId, depth: number, event: boolean) { mood = { zone, depth, event }; }
+/** 0 = calm, 1 = a giant fight: faster, a kick drum, the melody an octave up */
+let intensity = 0;
+export function setIntensity(k: number) { intensity = k; }
+/** music steps aside for a moment so a big sound can land */
+function duck(to: number, secs: number) {
+  if (!ctx || !musicBus) return;
+  const t = ctx.currentTime;
+  musicBus.gain.cancelScheduledValues(t);
+  musicBus.gain.setTargetAtTime(MUSIC_VOL * to, t, 0.05);
+  musicBus.gain.setTargetAtTime(MUSIC_VOL, t + secs, 0.4);
+}
 
 function newPhrase() {
   // a gentle random walk on the pentatonic scale, with rests
@@ -168,7 +200,7 @@ const CHORDS = [[48, 55], [45, 52], [41, 48], [43, 50]]; // C, Am, F, G roots + 
 
 function tick() {
   if (!ctx || !musicBus) return;
-  const spb = 60 / 96 / 2; // eighth notes at 96 bpm
+  const spb = 60 / (96 + intensity * 30) / 2; // eighth notes, 96 bpm calm, ~126 in a giant fight
   while (nextT < ctx.currentTime + 0.25) {
     const deep = Math.min(1, mood.depth / 2500);
     const base = (mood.zone === "ocean" ? 2 : 0) - Math.round(deep * 5);
@@ -177,7 +209,14 @@ function tick() {
     const chord = CHORDS[bar];
     if (s % 8 === 0) for (const n of chord) mallet(midi(n + base), nextT, 0.22, musicBus, 1.2);
     const m = melody[s];
-    if (m >= 0 && Math.random() > deep * 0.5) mallet(midi(72 + base + m + (mood.event ? 12 : 0)), nextT, 0.13, musicBus, 0.45);
+    if (m >= 0 && Math.random() > deep * 0.5) mallet(midi(72 + base + m + (mood.event || intensity > 0.5 ? 12 : 0)), nextT, 0.13, musicBus, 0.45);
+    if (intensity > 0.5 && s % 4 === 0) {
+      // a soft kick on the beat while a giant is fighting
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.setValueAtTime(110, nextT); o.frequency.exponentialRampToValueAtTime(40, nextT + 0.12);
+      g.gain.setValueAtTime(0.35, nextT); g.gain.exponentialRampToValueAtTime(0.0001, nextT + 0.15);
+      o.connect(g).connect(musicBus); o.start(nextT); o.stop(nextT + 0.16);
+    }
     if (s % 2 === 1 && deep < 0.7) {
       const sh = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
       sh.buffer = noiseBuf; f.type = "highpass"; f.frequency.value = 7000;
@@ -205,4 +244,32 @@ export function setRain(level: number) {
     src.connect(f).connect(rainGain).connect(master); src.start();
   }
   rainGain.gain.setTargetAtTime(level * 0.1, ctx.currentTime, level < 0.2 ? 2.5 : 0.8);
+}
+
+// ----------------------------------------------------------------- the vacuum
+// Air rushing through a filter, plus a soft motor hum. It starts the instant you press and stops when you let go;
+// a stronger vacuum sounds higher and fuller; while a critter fights back the air wobbles.
+let vac: { g: GainNode; f: BiquadFilterNode; hum: OscillatorNode; hg: GainNode; lfo: OscillatorNode; lg: GainNode } | null = null;
+export function setVacuum(on: boolean, strength: number, tug: boolean) {
+  if (!ctx || !noiseBuf || !sfxBus) return;
+  if (!vac) {
+    const src = ctx.createBufferSource(); src.buffer = noiseBuf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = "bandpass"; f.Q.value = 0.9; f.frequency.value = 900;
+    const g = ctx.createGain(); g.gain.value = 0;
+    src.connect(f).connect(g).connect(sfxBus); src.start();
+    const hum = ctx.createOscillator(); hum.type = "triangle"; hum.frequency.value = 90;
+    const hf = ctx.createBiquadFilter(); hf.type = "lowpass"; hf.frequency.value = 400;
+    const hg = ctx.createGain(); hg.gain.value = 0;
+    hum.connect(hf).connect(hg).connect(sfxBus); hum.start();
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 9;
+    const lg = ctx.createGain(); lg.gain.value = 0;
+    lfo.connect(lg).connect(f.frequency); lfo.start();
+    vac = { g, f, hum, hg, lfo, lg };
+  }
+  const t = ctx.currentTime, k = Math.max(0, Math.min(1, strength));
+  vac.g.gain.setTargetAtTime(on ? 0.09 + k * 0.05 : 0, t, on ? 0.03 : 0.08);
+  vac.hg.gain.setTargetAtTime(on ? 0.05 : 0, t, on ? 0.03 : 0.1);
+  vac.f.frequency.setTargetAtTime(on ? 800 + k * 900 : 600, t, 0.12);
+  vac.hum.frequency.setTargetAtTime(80 + k * 50, t, 0.2);
+  vac.lg.gain.setTargetAtTime(on && tug ? 350 : 0, t, 0.05);
 }
