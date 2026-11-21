@@ -7,7 +7,7 @@ import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tank
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
 import { GIANTS, giantOf, giantStep } from "./data/critters.ts";
-import { MOUTH_FULL, vacLevel, valueMult } from "./core/economy.ts";
+import { MOUTH_FULL, REACH_FULL, vacLevel, valueMult } from "./core/economy.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
 import type { BiomeId } from "./core/types.ts";
@@ -386,7 +386,7 @@ function renderUpBar() {
     const b = document.createElement("button");
     b.className = "upb" + (ok ? " ok" : "");
     b.dataset.up = id;
-    const icon = id === "range" && save.up.range >= MOUTH_FULL ? "🌪️💰" : UPGRADES[id].icon;
+    const icon = id !== "range" ? UPGRADES[id].icon : save.up.range >= MOUTH_FULL ? "🌪️💰" : save.up.range >= REACH_FULL ? "🌪️" : "📏";
     b.innerHTML = `<span class="ui">${icon}</span><span class="uc">${c === null ? "MAX" : `${COIN}${short(c)}`}</span><i class="lvl" style="width:${Math.min(100, (save.up[id] / UPGRADES[id].max) * 100)}%"></i>`;
     b.onpointerdown = (ev) => { ev.stopPropagation(); };
     b.onclick = () => { buy(id); b.classList.add("bought"); flyUp(b); };
@@ -848,7 +848,7 @@ function updateUi() {
     const b = document.createElement("button");
     b.className = "btn up";
     b.disabled = cost === null || cost > save.coins;
-    const icon = id === "range" && save.up.range >= MOUTH_FULL ? "🌪️💰" : UPGRADES[id].icon;
+    const icon = id !== "range" ? UPGRADES[id].icon : save.up.range >= MOUTH_FULL ? "🌪️💰" : save.up.range >= REACH_FULL ? "🌪️" : "📏";
     b.innerHTML = `<span class="ui">${icon}</span><span class="un">${tr(`up.${id}`)}</span><span class="ul">${UP_LABEL[id](save.up[id])} ➜ <b>${UP_LABEL[id](save.up[id] + 1)}</b></span><span class="lvbar"><i style="width:${Math.min(100, save.up[id] * 5)}%"></i></span><span class="uc">${cost === null ? tr("max") : `<img src="./art/coin.webp" alt="">` + short(cost)}</span>`;
     b.onclick = () => buy(id);
     box.appendChild(b);

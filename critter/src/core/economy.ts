@@ -4,7 +4,7 @@ export type Upgrades = Record<UpgradeId, number>;
 
 export const UPGRADES: Record<UpgradeId, { max: number; cost: (l: number) => number; icon: string }> = {
   power: { max: 100, cost: (l) => Math.round(40 * Math.pow(1.32, l)), icon: "💨" },
-  range: { max: 80, cost: (l) => Math.round(60 * Math.pow(1.33, l)), icon: "🌪️" },
+  range: { max: 90, cost: (l) => Math.round(60 * Math.pow(1.33, l)), icon: "📏" },
   tank: { max: 80, cost: (l) => Math.round(90 * Math.pow(1.35, l)), icon: "💰" },
 };
 export const UPGRADE_ORDER: UpgradeId[] = ["power", "range", "tank"];
@@ -12,11 +12,13 @@ export const upgradeCost = (u: Upgrades, id: UpgradeId) => (u[id] >= UPGRADES[id
 
 /** pull strength: how fast a critter with resist 1 is drawn in (units per second) */
 export const power = (u: Upgrades) => 170 + 22 * u.power;
-/** suction cone length: fixed and generous (on a phone screen reach hardly matters) */
-export const range = (_u: Upgrades) => 210;
+/** one button, three stages: first the reach grows (until the cone spans the screen), then the mouth opens wider,
+ *  and once it is fully open every further level adds coin value */
+export const REACH_FULL = 16;
+export const range = (u: Upgrades) => 125 + 11 * Math.min(u.range, REACH_FULL);
 /** half-angle of the cone (radians): the second upgrade opens the mouth wider, so it grabs more at once */
-export const MOUTH_FULL = 38;
-export const cone = (u: Upgrades) => 0.36 + 0.018 * Math.min(u.range, MOUTH_FULL);
+export const MOUTH_FULL = REACH_FULL + 34;
+export const cone = (u: Upgrades) => 0.42 + 0.018 * Math.max(0, Math.min(u.range, MOUTH_FULL) - REACH_FULL);
 /** no jar any more: catches pay at once (kept so old callers still work) */
 export const tankSize = (_u: Upgrades) => 1e9;
 /** the third upgrade: every catch is worth more */
