@@ -85,6 +85,10 @@ JOBS.update({
   "bg_moon": _bg("the surface of the moon under a starry purple space sky, the Earth small in the distance, soft grey craters and glowing crystals."),
 })
 
+JOBS["kid_rival"] = ("A single game sprite on a fully transparent background: a cheeky rival kid explorer, smug confident grin, one eyebrow raised, purple cap worn backwards, green hoodie, "
+    "black shorts, sneakers, wearing a sleek green-and-black vacuum tank backpack with a glowing green dome, holding a chunky vacuum nozzle pointing forward to the right, side view facing right. "
+    "Full body, no ground, no text. Same art style and proportions as the reference kid. " + STYLE, "1:1", True, [dl.STYLE_REF, "https://media.base44.com/images/public/6aea41c732ebf572da66fc50/6ed63788d_generated_38770da9.png"])
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]

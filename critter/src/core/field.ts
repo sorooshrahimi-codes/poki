@@ -55,7 +55,7 @@ export type CompanionId = "sunpup" | "prismane" | "elderoak" | "moonfawn" | "fro
 export const COMPANIONS: CompanionId[] = ["sunpup", "prismane", "elderoak", "moonfawn", "frostking", "wyrmling"];
 
 export type Surprise = "visitor" | "golden_rain" | "stampede" | "boss";
-export type FieldEv = { kind: "tease"; c: Critter } | { kind: "erupt" } | { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter } | { kind: "split"; c: Critter } | { kind: "hide"; c: Critter } | { kind: "flee"; c: Critter } | { kind: "bossPhase"; c: Critter } | { kind: "bubbled"; c: Critter } | { kind: "ability"; id: CompanionId };
+export type FieldEv = { kind: "rivalIn" } | { kind: "stolen"; c: Critter } | { kind: "rivalBlown" } | { kind: "rivalMiss" } | { kind: "tease"; c: Critter } | { kind: "erupt" } | { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter } | { kind: "split"; c: Critter } | { kind: "hide"; c: Critter } | { kind: "flee"; c: Critter } | { kind: "bossPhase"; c: Critter } | { kind: "bubbled"; c: Critter } | { kind: "ability"; id: CompanionId };
 
 export interface Field {
   biome: BiomeId;
@@ -74,6 +74,11 @@ export interface Field {
   giantT: number;
   /** volcano: seconds to the next eruption */
   eruptT: number;
+  /** the rival kid: sneaks in now and then to steal a critter; blow him away with your wind */
+  rival: { x: number; y: number; phase: "in" | "grab" | "out" | "blown"; t: number; target: number; got: boolean } | null;
+  rivalT: number;
+  /** set by the controller: rivals only show up once the player knows the basics */
+  rivalOn: boolean;
   critters: Critter[];
   beam: boolean; aim: { x: number; y: number };
   jar: number; cap: number;
@@ -107,7 +112,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, rival: null, rivalT: 25, rivalOn: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -225,6 +230,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
   }
 
   bossClock -= dt;
+  stepRival(f, dt, inp, up, rng);
   if (f.biome === "volcano" && f.script >= 2) {
     f.eruptT -= dt;
     if (f.eruptT <= 0) {
@@ -394,4 +400,49 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
     }
   }
   f.critters = f.critters.filter((c) => c.state !== "caught");
+}
+
+/** the rival: walks in from the right edge toward a critter, sucks it into his own vacuum and walks off smirking.
+ *  If your wind hits him on the way, he is blown off his feet and leaves empty-handed. */
+function stepRival(f: Field, dt: number, inp: FieldInput, up: Upgrades, rng: Rng) {
+  if (!f.rivalOn || f.script < 2 || f.critters.some((c) => c.boss > 0 && c.state !== "caught")) { if (!f.rival) return; }
+  if (!f.rival) {
+    f.rivalT -= dt;
+    if (f.rivalT > 0 || !f.rivalOn) return;
+    // he goes for one in the middle of the field, where you can see him and blow him away
+    const mid = (f.left + f.right) / 2 + 40;
+    const prey = f.critters.filter((c) => c.state === "roam" && c.boss === 0 && !c.hidden && c.def.behave !== "fly" && c.x < f.right - 110).sort((a, b) => Math.abs(a.x - mid) - Math.abs(b.x - mid))[0];
+    f.rivalT = 35 + rng() * 25;
+    if (!prey) return;
+    f.rival = { x: f.right + 60, y: Math.min(f.nearY, prey.y + 6), phase: "in", t: 0, target: prey.uid, got: false };
+    f.ev.push({ kind: "rivalIn" });
+    return;
+  }
+  const r = f.rival, prey = f.critters.find((c) => c.uid === r.target);
+  r.t += dt;
+  // your wind can blow him away (unless he is already leaving)
+  if (f.beam && (r.phase === "in" || r.phase === "grab")) {
+    const ang = Math.atan2(f.aim.y - f.nozzle.y, f.aim.x - f.nozzle.x), ry = r.y - 40;
+    const dx = r.x - f.nozzle.x, dy = ry - f.nozzle.y;
+    let da = Math.atan2(dy, dx) - ang; da = Math.atan2(Math.sin(da), Math.cos(da));
+    if (Math.hypot(dx, dy) < range(up) * 1.1 && Math.abs(da) < cone(up) * 1.2) { r.phase = "blown"; r.t = 0; f.ev.push({ kind: "rivalBlown" }); }
+  }
+  if (r.phase === "in") {
+    if (!prey || prey.state !== "roam") { r.phase = "out"; r.t = 0; f.ev.push({ kind: "rivalMiss" }); return; }
+    const tx = prey.x + 70;
+    r.x += Math.sign(tx - r.x) * Math.min(Math.abs(tx - r.x), 150 * dt);
+    r.y += (Math.min(f.nearY, prey.y + 6) - r.y) * Math.min(1, dt * 3);
+    if (Math.abs(tx - r.x) < 4) { r.phase = "grab"; r.t = 0; }
+  } else if (r.phase === "grab") {
+    if (!prey || prey.state !== "roam") { r.phase = "out"; r.t = 0; f.ev.push({ kind: "rivalMiss" }); return; }
+    prey.x += (r.x - 30 - prey.x) * Math.min(1, dt * 4);
+    prey.lift += 30 * dt;
+    if (r.t > 0.9) { prey.state = "caught"; r.got = true; r.phase = "out"; r.t = 0; f.ev.push({ kind: "stolen", c: prey }); }
+  } else if (r.phase === "out") {
+    r.x += 170 * dt;
+    if (r.x > f.right + 80) f.rival = null;
+  } else {
+    r.x += 380 * dt;
+    if (r.x > f.right + 120) f.rival = null;
+  }
 }

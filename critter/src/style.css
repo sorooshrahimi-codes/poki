@@ -483,3 +483,19 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 @keyframes plus { 40% { transform: scale(1.5); color: #7be495; } }
 #fieldHead.nope .gbar { box-shadow: none; animation: nopeRing .25s 5; }
 @keyframes nopeRing { 0%, 100% { box-shadow: 0 0 0 3px #ff4d6d, 0 0 16px #ff4d6d; transform: translateX(0); } 50% { box-shadow: 0 0 0 3px #ff4d6d, 0 0 16px #ff4d6d; transform: translateX(-5px); } }
+/* the race: you and the rival on the way to the Moon */
+#race { position: relative; width: min(64vw, 300px); margin-top: 8px; }
+#race .track { position: relative; height: 6px; border-radius: 3px; background: rgba(13,30,69,.45); margin: 14px 10px 0; }
+#race .st { position: absolute; top: 50%; translate: -50% -50%; font-size: 12px; opacity: .8; }
+#race .who { position: absolute; bottom: 2px; width: 26px; translate: -50% 0; transition: left .6s; filter: drop-shadow(0 1px 1px rgba(0,0,0,.5)); }
+#race .who.him { width: 24px; transform: scaleX(-1); opacity: .95; }
+#race .who.me { z-index: 1; }
+#race.ahead .who.me { filter: drop-shadow(0 0 5px #ffe066); }
+#race:not(.ahead) .who.him { filter: drop-shadow(0 0 5px #9cff6a); }
+#race .lap { position: absolute; right: -14px; top: 4px; font-size: 11px; color: #ffe066; }
+#journey .rivalw { position: fixed; width: 38px; translate: -50% -110%; transform: scaleX(-1); filter: drop-shadow(0 3px 2px rgba(0,0,0,.4)); }
+#finale .times { position: relative; display: flex; flex-direction: column; gap: 6px; }
+#finale .times .t { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 700; padding: 2px 14px; border-radius: 999px; background: rgba(255,255,255,.1); }
+#finale .times .t img { height: 36px; }
+#finale .times .t.win { background: rgba(255,224,102,.3); box-shadow: 0 0 14px rgba(255,224,102,.6); }
+@media (orientation: landscape) and (max-height: 600px) { #race { width: 220px; margin-top: 2px; } }

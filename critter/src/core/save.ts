@@ -22,6 +22,10 @@ export interface SaveData {
   giantWins?: number;
   /** what catches have added to the giant bar since the last giant (on top of the vacuum level) */
   charge?: number;
+  /** seconds of play on the road (the speedrun clock) */
+  playTime?: number;
+  /** best time to the Moon, in seconds */
+  moonBest?: number;
   /** the suction style in use */
   skin?: string;
   /** places whose colour is back (their giant boss was caught) */

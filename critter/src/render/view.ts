@@ -8,7 +8,7 @@ import type { SaveData } from "../core/save.ts";
 
 type Ctx = CanvasRenderingContext2D;
 // the place you are in loads before play starts; the next places follow in road order, so the art is ready before you get there
-const COMMON = ["kid_vac", "kid_vac_suck", "kid_cheer", "jar", "coin", "nozzle"];
+const COMMON = ["kid_vac", "kid_vac_suck", "kid_cheer", "kid_rival", "jar", "coin", "nozzle"];
 const placeArt = (b: string) => [`bg_${b}`, ...CRITTERS.filter((c) => c.biome === b).map((c) => c.art)];
 const ROAD = ["meadow", "forest", "frost", "candy", "volcano", "moon"];
 const imgs = new Map<string, HTMLImageElement>();
@@ -171,8 +171,29 @@ export class View {
         blink(c, f.companion, px - w / 2, py - h - hop, w, h, t, 77);
       }
     }
+    this.drawRival(f, t);
     this.particles(dt);
     this.foreground(f, t);
+  }
+  /** the rival kid, facing left toward the critter he is after; spinning off when your wind hits him */
+  private drawRival(f: Field, t: number) {
+    const r = f.rival, im = img("kid_rival");
+    if (!r || !im) return;
+    const c = this.c, kk = depthK(f, r.y), w = 104 * kk, h = (w * im.height) / im.width;
+    c.fillStyle = "rgba(0,40,30,0.18)"; c.beginPath(); c.ellipse(r.x, r.y + 4, w * 0.32, 6 * kk, 0, 0, Math.PI * 2); c.fill();
+    c.save();
+    c.translate(r.x, r.y);
+    if (r.phase === "blown") { c.translate(0, -r.t * 260 + r.t * r.t * 300); c.rotate(r.t * 14); }
+    else if (r.phase === "out") c.scale(1, 1);
+    else c.scale(-1, 1);
+    const bob = r.phase === "blown" ? 0 : Math.abs(Math.sin(t * 9)) * 3;
+    c.drawImage(im, -w / 2, -h - bob, w, h);
+    c.restore();
+    if (r.phase === "grab") {
+      // his green wind
+      c.save(); c.globalAlpha = 0.5; c.fillStyle = "#9cff6a";
+      c.beginPath(); c.moveTo(r.x - w * 0.42, r.y - h * 0.5); c.lineTo(r.x - w * 0.42 - 70, r.y - h * 0.5 - 30); c.lineTo(r.x - w * 0.42 - 70, r.y - h * 0.5 + 30); c.fill(); c.restore();
+    }
   }
   zoom = 1;
   skin: Skin = SKINS[0];

@@ -171,6 +171,18 @@ function handleEvents() {
       // (no tip messages: the critter's behaviour shows on the field)
     } else if (e.kind === "flee") {
       // (no tip message)
+    } else if (e.kind === "rivalIn") {
+      sfx.event();
+    } else if (e.kind === "stolen") {
+      sfx.nope(); if (field.rival) view.text(field.rival.x, field.rival.y - 130, "😏", "#ffffff", 34);
+    } else if (e.kind === "rivalMiss") {
+      if (field.rival) view.text(field.rival.x, field.rival.y - 130, "😤", "#ffffff", 34);
+    } else if (e.kind === "rivalBlown") {
+      // blown off his feet: a little bonus for you
+      sfx.boing(); view.shake = 6;
+      const bonus = Math.max(20, Math.round(incomePerSec() * 8));
+      save.coins += bonus;
+      if (field.rival) { view.text(field.rival.x, field.rival.y - 120, "😵💨", "#ffffff", 32); flyCoins(field.rival.x, field.rival.y - 60, 5); }
     } else if (e.kind === "tease") {
       // the first meeting: the giant laughs you off. The bar flashes: you are too weak, for now
       view.shake = 12; sfx.boing(); view.text(e.c.x, e.c.y - 170, "😂", "#ffffff", 40);
@@ -357,11 +369,15 @@ async function showJourney(from: number, to: number) {
   box.innerHTML = `<div class="road">${places.map((b, i) => {
     const g = GIANTS.find((x) => x.biome === b.id), done = (save.restored ?? []).includes(b.id);
     return `<div class="stop${i <= to ? " on" : ""}${i === places.length - 1 ? " goal" : ""}"><span class="pi">${b.icon}</span>${g ? `<img class="gg${done ? " done" : ""}" src="./art/${CRITTER_BY_ID[g.id].art}.webp" alt="">` : ""}${done ? "<i>✔</i>" : ""}</div>`;
-  }).join('<b class="dots"></b>')}</div><img class="walker" src="./art/kid_vac.webp" alt="">`;
+  }).join('<b class="dots"></b>')}</div><img class="walker" src="./art/kid_vac.webp" alt=""><img class="rivalw" src="./art/kid_rival.webp" alt="">`;
   box.classList.remove("hidden");
   const stops = box.querySelectorAll<HTMLElement>(".stop"), walker = box.querySelector<HTMLElement>(".walker")!;
   const at = (i: number) => { const r = stops[Math.max(0, Math.min(stops.length - 1, i))].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top }; };
   const a = at(from), b = at(to);
+  // the rival stands where he is on the road right now
+  const rp = Math.min(BIOMES.length - 1, Math.floor(rivalPos(save.playTime ?? 0) % GIANTS.length)), rv = box.querySelector<HTMLElement>(".rivalw")!, ra = at(rp);
+  rv.style.left = `${ra.x + 14}px`; rv.style.top = `${ra.y - 6}px`;
+  rv.classList.toggle("hidden", (save.playTime ?? 0) < 20);
   walker.style.left = `${a.x}px`; walker.style.top = `${a.y}px`;
   await new Promise((r) => setTimeout(r, 450));
   walker.style.transition = "left 1.1s ease-in-out, top 1.1s ease-in-out";
@@ -374,14 +390,18 @@ async function showJourney(from: number, to: number) {
 /** the end of the road: you sucked up the Moon. A trophy moment, a share button, then the giants come back stronger. */
 async function moonFinale() {
   const box = $("finale");
-  box.innerHTML = `<div class="rays"></div><img class="moon" src="./art/bigmoon.webp" alt=""><img class="kid" src="./art/kid_cheer.webp" alt=""><div class="trophy">🏆</div><div class="row"><button class="btn big rush" id="finShare">📤 🌙</button><button class="btn big go" id="finGo">★2 ▶</button></div>`;
+  const mine = save.playTime ?? 0, his = rivalAt(GIANTS.length - 1), won = mine <= his;
+  save.moonBest = Math.min(save.moonBest ?? 1e9, mine); writeSave(save);
+  box.innerHTML = `<div class="rays"></div><img class="moon" src="./art/bigmoon.webp" alt=""><img class="kid" src="./art/kid_cheer.webp" alt=""><div class="trophy">${won ? "🏆" : "🥈"}</div>
+    <div class="times"><div class="t${won ? " win" : ""}"><img src="./art/kid_vac.webp" alt="">⏱ ${clock(mine)}</div><div class="t${won ? "" : " win"}"><img src="./art/kid_rival.webp" alt="">⏱ ${clock(his)}</div></div><div class="row"><button class="btn big rush" id="finShare">📤 🌙</button><button class="btn big go" id="finGo">★2 ▶</button></div>`;
   box.classList.remove("hidden");
   sfx.reveal("legendary"); setTimeout(() => sfx.event(), 600);
   for (let i = 0; i < 30; i++) setTimeout(() => { const s = document.createElement("i"); s.className = "confetti"; s.style.left = `${Math.random() * 100}%`; s.style.background = ["#ffe066", "#ff7ad1", "#7be495", "#5bc8ff"][i % 4]; box.appendChild(s); setTimeout(() => s.remove(), 2600); }, i * 60);
   $("finShare").onclick = async () => {
     const url = await shareURL({});
-    try { if (navigator.share) { await navigator.share({ text: "🫙🌙 I vacuumed up the MOON in Critter Vac! Can you?", url }); return; } } catch { /* cancelled */ }
-    try { await navigator.clipboard.writeText(`🫙🌙 I vacuumed up the MOON in Critter Vac! ${url}`); toast("📋 ✔", 2000); } catch { /* nothing */ }
+    const text = `🫙🌙 I vacuumed up the MOON in ${clock(mine)} in Critter Vac! Can you beat it?`;
+    try { if (navigator.share) { await navigator.share({ text, url }); return; } } catch { /* cancelled */ }
+    try { await navigator.clipboard.writeText(`${text} ${url}`); toast("📋 ✔", 2000); } catch { /* nothing */ }
   };
   await new Promise<void>((r) => { $("finGo").onclick = () => r(); });
   box.classList.add("hidden");
@@ -826,6 +846,36 @@ function toast(html: string, ms = 1800) {
   clearTimeout(toastT); toastT = window.setTimeout(() => el.classList.add("hidden"), ms);
 }
 /** the giant still standing in a place (null once caught) and the next giant on the road */
+/** the rival's pace: when he beats each giant, in seconds of your play time. Ahead early, catchable mid-road,
+ *  and a good run beats him to the Moon. After the Moon he keeps going, a giant every four minutes. */
+const RIVAL_AT = [85, 200, 370, 580, 830, 1120];
+const rivalAt = (i: number) => i < RIVAL_AT.length ? RIVAL_AT[i] : RIVAL_AT[RIVAL_AT.length - 1] + (i - RIVAL_AT.length + 1) * 240;
+function rivalPos(pt: number) {
+  let i = 0; while (rivalAt(i) <= pt) i++;
+  const a = i ? rivalAt(i - 1) : 0, b = rivalAt(i);
+  return i + (pt - a) / (b - a);
+}
+const clock = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.floor(sec % 60)).padStart(2, "0")}`;
+/** the race under the giant bar: the six stops, you and the rival */
+let raceKey = "";
+function renderRace() {
+  const box = $("race");
+  if (mode !== "field") { box.innerHTML = ""; raceKey = ""; return; }
+  const wins = save.giantWins ?? 0, lap = Math.floor(wins / GIANTS.length), base = lap * GIANTS.length;
+  const g = nextGiant(), mine = wins + Math.min(0.95, barPower() / g.need) - base;
+  const his = rivalPos(save.playTime ?? 0) - base;
+  const pct = (v: number) => `${Math.max(0, Math.min(100, (v / GIANTS.length) * 100)).toFixed(1)}%`;
+  const key = `${lap}|${pct(mine)}|${pct(his)}`;
+  if (key === raceKey) return;
+  if (!raceKey || box.dataset.lap !== String(lap)) {
+    box.dataset.lap = String(lap);
+    box.innerHTML = `<div class="track">${BIOMES.map((b, i) => `<span class="st" style="left:${((i + 1) / GIANTS.length) * 100}%">${b.icon}</span>`).join("")}<img class="who him" src="./art/kid_rival.webp" alt=""><img class="who me" src="./art/kid_vac.webp" alt=""></div>${lap ? `<b class="lap">★${lap + 1}</b>` : ""}`;
+  }
+  raceKey = key;
+  (box.querySelector(".me") as HTMLElement).style.left = pct(mine);
+  (box.querySelector(".him") as HTMLElement).style.left = pct(his);
+  box.classList.toggle("ahead", mine >= his);
+}
 /** the giant bar: your vacuum level plus what your catches have added since the last giant */
 const barPower = () => vacLevel(save.up) + Math.floor(save.charge ?? 0);
 const nextGiant = () => giantStep(save.giantWins ?? 0);
@@ -884,6 +934,7 @@ function updateUi() {
   renderTools();
   renderUpBar();
   $("rateN").textContent = incomePerSec() > 0 ? ` +${short(incomePerSec())}/s` : "";
+  renderRace();
   placeGuide();
   // the first legend you own: tell the player it can come along
 
@@ -961,6 +1012,8 @@ function frame(now: number) {
     view.drawField(field, RUSH_UP, t, dt);
     if (rush.left <= 0) endRush();
   } else if (mode === "field") {
+    field.rivalOn = save.catches >= 10;
+    if (!document.hidden && started) save.playTime = (save.playTime ?? 0) + dt;
     stepField(field, dt, input, save.up, rng);
     handleEvents();
     setVacuum(field.beam, Math.min(1, barPower() / 60), field.critters.some((c) => c.state === "tug"));

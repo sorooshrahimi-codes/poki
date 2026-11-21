@@ -32,7 +32,7 @@ SHEETS = {
     "crit_moon2": ["astrocat", "nebulee", "saturnie", "ufolo"],
     "crit_moon3": ["lunaria", "galaxeel", "celestail", "bigmoon"],
 }
-SINGLES = {"kid_vac": "kid_vac", "kid_vac_suck": "kid_vac_suck", "kid_cheer": "kid_cheer", "lab_egg": "lab_egg"}
+SINGLES = {"kid_vac": "kid_vac", "kid_vac_suck": "kid_vac_suck", "kid_cheer": "kid_cheer", "kid_rival": "kid_rival", "lab_egg": "lab_egg"}
 BGS = {"bg_meadow": "bg_meadow", "bg_park": "bg_park", "bg_forest": "bg_forest", "bg_frost": "bg_frost", "bg_candy": "bg_candy", "bg_volcano": "bg_volcano", "bg_moon": "bg_moon"}
 MAX = {"egg_": 120, "lab_egg": 120, "kid_": 360, "pedestal": 220, "jar": 200, "coin": 96, "nozzle": 128}
 
