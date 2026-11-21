@@ -380,7 +380,10 @@ async function nextPlace() {
   busy = true;
   await commercialBreak();
   const toI = BIOMES.findIndex((b) => b.id === save.biome);
-  if (toI !== fromI) await showJourney(fromI, toI);
+  if (toI !== fromI) {
+    if (BIOMES[toI].id === "moon" && BIOMES[fromI].id === "volcano") await showLaunch();
+    await showWorld({ walkFrom: fromI + 1, newPart: true });
+  }
   busy = false;
   field = newField(view.W, view.H, save.up, save.biome); field.script = 2;
   for (let i = 0; i < 5; i++) spawn(field, rng);
@@ -446,6 +449,58 @@ async function moonFinale() {
   box.classList.add("hidden");
   await pickPerk();
   await nextPlace();
+}
+
+/** the world map: one illustrated road from the kid's house (bottom) to the Moon (top). Pins for every place with its giant,
+ *  the kid where you are, the rival where he is. From the button it just closes; on the way it waits for a tap on your place. */
+const WORLD_PINS: [number, number][] = [[29, 84], [54, 93], [48, 68], [47, 54], [46, 39], [55, 27], [52, 7]]; // home, 6 places (the Moon last), on the road in the picture
+/** the rocket by the house: one part for each of the first five giants (pad, body, window, fins, boosters, then complete) */
+const ROCKET_PLACES: BiomeId[] = ["meadow", "forest", "frost", "candy", "volcano"];
+const rocketStage = () => Math.min(5, ROCKET_PLACES.filter((b) => (save.restored ?? []).includes(b)).length);
+function showWorld(o: { walkFrom?: number; browse?: boolean; newPart?: boolean } = {}) {
+  return new Promise<void>((done) => {
+    const box = $("world"), here = placeIndex(save.biome) + 1; // pin index: 0 = home
+    const rv = Math.min(BIOMES.length, Math.floor(rivalPos(save.playTime ?? 0)) % GIANTS.length + 1);
+    const pin = (i: number) => `left:${WORLD_PINS[i][0]}%;top:${WORLD_PINS[i][1]}%`;
+    box.innerHTML = `<div class="wbg"></div><div class="wmap"><img class="art" src="./art/world_map.webp" alt="">
+      <div class="pin home" style="${pin(0)}">🏠</div>
+      <div class="rocket${o.newPart ? " built" : ""}"><img src="./art/rocket_${rocketStage()}.webp" alt=""><span class="parts">${[0, 1, 2, 3, 4].map((k) => `<i class="${k < rocketStage() ? "on" : ""}"></i>`).join("")}</span></div>
+      ${BIOMES.map((b, k) => { const i = k + 1, g = GIANTS.find((x) => x.biome === b.id), beat = (save.restored ?? []).includes(b.id);
+        return `<button class="pin place${i === here ? " here" : ""}${i < here || beat ? " past" : ""}${i > here && !beat ? " ahead" : ""}${b.id === "moon" ? " moon" : ""}" data-i="${i}" style="${pin(i)}"><span class="pi">${b.icon}</span>${g ? `<img class="gg${beat ? "" : " sil"}" src="./art/${CRITTER_BY_ID[g.id].art}.webp" alt="">` : ""}${beat ? "<i>✔</i>" : ""}</button>`; }).join("")}
+      <img class="who him" src="./art/kid_rival.webp" alt="" style="${pin(rv)}">
+      <img class="who me" src="./art/kid_vac.webp" alt="" style="${pin(o.walkFrom ?? here)}">
+    </div>${o.browse ? `<button class="btn x" id="wClose">✕</button>` : ""}`;
+    box.classList.remove("hidden"); input.on = false;
+    const me = box.querySelector<HTMLElement>(".who.me")!;
+    if (o.newPart) setTimeout(() => { sfx.reveal("epic"); }, 300);
+    if (o.walkFrom !== undefined && o.walkFrom !== here) setTimeout(() => { me.classList.add("walk"); me.setAttribute("style", pin(here)); sfx.event(); }, o.newPart ? 1600 : 500);
+    const close = () => { box.classList.add("hidden"); done(); };
+    const cur = box.querySelector<HTMLElement>(`.pin.place[data-i="${here}"]`)!;
+    cur.onclick = () => { sfx.tap(); close(); };
+    for (const el of box.querySelectorAll<HTMLElement>(".pin.place:not(.here)")) el.onclick = () => sfx.nope();
+    const c = document.getElementById("wClose"); if (c) c.onclick = close;
+  });
+}
+/** the rocket is complete: lift-off, up past the clouds, toward the Moon */
+function showLaunch() {
+  return new Promise<void>((done) => {
+    const box = $("launch");
+    box.innerHTML = `<div class="sky"></div><img class="moonL" src="./art/bigmoon.webp" alt=""><img class="r" src="./art/rocket_launch.webp" alt=""><div class="smoke"></div>`;
+    box.classList.remove("hidden"); input.on = false;
+    sfx.rumble(); view.shake = 14;
+    setTimeout(() => { box.querySelector(".r")!.setAttribute("src", "./art/rocket_fly.webp"); box.classList.add("go"); sfx.reveal("legendary"); }, 1400);
+    setTimeout(() => { box.classList.add("hidden"); box.classList.remove("go"); done(); }, 4200);
+  });
+}
+/** the dream: a night in the kid's room, the Moon in the window, and a thought: the Moon, in my vacuum */
+function showDream() {
+  return new Promise<void>((done) => {
+    const box = $("dream");
+    box.innerHTML = `<img class="art" src="./art/intro_dream.webp" alt=""><div class="bubble"><i></i><i></i><div class="b"><img class="m" src="./art/bigmoon.webp" alt=""><img class="v" src="./art/kid_vac_suck.webp" alt=""></div></div><div class="tap">👆</div>`;
+    box.classList.remove("hidden");
+    setTimeout(() => sfx.reveal("epic"), 900);
+    setTimeout(() => { box.onclick = () => { box.classList.add("hidden"); box.onclick = null; done(); }; }, 1600);
+  });
 }
 
 /** coins fly from the nozzle up to the coin counter: you see where the money goes */
@@ -547,6 +602,7 @@ function openBook(b: BiomeId = save.biome) {
   renderParkGrid();
 }
 $("bookBtn").onclick = () => openBook();
+$("worldBtn").onclick = () => { if (lvl && !lvl.done) return; sfx.tap(); void showWorld({ browse: true }); };
 $("lureBtn2").onclick = () => void lure();
 $("specialBtn").onpointerdown = (e) => { e.stopPropagation(); if (fireSpecial(field, tierOf(vacLevel(save.up)))) { sfx.rumble(); view.shake = 12; } else sfx.nope(); };
 $("rushBtn2").onclick = () => void startRush(1 + Math.floor(Math.random() * 999_983), null);
@@ -1041,7 +1097,7 @@ function endLevel(win: boolean) {
 /** big screens (chests, gift, rival, evolution) come one after another, never on top of each other */
 let overlayQ: Promise<unknown> = Promise.resolve();
 const queued = <T>(f: () => Promise<T>) => { const r = overlayQ.then(f, f); overlayQ = r.catch(() => undefined); return r; };
-const OVERLAYS = ["gift", "vs", "perks", "evolve", "wheel", "finale", "journey"];
+const OVERLAYS = ["gift", "vs", "perks", "evolve", "wheel", "finale", "journey", "world", "dream", "launch"];
 const overlayOpen = () => OVERLAYS.some((id) => !$(id).classList.contains("hidden"));
 /** meeting the rival: you, the Moon, him. Once, before the race track starts to matter. */
 async function meetRival() {
@@ -1362,7 +1418,10 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
     const c = spawn(field, rng, { def: CRITTER_BY_ID[g.id], mut: null, x: field.left + Math.min(300, (field.right - field.left) * 0.62), y: field.farY + (field.nearY - field.farY) * 0.45 });
     c.boss = 1; c.scale = 2.6; c.resist = 9; c.tease = true; c.dir = -1; c.hopPer = 1.4;
   }
-  if (!save.tips.includes("road")) { save.tips.push("road"); writeSave(save); setTimeout(() => void showJourney(0, 0), 400); }
+  if (!save.tips.includes("road")) {
+    save.tips.push("road"); writeSave(save);
+    void (async () => { await showDream(); await showWorld({ walkFrom: 0 }); })();
+  }
   setTimeout(() => void queued(dailyGift), 1200);
   if (!save.tips.includes("intro") && save.catches === 0) { lvl = makeLevel("meadow", 0); lvl.left = lvl.total = 60; } else renderLevels();
   if (save.catches > 0) $("hint").classList.add("hidden");

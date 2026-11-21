@@ -644,3 +644,63 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 .upb .uc { font-size: 14px; white-space: nowrap; }
 .corner.left { left: 14px; } .corner.right { right: 14px; }
 @media (orientation: portrait) { .corner { bottom: 66px; } }
+/* the world map */
+#world { position: absolute; inset: 0; z-index: 10; pointer-events: auto; display: flex; align-items: center; justify-content: center; animation: fadeIn .3s; background: #0d1e45; }
+#world .wbg { position: absolute; inset: -20px; background: url(./art/world_map.webp) center/cover; filter: blur(14px) brightness(.6); }
+#world .wmap { position: relative; height: min(100%, 150vw); aspect-ratio: 2 / 3; max-width: 100%; }
+#world .wmap .art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
+#world .pin { position: absolute; translate: -50% -50%; border: 0; background: none; padding: 0; font-family: inherit; color: #fff; display: flex; align-items: center; gap: 2px; cursor: pointer; }
+#world .pin.home { font-size: 30px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+#world .pin.place { width: 64px; height: 64px; border-radius: 50%; justify-content: center; background: radial-gradient(circle at 50% 35%, rgba(255,255,255,.95), rgba(220,230,255,.85)); box-shadow: 0 4px 0 rgba(13,30,69,.6), 0 6px 14px rgba(0,0,0,.35); }
+#world .pin .pi { font-size: 28px; }
+#world .pin .gg { position: absolute; right: -26px; top: -8px; width: 40px; height: 40px; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(0,0,0,.4)); }
+#world .pin .gg.sil { filter: brightness(0) opacity(.55); }
+#world .pin i { position: absolute; left: -4px; bottom: -4px; font-style: normal; font-size: 15px; color: #2fb35a; background: #fff; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; }
+#world .pin.ahead { filter: saturate(.3) brightness(.85); }
+#world .pin.here { animation: pulse 1s infinite; box-shadow: 0 4px 0 rgba(13,30,69,.6), 0 0 22px 8px rgba(255,224,102,.9); }
+#world .pin.moon { width: 80px; height: 80px; background: radial-gradient(circle, #fffbe0, #ffe9a0); box-shadow: 0 0 30px 12px rgba(255,240,180,.8); }
+#world .pin.moon .pi { font-size: 36px; }
+#world .who { position: absolute; width: 46px; translate: -50% -120%; pointer-events: none; filter: drop-shadow(0 3px 2px rgba(0,0,0,.5)); }
+#world .who.me { z-index: 2; animation: hop .7s infinite; }
+#world .who.me.walk { transition: left 1.4s ease-in-out, top 1.4s ease-in-out; }
+#world .who.him { width: 38px; translate: 0% -115%; transform: scaleX(-1); }
+#world #wClose { position: absolute; top: 12px; right: 12px; }
+/* the dream */
+#dream { position: absolute; inset: 0; z-index: 11; pointer-events: auto; background: #0d1e45; overflow: hidden; animation: fadeIn .6s; }
+#dream .art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; animation: dreamZoom 6s ease-out both; }
+#dream .bubble { position: absolute; right: 8%; top: 8%; animation: popIn .6s .7s both cubic-bezier(.3,1.6,.5,1); }
+#dream .bubble i { position: absolute; border-radius: 50%; background: #fff; box-shadow: 0 3px 10px rgba(0,0,0,.3); }
+#dream .bubble i:nth-child(1) { width: 14px; height: 14px; left: -30px; bottom: -40px; }
+#dream .bubble i:nth-child(2) { width: 22px; height: 22px; left: -12px; bottom: -20px; }
+#dream .bubble .b { width: 150px; height: 110px; border-radius: 50%; background: #fff; box-shadow: 0 4px 14px rgba(0,0,0,.35); position: relative; }
+#dream .bubble .m { position: absolute; right: 14px; top: 16px; width: 62px; animation: dreamPull 1.6s 1.4s ease-in infinite; }
+#dream .bubble .v { position: absolute; left: 6px; bottom: 6px; width: 70px; }
+#dream .tap { position: absolute; left: 50%; bottom: 8%; translate: -50% 0; font-size: 46px; animation: pulse 1s 1.6s infinite both; }
+@keyframes dreamZoom { from { transform: scale(1.12); } }
+@keyframes dreamPull { 0% { transform: translate(0, 0) scale(1); } 80% { transform: translate(-40px, 22px) scale(.45); opacity: 1; } 100% { transform: translate(-44px, 24px) scale(.3); opacity: 0; } }
+#dream .bubble { left: 6%; right: auto; top: 4%; }
+#dream .bubble i:nth-child(1) { left: auto; right: -34px; bottom: -46px; }
+#dream .bubble i:nth-child(2) { left: auto; right: -14px; bottom: -22px; }
+#world .pin.place { width: 54px; height: 54px; }
+#world .pin .pi { font-size: 24px; }
+#world { overflow: hidden; }
+#world .wmap { height: 100%; max-width: none; width: auto; }
+@media (orientation: landscape) { #world .wmap { height: 100%; } }
+/* the rocket by the house */
+#world .rocket { position: absolute; left: 12%; top: 70%; translate: -50% -50%; display: flex; flex-direction: column; align-items: center; z-index: 1; }
+#world .rocket img { width: 76px; filter: drop-shadow(0 4px 4px rgba(0,0,0,.45)); }
+#world .rocket .parts { display: flex; gap: 3px; margin-top: -4px; }
+#world .rocket .parts i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.35); box-shadow: 0 0 0 2px rgba(13,30,69,.6); }
+#world .rocket .parts i.on { background: #ffe066; }
+#world .rocket.built img { animation: popIn .6s .2s both cubic-bezier(.3,1.6,.5,1); filter: drop-shadow(0 0 16px #ffe066); }
+/* lift-off */
+#launch { position: absolute; inset: 0; z-index: 11; pointer-events: auto; overflow: hidden; animation: fadeIn .3s; }
+#launch .sky { position: absolute; inset: 0; background: linear-gradient(#0d1e45, #2d5aa0 60%, #7fd3ff); transition: background 2s; }
+#launch.go .sky { background: linear-gradient(#05081a, #0d1e45 60%, #2a3a7a); }
+#launch .moonL { position: absolute; top: 6%; right: 10%; width: 120px; filter: drop-shadow(0 0 30px rgba(255,250,210,.8)); transition: transform 2.6s ease-in; }
+#launch.go .moonL { transform: scale(1.8) translate(-10%, 10%); }
+#launch .r { position: absolute; left: 50%; bottom: 6%; width: min(44vw, 200px); translate: -50% 0; animation: shake .08s infinite; transition: bottom 2.6s cubic-bezier(.5,0,.8,.6), width 2.6s; }
+#launch.go .r { bottom: 120%; width: min(24vw, 110px); }
+#launch .smoke { position: absolute; left: 0; right: 0; bottom: 0; height: 22%; background: radial-gradient(ellipse at 50% 100%, rgba(255,255,255,.95), rgba(255,255,255,0) 70%); }
+@keyframes shake { 50% { transform: translateX(2px); } }
+#world .rocket { left: 72%; top: 79%; }

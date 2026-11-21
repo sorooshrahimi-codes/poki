@@ -21,6 +21,13 @@ Scale is the wow: a little kid, a little nozzle, and a giant cute monster stretc
 | 9. Competing | "I'm better" | Rush best on the button; after a giant, show the giant ladder rank | later |
 | 10. Long term | "There's always more" | Six places on the road to the Moon (a giant every 3-4 min, the Moon at ~18 min), then the giant ladder (★2, ★3...) | done |
 
+## The story (wordless)
+- **Start:** a night in the kid's room, the Moon fills the window, a thought bubble: the Moon going into his vacuum. The dream.
+- **The road:** one illustrated world map, from the kid's house (bottom) through the meadow, forest, ice, candy and volcano, up a rainbow to the Moon (top). Each place has a giant to beat.
+- **What you build:** a rocket next to the house; each giant beaten adds a part (pad, body, window, fins, boosters, nose cone). Visible on the map.
+- **The end:** after the volcano the rocket is complete, lifts off, and the last giant is the Moon itself.
+- **The rival:** a cheeky kid racing you to the Moon (shown on the road and in a VS scene).
+
 ## Second by second: what the player meets, and what makes them stay
 
 | Time | What happens on screen | What the player feels / learns | Pull to keep going |

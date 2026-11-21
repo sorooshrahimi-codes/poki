@@ -31,9 +31,11 @@ SHEETS = {
     "crit_moon1": ["moonbun", "starling", "cometto", "cratero"],
     "crit_moon2": ["astrocat", "nebulee", "saturnie", "ufolo"],
     "crit_moon3": ["lunaria", "galaxeel", "celestail", "bigmoon"],
+    "rocket1": ["rocket_0", "rocket_1", "rocket_2", "rocket_3"],
+    "rocket2": ["rocket_4", "rocket_5", "rocket_launch", "rocket_fly"],
 }
 SINGLES = {"kid_vac": "kid_vac", "kid_vac_suck": "kid_vac_suck", "kid_cheer": "kid_cheer", "kid_rival": "kid_rival", "kid_vac2": "kid_vac2", "kid_vac3": "kid_vac3", "kid_vac4": "kid_vac4", "lab_egg": "lab_egg"}
-BGS = {"bg_meadow": "bg_meadow", "bg_park": "bg_park", "bg_forest": "bg_forest", "bg_frost": "bg_frost", "bg_candy": "bg_candy", "bg_volcano": "bg_volcano", "bg_moon": "bg_moon"}
+BGS = {"bg_meadow": "bg_meadow", "bg_park": "bg_park", "bg_forest": "bg_forest", "bg_frost": "bg_frost", "bg_candy": "bg_candy", "bg_volcano": "bg_volcano", "bg_moon": "bg_moon", "world_map": "world_map", "intro_dream": "intro_dream"}
 MAX = {"egg_": 120, "lab_egg": 120, "kid_": 360, "pedestal": 220, "jar": 200, "coin": 96, "nozzle": 128}
 
 def save(im, name):

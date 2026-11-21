@@ -95,6 +95,19 @@ JOBS["kid_vac2"] = (_KID + "The vacuum is UPGRADED: a bigger turbo backpack with
 JOBS["kid_vac3"] = (_KID + "The vacuum is a MEGA machine: a huge golden backpack with spinning turbines and a big glass tank full of a tiny tornado, a long golden nozzle with glowing rings and sparks. " + STYLE, "1:1", True, _REF)
 JOBS["kid_vac4"] = (_KID + "The vacuum is COSMIC: a backpack holding a swirling purple galaxy in a crystal sphere, floating star particles around it, a sleek crystal nozzle glowing with starlight. " + STYLE, "1:1", True, _REF)
 
+JOBS["world_map"] = ("Vertical game world map illustration, portrait composition, seen slightly from above like a board-game map: one winding dirt road that starts at the BOTTOM at a cozy little house with a red roof, "
+    "then climbs upward through clearly separated areas, from bottom to top: a sunny flower meadow, a mushroom forest, snowy ice peaks, pink candy hills with lollipops, a volcano with lava, "
+    "then the road becomes a glowing rainbow bridge rising through fluffy clouds into a starry night sky, ending at a big glowing full Moon at the very TOP. Each area is a distinct band across the map, "
+    "with a little round clearing on the road in each area as a stop. Bright, cheerful, readable, no characters, no creatures, no text, no labels. " + STYLE, "2:3", False)
+JOBS["intro_dream"] = ("Vertical game illustration, portrait composition: a cozy kid's bedroom at night, the same cheerful kid explorer (red cap, blue overalls) kneeling on his bed looking out of a big round window, "
+    "hugging his toy vacuum cleaner backpack, a HUGE glowing full Moon fills the window, stars in the night sky, warm lamp light in the room, toys on the shelf, dreamy and magical. No text. " + STYLE, "2:3", False, _REF)
+
+_ROCK = "Each panel shows the SAME cute cartoon toy rocket under construction on the same little round launch pad, front view, centered, on a plain transparent background, no characters, no text. "
+JOBS["rocket1"] = (SHEET + _ROCK + "Top-left: only the round launch pad with a small scaffold and a toolbox. Top-right: the pad with the rocket's lower body, red and white, with bolts. "
+    "Bottom-left: the rocket body taller with a round blue porthole window. Bottom-right: the rocket with fins added, red fins with yellow trim. " + STYLE, "1:1", True)
+JOBS["rocket2"] = (SHEET + _ROCK + "Top-left: the full rocket with fins and two side boosters attached. Top-right: the complete rocket with a pointy nose cone and a little flag on top, shiny and proud. "
+    "Bottom-left: the complete rocket launching, big orange-and-yellow flames and puffy smoke clouds below. Bottom-right: the complete rocket flying upward with a long sparkly flame trail. " + STYLE, "1:1", True)
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]
