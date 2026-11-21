@@ -571,3 +571,19 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 #gift .days i.on { color: #ffe066; text-shadow: 0 0 8px #ffe066; }
 #gift .prize { display: flex; align-items: center; gap: 6px; font-size: 30px; font-weight: 700; color: #ffe066; }
 #gift .prize img { height: 36px; }
+#levels .path line { stroke: rgba(255,255,255,.75); stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; stroke-width: 5px; }
+#levels .path line.off { stroke: rgba(255,255,255,.15); }
+#levels .node.wheel { background: radial-gradient(circle at 50% 35%, #ffd45e, #ff9a1f); box-shadow: 0 5px 0 #a05a00, 0 8px 16px rgba(0,0,0,.3); }
+#levels .node.hard { background: radial-gradient(circle at 50% 35%, #ff7a8a, #c42a4a); box-shadow: 0 5px 0 #7a1028, 0 8px 16px rgba(0,0,0,.3); }
+#levels .node.locked.wheel, #levels .node.locked.hard { filter: saturate(.3) brightness(.8); }
+#levels .node { width: 64px; height: 64px; }
+#levels .node .ni { font-size: 27px; }
+#levels .node.giant { width: 92px; height: 92px; }
+#levels .node.giant img.gi { width: 70px; height: 70px; }
+/* the lucky wheel */
+#wheel { position: absolute; inset: 0; z-index: 9; pointer-events: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; background: rgba(13,30,69,.82); animation: fadeIn .3s; }
+#wheel .wh { position: relative; width: 260px; height: 260px; }
+#wheel .disc { position: absolute; inset: 0; border-radius: 50%; transition: transform 3.2s cubic-bezier(.15,.8,.2,1);
+  background: conic-gradient(from -30deg, #ff7a8a 0 60deg, #ffd45e 60deg 120deg, #7be495 120deg 180deg, #5bc8ff 180deg 240deg, #c9a7ff 240deg 300deg, #ffb347 300deg 360deg); box-shadow: 0 0 0 8px #fff, 0 10px 30px rgba(0,0,0,.4); }
+#wheel .disc span { position: absolute; left: 50%; top: 50%; font-size: 24px; font-weight: 700; transform: translate(-50%, -50%) rotate(var(--a)) translateY(-90px) rotate(calc(-1 * var(--a))); white-space: nowrap; }
+#wheel .ptr { position: absolute; left: 50%; top: -24px; transform: translateX(-50%); font-style: normal; font-size: 34px; color: #fff; text-shadow: 0 3px 0 #0d1e45; }

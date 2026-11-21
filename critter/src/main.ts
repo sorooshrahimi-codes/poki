@@ -938,20 +938,35 @@ async function dailyGift() {
 /** every place: five short levels, each with its own task, then the giant */
 type Task = "any" | "species" | "combo" | "golden" | "rival" | "giant";
 const LEVEL_TASKS: Task[] = ["any", "species", "combo", "golden", "rival"];
-interface Level { biome: BiomeId; idx: number; task: Task; goal: number; count: number; left: number; total: number; stolen: number; target: string | null; done: boolean }
+interface Level { biome: BiomeId; idx: number; task: Task; goal: number; count: number; left: number; total: number; stolen: number; target: string | null; done: boolean; hard: boolean }
 let lvl: Level | null = null;
 const placeIndex = (b: BiomeId) => BIOMES.findIndex((x) => x.id === b);
-const starsOf = (b: BiomeId) => (save.stars ??= {})[b] ??= [0, 0, 0, 0, 0];
-const levelsDone = (b: BiomeId) => starsOf(b).every((x) => x > 0);
+/** seven nodes per place: 0 and 1, then a fork (2-3 the normal way, 5-6 the risky way: a lucky wheel and a hard level), then 4, then the giant */
+const starsOf = (b: BiomeId) => { const st = ((save.stars ??= {})[b] ??= [0, 0, 0, 0, 0, 0, 0]); while (st.length < 7) st.push(0); return st; };
+const branch = (b: BiomeId) => { const st = starsOf(b); return st[2] || st[3] ? "a" : st[5] || st[6] ? "b" : null; };
+function nodeOpen(b: BiomeId, i: number) {
+  const st = starsOf(b), br = branch(b);
+  if (i === 0) return true;
+  if (i === 1) return st[0] > 0;
+  if (i === 2) return st[1] > 0 && br !== "b";
+  if (i === 5) return st[1] > 0 && br !== "a";
+  if (i === 3) return st[2] > 0;
+  if (i === 6) return st[5] > 0;
+  if (i === 4) return st[3] > 0 || st[6] > 0;
+  return false;
+}
+const levelsDone = (b: BiomeId) => { const st = starsOf(b); return st[0] > 0 && st[1] > 0 && st[4] > 0 && ((st[2] > 0 && st[3] > 0) || (st[5] > 0 && st[6] > 0)); };
 const TASK_ICON: Record<Task, string> = { any: "🎯", species: "", combo: "🔥", golden: "✨", rival: "🛡️", giant: "👑" };
 function makeLevel(b: BiomeId, idx: number): Level {
-  const k = placeIndex(b), task = idx >= 5 ? "giant" : LEVEL_TASKS[idx];
+  const k = placeIndex(b), hard = idx === 6;
+  const task: Task = idx === 7 ? "giant" : hard ? (["any", "species", "golden"] as Task[])[k % 3] : LEVEL_TASKS[Math.min(4, idx)];
   const commons = critterOf(b).filter((d) => d.rarity === "common");
   const target = task === "species" ? commons[(k + idx) % commons.length].id : null;
-  const goal = task === "any" ? (k ? 11 + k * 3 : 8) : task === "species" ? 7 + k : task === "combo" ? 6 + (k >= 2 ? 1 : 0) : task === "golden" ? 7 + k : task === "rival" ? 18 + k * 3 : 1;
+  const goal0 = task === "any" ? (k ? 11 + k * 3 : 8) : task === "species" ? 7 + k : task === "combo" ? 6 + (k >= 2 ? 1 : 0) : task === "golden" ? 7 + k : task === "rival" ? 18 + k * 3 : 1;
   const total = task === "giant" ? 0 : task === "golden" ? 35 : task === "rival" ? 55 : idx === 0 ? 60 : 45;
+  const goal = hard ? Math.round(goal0 * 1.6) : goal0;
   const more = task === "giant" ? 0 : 8 * perkN("time");
-  return { biome: b, idx, task, goal, count: 0, left: total + more, total: total + more, stolen: 0, target, done: false };
+  return { biome: b, idx, task, goal, count: 0, left: total + more, total: total + more, stolen: 0, target, done: false, hard };
 }
 /** what the level asks for, as a picture: the icon (or the critter), the count and the goal */
 function taskHtml(l: Level) {
@@ -961,7 +976,8 @@ function taskHtml(l: Level) {
 }
 async function startLevel(b: BiomeId, idx: number) {
   if (busy) return;
-  if (idx >= 5) {
+  if (idx === 5) { await spinWheel(b); return; }
+  if (idx >= 7) {
     const g = nextGiant();
     if (g.biome !== b || barPower() < g.need) { sfx.nope(); const fh = $("levels").querySelector(".node.giant"); fh?.classList.remove("nope"); void (fh as HTMLElement | null)?.offsetWidth; fh?.classList.add("nope"); return; }
   }
@@ -980,8 +996,8 @@ function endLevel(win: boolean) {
   l.done = true; input.on = false; gameplayStop();
   const k = l.total ? l.left / l.total : 1;
   const stars = !win ? 0 : l.task === "giant" ? 3 : k >= 0.5 ? 3 : k >= 0.25 ? 2 : 1;
-  const prize = win ? Math.round((incomePerSec() * 25 + 80 * (1 + placeIndex(l.biome) * 3)) * (1 + stars * 0.5)) : 0;
-  if (win && l.idx < 5) { const st = starsOf(l.biome); st[l.idx] = Math.max(st[l.idx], stars); }
+  const prize = win ? Math.round((incomePerSec() * 25 + 80 * (1 + placeIndex(l.biome) * 3)) * (1 + stars * 0.5) * (l.hard ? 2.5 : 1)) : 0;
+  if (win && l.idx < 7) { const st = starsOf(l.biome); st[l.idx] = Math.max(st[l.idx], stars); }
   save.coins += prize; writeSave(save);
   if (l.task === "giant") return; // the giant has its own celebration and then the journey
   const box = $("lvlEnd");
@@ -1001,24 +1017,61 @@ async function toMap() {
   if (field.biome !== save.biome || field.critters.length === 0) { field = newField(view.W, view.H, save.up, save.biome); field.script = 2; for (let i = 0; i < 5; i++) spawn(field, rng); }
   renderLevels(); updateUi();
 }
-/** the place's map: a winding path of five levels and the giant at the end */
-const NODE_POS = [[18, 82], [50, 70], [80, 56], [48, 44], [18, 30], [60, 14]];
+/** the place's map: two levels, a fork (the normal way or the risky way), one more level, the giant */
+const NODE_POS: Record<number, [number, number]> = { 0: [24, 88], 1: [50, 74], 2: [22, 57], 3: [22, 38], 5: [78, 57], 6: [78, 38], 4: [50, 24], 7: [50, 6] };
+const LINKS: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 4], [1, 5], [5, 6], [6, 4], [4, 7]];
 function renderLevels() {
-  const b = save.biome, st = starsOf(b), box = $("levels");
-  const firstOpen = st.findIndex((x) => x === 0);
+  const b = save.biome, st = starsOf(b), box = $("levels"), br = branch(b);
+  const order = [0, 1, ...(br === "b" ? [5, 6] : br === "a" ? [2, 3] : [2, 5]), 4];
+  const next = order.find((i) => nodeOpen(b, i) && st[i] === 0);
   const g = nextGiant();
-  const path = NODE_POS.map(([x, y]) => `${x},${y}`).join(" ");
-  box.innerHTML = `<svg class="path" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points="${path}" /></svg>` + NODE_POS.map(([x, y], i) => {
-    if (i === 5) {
+  const offWay = (a: number, c: number) => (br === "b" && (a === 2 || a === 3 || c === 2)) || (br === "a" && (a === 5 || a === 6 || c === 5));
+  const line = ([a, c]: [number, number]) => { const [x1, y1] = NODE_POS[a], [x2, y2] = NODE_POS[c]; return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="${offWay(a, c) ? "off" : ""}"/>`; };
+  box.innerHTML = `<svg class="path" viewBox="0 0 100 100" preserveAspectRatio="none">${LINKS.map(line).join("")}</svg>` + Object.entries(NODE_POS).map(([key, [x, y]]) => {
+    const i = +key;
+    if (i === 7) {
       const ready = levelsDone(b) && g.biome === b;
-      return `<button class="node giant${ready && barPower() >= g.need ? " go" : ""}${ready ? "" : " locked"}" data-i="5" style="left:${x}%;top:${y}%">${giantImg(g.id)}${ready ? "" : "<i>🔒</i>"}</button>`;
+      return `<button class="node giant${ready && barPower() >= g.need ? " go" : ""}${ready ? "" : " locked"}" data-i="7" style="left:${x}%;top:${y}%">${giantImg(g.id)}${ready ? "" : "<i>🔒</i>"}</button>`;
     }
-    const L = makeLevel(b, i), open = i <= (firstOpen < 0 ? 4 : firstOpen);
-    const icon = L.task === "species" && L.target ? ic(L.target) : L.task === "rival" ? `<img src="./art/kid_rival.webp" alt="">` : TASK_ICON[L.task];
-    return `<button class="node${open ? "" : " locked"}${i === firstOpen ? " next" : ""}" data-i="${i}" style="left:${x}%;top:${y}%"><span class="ni">${open ? icon : "🔒"}</span><span class="ns">${[0, 1, 2].map((k) => `<i class="${k < st[i] ? "on" : ""}">★</i>`).join("")}</span></button>`;
+    const open = nodeOpen(b, i);
+    let icon: string, cls = "";
+    if (i === 5) { icon = "🎰"; cls = " wheel"; }
+    else {
+      const L = makeLevel(b, i);
+      icon = L.task === "species" && L.target ? ic(L.target) : L.task === "rival" ? `<img src="./art/kid_rival.webp" alt="">` : TASK_ICON[L.task];
+      if (i === 6) { icon = `💀`; cls = " hard"; }
+    }
+    return `<button class="node${cls}${open ? "" : " locked"}${i === next ? " next" : ""}" data-i="${i}" style="left:${x}%;top:${y}%"><span class="ni">${open ? icon : "🔒"}</span><span class="ns">${[0, 1, 2].map((k) => `<i class="${k < st[i] ? "on" : ""}">★</i>`).join("")}</span></button>`;
   }).join("");
   box.classList.remove("hidden");
   for (const el of box.querySelectorAll<HTMLElement>(".node")) el.onclick = () => { if (el.classList.contains("locked")) { sfx.nope(); return; } sfx.tap(); void startLevel(b, +el.dataset.i!); };
+}
+/** the lucky wheel: six prizes, tap to spin */
+async function spinWheel(b: BiomeId) {
+  const prizes = ["💰", "💰💰", "🌀+3", "✨", "🃏", "💰💰💰"];
+  const box = $("wheel");
+  box.innerHTML = `<div class="wh"><div class="disc">${prizes.map((p, i) => `<span style="--a:${i * 60}deg">${p}</span>`).join("")}</div><i class="ptr">▼</i></div><button class="btn big go" id="whGo">🎰</button>`;
+  box.classList.remove("hidden"); $("levels").classList.add("hidden");
+  await new Promise<void>((r) => { $("whGo").onclick = () => r(); });
+  $("whGo").classList.add("hidden");
+  const pick = Math.floor(Math.random() * prizes.length);
+  const disc = box.querySelector<HTMLElement>(".disc")!;
+  requestAnimationFrame(() => { disc.style.transform = `rotate(${-(360 * 5 + pick * 60)}deg)`; });
+  for (let i = 0; i < 14; i++) setTimeout(() => sfx.coin(i), i * 160 + i * i * 8);
+  await new Promise((r) => setTimeout(r, 3400));
+  sfx.reveal("epic");
+  const base = Math.max(120, Math.round(incomePerSec() * 40 + 100 * (1 + placeIndex(b) * 3)));
+  if (pick === 0 || pick === 3) save.coins += base;
+  else if (pick === 1) save.coins += base * 2;
+  else if (pick === 5) save.coins += base * 4;
+  else if (pick === 2) save.charge = (save.charge ?? 0) + 3;
+  if (pick === 3) field.lure += 5;
+  if (pick !== 4 && pick !== 2) flyCoins(view.W / 2, view.H / 2, 8);
+  starsOf(b)[5] = 3; writeSave(save);
+  await new Promise((r) => setTimeout(r, 900));
+  box.classList.add("hidden");
+  if (pick === 4) await pickPerk();
+  renderLevels(); updateUi();
 }
 
 /** the rival's pace: when he beats each giant, in seconds of your play time. Ahead early, catchable mid-road,
