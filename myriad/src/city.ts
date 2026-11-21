@@ -208,7 +208,7 @@ void main() {
 // ---------------------------------------------------------------- eating and painting
 const EAT_VS = `#version 300 es
 precision highp float;
-uniform sampler2D uPos;
+uniform sampler2D uPos, uVel;
 uniform float uS, uMode;
 uniform vec4 uB[${NB}];
 uniform vec4 uS2[${NB}];
@@ -218,9 +218,11 @@ void main() {
   vec4 p = texelFetch(uPos, ivec2(i % int(uS), i / int(uS)), 0);
   gl_PointSize = 1.0;
   if (p.w < 1.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
-  int b = int(p.w - 2.0 + 0.5);
+  int b = int(floor(p.w - 2.0 + 0.01));
+  bool ahead = fract(p.w) > 0.25;
   vec4 B = uB[b];
   vec3 lp = (p.xyz - vec3(B.x, uS2[b].y, B.y)) / (${VS.toFixed(3)} * uS2[b].x) + vec3(16.0, 0.0, 16.0);
+  if (ahead) { vec3 vel = texelFetch(uVel, ivec2(i % int(uS), i / int(uS)), 0).xyz; lp += (length(vel) > 0.1 ? normalize(vel) : vec3(0.0, -1.0, 0.0)) * 1.2; }
   ivec3 v = clamp(ivec3(floor(lp)), ivec3(0), ivec3(31));
   if (uMode < 0.5) gl_Position = vec4((vec2(atl(b, v)) + 0.5) / vec2(${AW}.0, ${AH}.0) * 2.0 - 1.0, 0.0, 1.0);
   else gl_Position = vec4((float(b) + 0.5) / ${NB}.0 * 2.0 - 1.0, 0.0, 0.0, 1.0);
@@ -354,22 +356,22 @@ void main() { o = vec4(uAmount); }`, "fill");
   }
 
   /** eating, counting, painting, then gravity for every building that is being eaten or still settling */
-  feed(posTex: WebGLTexture, active: number, dt: number, t: number) {
+  feed(posTex: WebGLTexture, velTex: WebGLTexture, active: number, dt: number, t: number) {
     const gl = this.gl;
     gl.bindVertexArray(this.vao);
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
     gl.useProgram(this.eat.p);
     const u = this.eat.u;
-    bindTex(gl, 0, posTex, u.uPos);
+    bindTex(gl, 0, posTex, u.uPos); bindTex(gl, 1, velTex, u.uVel);
     gl.uniform1f(u.uS, S); gl.uniform4fv(u.uB, this.bArr); gl.uniform4fv(u.uS2, this.s2Arr);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.atlas.fb); gl.viewport(0, 0, AW, AH);
     gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT); gl.blendFunc(gl.ONE, gl.ONE);
-    gl.uniform1f(u.uMode, 0); gl.uniform1f(u.uAmount, dt * 2.6);
+    gl.uniform1f(u.uMode, 0); gl.uniform1f(u.uAmount, dt * 7.5);
     gl.drawArrays(gl.POINTS, 0, active);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.counter.fb); gl.viewport(0, 0, NB, 1);
     gl.blendEquation(gl.FUNC_ADD);
-    gl.uniform1f(u.uMode, 1); gl.uniform1f(u.uAmount, dt * 2.6);
+    gl.uniform1f(u.uMode, 1); gl.uniform1f(u.uAmount, dt * 7.5);
     gl.drawArrays(gl.POINTS, 0, active);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.color.fb); gl.viewport(0, 0, COLOR, COLOR);
     gl.useProgram(this.paint.p);

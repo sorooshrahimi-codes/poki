@@ -52,31 +52,32 @@ void main() {
     pos = uLeader + vec3(q.x, 0.4 + abs(q.y), q.z) * 2.0;
     vel = normalize(vec3(q.x, 0.6, q.z) + 1e-4) * (4.0 + 6.0 * r.y) + uLeaderVel;
   }
-  // 1. a loose leash: inside the swarm's radius a mite is free; outside, it is pulled back toward the seed
+  // 1. seek the seed: every mite heads for the finger, arriving softly (so the swarm moves as one liquid body)
   vec3 rel = pos - uLeader;
-  float R = uRadius * (0.55 + 0.6 * r.y);
   float dist = length(rel.xz);
   vec3 inward = dist > 1e-3 ? -vec3(rel.x, 0.0, rel.z) / dist : vec3(0.0);
-  vec3 leash = inward * max(0.0, dist - R) * 1.6;
-  // 2. the whole swarm mills around the seed like a school of fish (alternating layers turn opposite ways)
-  vec3 tang = vec3(-inward.z, 0.0, inward.x) * (r.x < 0.5 ? 1.0 : -0.6);
-  vec3 mill = tang * min(dist, R) * 0.55;
-  // 3. curl noise: a divergence-free flow, so streams and vortices twist through the swarm without clumping
-  // the cross product of two gradient fields is exactly divergence-free: cheap curl noise
-  vec3 q = pos * 0.075;
-  float t = uTime * 0.35;
+  float vmaxSeek = uSpeed * (1.15 + 0.3 * r.z);
+  // each mite keeps its own place inside a body whose size grows with the swarm (sqrt: an even disc)
+  float home = uRadius * sqrt(r.y) * 0.95;
+  vec3 seek = inward * clamp((dist - home) * 3.2, -vmaxSeek * 0.3, vmaxSeek);
+  // 2. a gentle mill around the seed when it rests (life, not chaos)
+  vec3 tang = vec3(-inward.z, 0.0, inward.x) * (r.x < 0.5 ? 1.0 : -0.7);
+  float calm = 1.0 - min(1.0, length(uLeaderVel) / max(uSpeed * 0.5, 1.0));
+  vec3 mill = tang * min(dist, uRadius) * (0.15 + 0.35 * calm);
+  // 3. curl noise, small: shimmer inside the body of the swarm
+  vec3 q = pos * 0.11;
+  float t = uTime * 0.45;
   const vec3 k1 = vec3(1.0, 0.6, 0.3), k2 = vec3(-0.4, 1.1, 0.8), k3 = vec3(0.7, -0.3, 1.2), k4 = vec3(1.3, 0.9, -0.6);
   vec3 g1 = k1 * cos(dot(k1, q) + t) + k2 * cos(dot(k2, q) * 1.7 + 1.3 * t) * 0.6;
   vec3 g2 = k3 * cos(dot(k3, q) - 0.7 * t) + k4 * cos(dot(k4, q) * 1.9 + 0.5 * t) * 0.6;
-  vec3 curl = cross(g1, g2);
-  vec3 flow = curl * (3.5 + 0.25 * uRadius) * (0.7 + 0.6 * r.z);
+  vec3 flow = cross(g1, g2) * (1.4 + 0.06 * uRadius) * (0.6 + 0.6 * r.z);
   // 4. away from crowding: the density gradient
   vec2 e = uDenTexel * uWorld;
   float c0 = den(pos.xz);
   vec2 g = vec2(den(pos.xz + vec2(e.x, 0.0)) - den(pos.xz - vec2(e.x, 0.0)), den(pos.xz + vec2(0.0, e.y)) - den(pos.xz - vec2(0.0, e.y)));
   vec3 rep = -vec3(g.x, 0.0, g.y) * uRep;
-  vec3 want = uLeaderVel * (0.6 + 0.5 * r.z) + leash + mill + flow;
-  vel += ((want - vel) * 2.4 + rep) * uDt;
+  vec3 want = uLeaderVel + seek + mill + flow;
+  vel += ((want - vel) * 5.5 + rep) * uDt;
   // 5. height: a soft floor, a soft ceiling that grows with the swarm, and the flow lifts sheets into the air
   float cap = 1.5 + uRadius * 0.45 * uLift;
   vel.y += (max(0.0, 0.4 - pos.y) * 12.0 - max(0.0, pos.y - cap) * 4.0 - 0.6) * uDt;
@@ -95,14 +96,20 @@ void main() {
       vec3 lp = (pos - vec3(B.x, uS2[b].y, B.y)) / (${VS_W.toFixed(3)} * uS2[b].x) + vec3(16.0, 0.0, 16.0);
       float here = solidAt(b, ivec3(floor(lp)));
       float above = solidAt(b, ivec3(floor(lp + vec3(0.0, 1.0, 0.0))));
+      vec3 hd = length(vel) > 0.1 ? normalize(vel) : vec3(0.0, -1.0, 0.0);
+      float ahead = solidAt(b, ivec3(floor(lp + hd * 1.2)));
       if (here > 0.5) {
         w = 2.0 + float(b);
-        // chewing through stone is slow; the swarm behind keeps pushing, so tunnels open up
-        vel *= exp(-7.0 * uDt);
-        vel.y += (above > 0.5 ? 2.5 : 5.0) * uDt;
+        // chewing through stone slows a mite down; the swarm behind keeps pushing, so tunnels open up
+        vel *= exp(-3.5 * uDt);
+        vel.y += (above > 0.5 ? 2.0 : 4.0) * uDt;
+      } else if (ahead > 0.5) {
+        // stone right in front: bite it (w + 0.5 tells the eat pass to take the voxel ahead) and climb
+        w = 2.5 + float(b);
+        vel.xz *= exp(-2.0 * uDt);
+        vel.y += 3.5 * uDt;
       } else {
-        // on the building: a wall or a roof to climb over, the soft ceiling rises with it
-        vel.y += 1.4 * uDt;
+        vel.y += 1.0 * uDt;
       }
     }
   }
@@ -204,11 +211,54 @@ void main() {
   o = vec4(c, 1.0);
 }`;
 
+// where the swarm bites: stone chips fly out and dust rises (drawn only for mites that are eating)
+const CHIP_VS = `#version 300 es
+precision highp float;
+uniform sampler2D uPos;
+uniform mat4 uVP;
+uniform vec3 uCamR, uCamU;
+uniform float uS, uTime;
+in vec2 aCorner;
+out vec2 vUv;
+out float vA;
+out float vKind;
+${HASH}
+void main() {
+  int i = gl_InstanceID;
+  vec4 p = texelFetch(uPos, ivec2(i % int(uS), i / int(uS)), 0);
+  if (p.w < 1.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+  vec3 r = h31(float(i) * 3.1);
+  // a looping little arc: each biting mite throws a chip out and up every ~0.6 s
+  float ph = fract(uTime * (1.4 + r.x) + r.y);
+  vec3 dir = normalize(vec3(r.x - 0.5, 0.8 + r.z, r.y - 0.5));
+  vec3 cp = p.xyz + dir * ph * 1.6 + vec3(0.0, -4.0 * ph * ph * 0.4, 0.0);
+  bool dust = r.z > 0.55;
+  float size = dust ? 0.35 + 0.6 * ph : 0.05 + 0.04 * r.x;
+  vKind = dust ? 1.0 : 0.0;
+  vA = dust ? (1.0 - ph) * 0.18 : 1.0 - ph * 0.6;
+  vec3 wp = (dust ? p.xyz + vec3(0.0, ph * 1.2, 0.0) : cp) + (uCamR * aCorner.x + uCamU * aCorner.y) * size;
+  vUv = aCorner;
+  gl_Position = uVP * vec4(wp, 1.0);
+}`;
+const CHIP_FS = `#version 300 es
+precision mediump float;
+in vec2 vUv;
+in float vA;
+in float vKind;
+out vec4 o;
+void main() {
+  float r2 = dot(vUv, vUv);
+  if (r2 > 1.0) discard;
+  vec3 c = vKind > 0.5 ? vec3(0.55, 0.52, 0.50) : vec3(0.42, 0.40, 0.38);
+  float a = vKind > 0.5 ? vA * (1.0 - r2) : vA;
+  o = vec4(c * a, a);
+}`;
+
 export class Swarm {
   pos: Target[]; // ping-pong pairs: [pos, vel] attachments
   cur = 0;
   den: Target; denA: Target; denB: Target;
-  upd: Program; splat: Program; blur: Program; mite: Program;
+  upd: Program; splat: Program; blur: Program; mite: Program; chip: Program;
   quad: WebGLVertexArrayObject; empty: WebGLVertexArrayObject;
   gl: GL;
   constructor(gl: GL) {
@@ -221,6 +271,7 @@ export class Swarm {
     this.splat = program(gl, SPLAT_VS, SPLAT_FS, "splat");
     this.blur = program(gl, FULLSCREEN_VS, BLUR_FS, "blur");
     this.mite = program(gl, MITE_VS, MITE_FS, "mite");
+    this.chip = program(gl, CHIP_VS, CHIP_FS, "chips");
     this.empty = gl.createVertexArray()!;
     this.quad = gl.createVertexArray()!;
     gl.bindVertexArray(this.quad);
@@ -249,7 +300,7 @@ export class Swarm {
     gl.uniform4fv(u.uB, world.b); gl.uniform4fv(u.uB2, world.b2); gl.uniform4fv(u.uS2, world.s2); gl.uniform4fv(u.uShock, this.shock);
     gl.uniform3fv(u.uLeader, leader); gl.uniform3fv(u.uLeaderVel, leaderVel);
     gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uActive, active); gl.uniform1f(u.uS, S); gl.uniform1f(u.uWorld, WORLD);
-    gl.uniform1f(u.uSpeed, speed); gl.uniform1f(u.uRep, 1.6); gl.uniform1f(u.uLift, 1.0);
+    gl.uniform1f(u.uSpeed, speed); gl.uniform1f(u.uRep, 1.0); gl.uniform1f(u.uLift, 1.0);
     gl.uniform1f(u.uRadius, 3.0 + Math.sqrt(active) * 0.075);
     gl.uniform2f(u.uDenTexel, 1 / DEN, 1 / DEN);
     gl.bindVertexArray(this.empty);
@@ -293,5 +344,14 @@ export class Swarm {
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
     gl.bindVertexArray(this.quad);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, active);
+    // chips and dust where the swarm is biting (premultiplied alpha, no depth writes)
+    const c = this.chip.u;
+    gl.useProgram(this.chip.p);
+    bindTex(gl, 0, this.state.tex[0], c.uPos);
+    gl.uniformMatrix4fv(c.uVP, false, vp); gl.uniform3fv(c.uCamR, camR); gl.uniform3fv(c.uCamU, camU);
+    gl.uniform1f(c.uS, S); gl.uniform1f(c.uTime, t);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, active);
+    gl.depthMask(true); gl.disable(gl.BLEND);
   }
 }

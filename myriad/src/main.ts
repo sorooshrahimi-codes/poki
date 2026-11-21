@@ -97,6 +97,8 @@ function xform(out: Float32Array, m: Float32Array, v: Float32Array) {
   for (let i = 0; i < 4; i++) out[i] = m[i] * v[0] + m[4 + i] * v[1] + m[8 + i] * v[2] + m[12 + i] * v[3];
 }
 let down = false;
+countNInit();
+function countNInit() { const el = document.getElementById("countN"); if (el) el.textContent = String(Number(params.get("start") ?? 1500)); }
 const hand = document.getElementById("hand")!, countN = document.getElementById("countN")!, countBox = document.getElementById("count")!, goalFill = document.getElementById("goalFill")!;
 let touched = false;
 canvas.addEventListener("pointerdown", (e) => {
@@ -115,14 +117,14 @@ addEventListener("keydown", (e) => {
 const CAP = Math.min(S * S, Number(params.get("n") ?? 200_000));
 // "grow=1" is the phase-1 stress demo (grows by itself); the game grows only by eating
 const grow = params.get("grow") === "1";
-let active = grow ? 100 : Number(params.get("start") ?? 300);
+let active = grow ? 100 : Number(params.get("start") ?? 1500);
 let meal = 0;
 // ---------------------------------------------------------------- the stone giant: wakes when the village is mostly colour again
 const GIANT_SCALE = 2.4, GIANT_H = 32 * 0.28 * GIANT_SCALE;
 let giant = -1, giantState: "sleep" | "rise" | "walk" | "fallen" = "sleep", giantT = 0, giantY = -GIANT_H, nextStomp = 0, won = false;
 let progress = 0;
 city.onEat = (b, amount) => {
-  meal += amount * 1.2; // every voxel eaten hatches new mites
+  meal += amount * 2.5; // every voxel eaten hatches new mites
   audio.eat(amount);
   const B = city.buildings[b];
   // a building is gone when (nearly) all of it, rubble included, has been eaten
@@ -188,14 +190,15 @@ function frame(now: number) {
     const a = time * 0.32;
     target[0] = Math.cos(a) * 34 + Math.sin(a * 2.3) * 12; target[2] = Math.sin(a * 1.3) * 28 + Math.cos(a * 3.1) * 6;
   }
-  const speed = 9 + Math.sqrt(active) * 0.035;
+  const speed = 18 + Math.sqrt(active) * 0.05;
   const dx = target[0] - leader[0], dz = target[2] - leader[2], d = Math.hypot(dx, dz);
-  const vx = d > 0.01 ? (dx / d) * Math.min(d * 2.5, speed) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * 2.5, speed) : 0;
-  leaderVel[0] += (vx - leaderVel[0]) * Math.min(1, dt * 5); leaderVel[2] += (vz - leaderVel[2]) * Math.min(1, dt * 5);
+  // the seed is the finger: it gets there fast, easing in at the end
+  const vx = d > 0.01 ? (dx / d) * Math.min(d * 6, speed * 1.6) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * 6, speed * 1.6) : 0;
+  leaderVel[0] += (vx - leaderVel[0]) * Math.min(1, dt * 12); leaderVel[2] += (vz - leaderVel[2]) * Math.min(1, dt * 12);
   leader[0] += leaderVel[0] * dt; leader[2] += leaderVel[2] * dt;
 
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
-  city.feed(swarm.state.tex[0], active, dt, time);
+  city.feed(swarm.state.tex[0], swarm.state.tex[1], active, dt, time);
   if (city.bloom > 0) { city.bloom -= dt; city.flood(dt * 0.45); }
 
   // camera: behind and above the seed, pulling back as the swarm grows
