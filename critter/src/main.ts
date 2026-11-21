@@ -942,7 +942,7 @@ document.addEventListener("visibilitychange", () => { save.lastSeen = Date.now()
 setInterval(() => writeSave(save), 5000);
 setMuted(save.muted); $("muteBtn").textContent = save.muted ? "🔇" : "🔊";
 
-Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(false) }), loadArt((k) => { ($("loadBar") as HTMLElement).style.width = `${Math.round(k * 100)}%`; }), document.fonts?.ready]).then(() => {
+Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(false) }), loadArt((k) => { ($("loadBar") as HTMLElement).style.width = `${Math.round(k * 100)}%`; }, save.biome), document.fonts?.ready]).then(() => {
   loadingFinished();
   $("loading").classList.add("gone");
   payOffline();

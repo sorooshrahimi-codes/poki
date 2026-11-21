@@ -7,22 +7,28 @@ import { EYES } from "../data/eyes.ts";
 import type { SaveData } from "../core/save.ts";
 
 type Ctx = CanvasRenderingContext2D;
-// the first place loads before play starts; everything else streams in right after, so the first screen is quick
-const FIRST = [...CRITTERS.filter((c) => c.biome === "meadow").map((c) => c.art), "kid_vac", "kid_vac_suck", "kid_cheer", "bg_meadow", "jar", "coin", "nozzle"];
-const LATER = [...CRITTERS.filter((c) => c.biome !== "meadow" && c.biome !== "lab").map((c) => c.art), "bg_forest", "bg_frost", "bg_candy", "bg_volcano", "bg_moon"];
+// the place you are in loads before play starts; the next places follow in road order, so the art is ready before you get there
+const COMMON = ["kid_vac", "kid_vac_suck", "kid_cheer", "jar", "coin", "nozzle"];
+const placeArt = (b: string) => [`bg_${b}`, ...CRITTERS.filter((c) => c.biome === b).map((c) => c.art)];
+const ROAD = ["meadow", "forest", "frost", "candy", "volcano", "moon"];
 const imgs = new Map<string, HTMLImageElement>();
 export const img = (n: string) => imgs.get(n) ?? null;
-const fetchImg = (n: string) => new Promise<void>((res) => {
+const fetchImg = (n: string) => imgs.has(n) ? Promise.resolve() : new Promise<void>((res) => {
   const im = new Image();
   im.onload = () => { imgs.set(n, im); res(); };
   im.onerror = () => res();
   im.src = `./art/${n}.webp`;
 });
-export function loadArt(onProgress: (k: number) => void) {
+export function loadArt(onProgress: (k: number) => void, here = "meadow") {
+  const first = [...COMMON, ...placeArt(here)];
   let done = 0;
-  return Promise.all(FIRST.map((n) => fetchImg(n).then(() => onProgress(++done / FIRST.length)))).then(() => {
-    // the rest quietly in the background
-    void LATER.reduce((p, n) => p.then(() => fetchImg(n)), Promise.resolve());
+  return Promise.all(first.map((n) => fetchImg(n).then(() => onProgress(++done / first.length)))).then(() => {
+    const i = ROAD.indexOf(here);
+    const order = [...ROAD.slice(i + 1), ...ROAD.slice(0, i)].flatMap(placeArt);
+    // a few at a time in the background
+    let k = 0;
+    const next = (): Promise<void> => k < order.length ? fetchImg(order[k++]).then(next) : Promise.resolve();
+    void Promise.all([next(), next(), next()]);
   });
 }
 
