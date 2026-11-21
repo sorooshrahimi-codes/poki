@@ -97,9 +97,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #2a6b3a; fon
 #parkMap { flex: 1; width: min(100%, 560px); padding: 6px 8px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 1fr); gap: 8px; min-height: 0; pointer-events: auto; }
 .plot { position: relative; font-family: inherit; color: #fff; border: 4px solid #6b3f1d; border-radius: 18px; padding: 26px 6px 6px; background: #5aa84a center/cover no-repeat; box-shadow: inset 0 0 0 3px #c98a4b, 0 4px 0 #3b2210; cursor: pointer; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 0; text-shadow: 0 2px 0 rgba(13,22,48,.55); }
 .plot:active { transform: translateY(2px); }
-.p-meadow { background-image: url(./art/bg_meadow.webp); background-position: center 70%; }
-.p-forest { background-image: url(./art/bg_forest.webp); background-position: center 70%; }
-.p-frost { background-image: url(./art/bg_frost.webp); background-position: center 70%; }
+.p-meadow { background-image: url(/art/bg_meadow.webp); background-position: center 70%; }
+.p-forest { background-image: url(/art/bg_forest.webp); background-position: center 70%; }
+.p-frost { background-image: url(/art/bg_frost.webp); background-position: center 70%; }
 .p-lab { background: radial-gradient(circle at 50% 60%, #b98cff, #4b2a8f); border-color: #2e1a5c; box-shadow: inset 0 0 0 3px #9b7be0, 0 4px 0 #1c0f3a; }
 .p-nest { background: radial-gradient(circle at 50% 70%, #f6d58a, #b9792f); }
 .p-shop { background: radial-gradient(circle at 50% 60%, #8fb4d8, #3c5b84); border-color: #1d2f4d; box-shadow: inset 0 0 0 3px #a9c4e4, 0 4px 0 #0f1c33; }
@@ -646,7 +646,7 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 @media (orientation: portrait) { .corner { bottom: 66px; } }
 /* the world map */
 #world { position: absolute; inset: 0; z-index: 10; pointer-events: auto; display: flex; align-items: center; justify-content: center; animation: fadeIn .3s; background: #0d1e45; }
-#world .wbg { position: absolute; inset: -20px; background: url(./art/world_map.webp) center/cover; filter: blur(14px) brightness(.6); }
+#world .wbg { position: absolute; inset: -20px; background: url(/art/world_map.webp) center/cover; filter: blur(14px) brightness(.6); }
 #world .wmap { position: relative; height: min(100%, 150vw); aspect-ratio: 2 / 3; max-width: 100%; }
 #world .wmap .art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 0; }
 #world .pin { position: absolute; translate: -50% -50%; border: 0; background: none; padding: 0; font-family: inherit; color: #fff; display: flex; align-items: center; gap: 2px; cursor: pointer; }
