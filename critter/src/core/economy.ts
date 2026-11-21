@@ -5,9 +5,9 @@ export type Upgrades = Record<UpgradeId, number>;
 /** prices climb fast early (every upgrade feels big), then gently after level 26 so late game never stalls */
 const soft = (base: number, g: number, l: number) => Math.round(base * Math.pow(g, Math.min(l, 26)) * Math.pow(1.09, Math.max(0, l - 26)));
 export const UPGRADES: Record<UpgradeId, { max: number; cost: (l: number) => number; icon: string }> = {
-  power: { max: 100, cost: (l) => soft(40, 1.32, l), icon: "💨" },
-  range: { max: 90, cost: (l) => soft(60, 1.33, l), icon: "📏" },
-  tank: { max: 80, cost: (l) => soft(90, 1.35, l), icon: "💰" },
+  power: { max: 999, cost: (l) => soft(40, 1.32, l), icon: "💨" },
+  range: { max: 999, cost: (l) => soft(60, 1.33, l), icon: "📏" },
+  tank: { max: 999, cost: (l) => soft(90, 1.35, l), icon: "💰" },
 };
 export const UPGRADE_ORDER: UpgradeId[] = ["power", "range", "tank"];
 export const upgradeCost = (u: Upgrades, id: UpgradeId) => (u[id] >= UPGRADES[id].max ? null : UPGRADES[id].cost(u[id]));

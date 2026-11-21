@@ -109,6 +109,12 @@ JOBS["rocket1"] = (SHEET + _ROCK + "Top-left: only the round launch pad with a s
 JOBS["rocket2"] = (SHEET + _ROCK + "Top-left: the full rocket with fins and two side boosters attached. Top-right: the complete rocket with a pointy nose cone and a little flag on top, shiny and proud. "
     "Bottom-left: the complete rocket launching, big orange-and-yellow flames and puffy smoke clouds below. Bottom-right: the complete rocket flying upward with a long sparkly flame trail. " + STYLE, "1:1", True)
 
+_HOME = "Each panel shows the kid's HOME at a different stage of growth, same cartoon style, three-quarter view, on a small round grassy base, centered, transparent background, no characters, no text. "
+JOBS["home1"] = (SHEET + _HOME + "Top-left: a tiny cozy cottage with a red roof and a mailbox. Top-right: the cottage bigger with a flower garden, a fence and a little workshop shed with tools. "
+    "Bottom-left: a two-storey house with a round telescope tower on the side. Bottom-right: a big mansion with a shiny observatory dome and a satellite dish. " + STYLE, "1:1", True)
+JOBS["home2"] = (SHEET + _HOME + "Top-left: a castle-like home with turrets and a tall rocket launch tower beside it. Top-right: a grand space-age home with a glass rocket hangar and glowing lights. "
+    "Bottom-left: a golden palace with a big glass moon dome and fountains. Bottom-right: a magical sky castle floating on a cloud island with rainbow waterfalls. " + STYLE, "1:1", True)
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]

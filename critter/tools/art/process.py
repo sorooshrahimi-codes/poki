@@ -32,6 +32,8 @@ SHEETS = {
     "crit_moon2": ["astrocat", "nebulee", "saturnie", "ufolo"],
     "crit_moon3": ["lunaria", "galaxeel", "celestail", "bigmoon"],
     "rocket1": ["rocket_0", "rocket_1", "rocket_2", "rocket_3"],
+    "home1": ["home_0", "home_1", "home_2", "home_3"],
+    "home2": ["home_4", "home_5", "home_6", "home_7"],
     "rocket2": ["rocket_4", "rocket_5", "rocket_launch", "rocket_fly"],
 }
 SINGLES = {"kid_vac": "kid_vac", "kid_vac_suck": "kid_vac_suck", "kid_cheer": "kid_cheer", "kid_rival": "kid_rival", "kid_vac2": "kid_vac2", "kid_vac3": "kid_vac3", "kid_vac4": "kid_vac4", "lab_egg": "lab_egg"}

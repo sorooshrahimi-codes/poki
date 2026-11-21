@@ -97,7 +97,7 @@ function handleEvents() {
       combo = t - lastCatch < 1.7 + 0.5 * perkN("combo") ? combo + 1 : 1;
       lastCatch = t;
       const airborne = (c.launch ?? 0) > 0;
-      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up) * (1 + 0.25 * perkN("coins"))) * (airborne ? 2 : 1) * (field.frenzy > 0 ? 2 : 1) * (c.kind === "treasure" ? 12 : 1) * (field.twist === "big" ? 2 : 1) * (rush ? 1 : 1 + 1.5 * lapNow()));
+      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up) * (1 + 0.25 * perkN("coins"))) * (airborne ? 2 : 1) * (field.frenzy > 0 ? 2 : 1) * (c.kind === "treasure" ? 12 : 1) * (field.twist === "big" ? 2 : 1) * (rush ? 1 : (1 + 1.5 * lapNow()) * (1 + 0.12 * homeStage())));
       if (c.kind === "treasure") { view.text(field.nozzle.x, field.nozzle.y - 110, "💰💰💰", "#ffe066", 30); view.shake = 6; }
       if (c.kind === "box") openBox();
       if (airborne) view.text(field.nozzle.x + 50 * field.kid.face, field.nozzle.y - 100, "🔥×2", "#ff9a3a", 22);
@@ -465,6 +465,19 @@ async function moonFinale() {
 /** the world map: one illustrated road from the kid's house (bottom) to the Moon (top). Pins for every place with its giant,
  *  the kid where you are, the rival where he is. From the button it just closes; on the way it waits for a tap on your place. */
 const WORLD_PINS: [number, number][] = [[29, 84], [54, 93], [48, 68], [47, 54], [46, 39], [55, 27], [52, 7]]; // home, 6 places (the Moon last), on the road in the picture
+/** the home: what your coins build. Eight stages from a cottage to a sky castle, each a lot more expensive,
+ *  each one a little bonus for good (+12% coins). Built on the world map by tapping the house. */
+const HOME_COST = [6_000, 90_000, 1_400_000, 18_000_000, 240_000_000, 3_000_000_000, 40_000_000_000];
+const homeStage = () => save.home ?? 0;
+const homeNext = () => (homeStage() < HOME_COST.length ? HOME_COST[homeStage()] : null);
+const homeReady = () => { const c = homeNext(); return c !== null && save.coins >= c; };
+function buildHome() {
+  const c = homeNext();
+  if (c === null || save.coins < c) { sfx.nope(); return false; }
+  save.coins -= c; save.home = homeStage() + 1; writeSave(save);
+  sfx.reveal("legendary"); setTimeout(() => sfx.event(), 500);
+  return true;
+}
 /** the rocket by the house: one part for each of the first five giants (pad, body, window, fins, boosters, then complete) */
 const ROCKET_PLACES: BiomeId[] = ["meadow", "forest", "frost", "candy", "volcano"];
 const rocketStage = () => Math.min(5, ROCKET_PLACES.filter((b) => (save.restored ?? []).includes(b)).length);
@@ -475,7 +488,7 @@ function showWorld(o: { walkFrom?: number; browse?: boolean; newPart?: boolean }
     const pin = (i: number) => `left:${WORLD_PINS[i][0]}%;top:${WORLD_PINS[i][1]}%`;
     box.classList.toggle("night", lapNow() > 0);
     box.innerHTML = `<div class="wbg"></div><div class="wmap"><img class="art" src="./art/world_map.webp" alt="">${lapNow() ? `<div class="lap">★${lapNow() + 1}</div>` : ""}
-      <div class="pin home" style="${pin(0)}">🏠</div>
+      <button class="pin home${homeReady() ? " ready" : ""}" style="${pin(0)}"><img src="./art/home_${homeStage()}.webp" alt="">${homeNext() !== null ? `<span class="hc${homeReady() ? " ok" : ""}">${homeReady() ? "🔨" : ""}${COIN}${short(homeNext()!)}</span>` : ""}<span class="hs">${"⭐".repeat(homeStage())}</span></button>
       <div class="rocket${o.newPart ? " built" : ""}"><img src="./art/rocket_${rocketStage()}.webp" alt=""><span class="parts">${[0, 1, 2, 3, 4].map((k) => `<i class="${k < rocketStage() ? "on" : ""}"></i>`).join("")}</span></div>
       ${BIOMES.map((b, k) => { const i = k + 1, g = GIANTS.find((x) => x.biome === b.id), beat = (save.restored ?? []).includes(b.id);
         return `<button class="pin place${i === here ? " here" : ""}${i < here || beat ? " past" : ""}${i > here && !beat ? " ahead" : ""}${b.id === "moon" ? " moon" : ""}" data-i="${i}" style="${pin(i)}"><span class="pi">${b.icon}</span>${g ? `<img class="gg${beat ? "" : " sil"}" src="./art/${CRITTER_BY_ID[g.id].art}.webp" alt="">` : ""}${beat ? "<i>✔</i>" : ""}</button>`; }).join("")}
@@ -491,6 +504,17 @@ function showWorld(o: { walkFrom?: number; browse?: boolean; newPart?: boolean }
     cur.onclick = () => { sfx.tap(); close(); };
     for (const el of box.querySelectorAll<HTMLElement>(".pin.place:not(.here)")) el.onclick = () => sfx.nope();
     const c = document.getElementById("wClose"); if (c) c.onclick = close;
+    // build the next stage of the home right here on the map
+    const home = box.querySelector<HTMLElement>(".pin.home")!;
+    home.onclick = () => {
+      if (!buildHome()) return;
+      const im = home.querySelector("img")!; im.src = `./art/home_${homeStage()}.webp`; home.classList.remove("built"); void home.offsetWidth; home.classList.add("built");
+      const hc = home.querySelector<HTMLElement>(".hc"); const n = homeNext();
+      if (hc) { if (n === null) hc.remove(); else { hc.className = `hc${homeReady() ? " ok" : ""}`; hc.innerHTML = `${homeReady() ? "🔨" : ""}${COIN}${short(n)}`; } }
+      home.querySelector<HTMLElement>(".hs")!.textContent = "⭐".repeat(homeStage());
+      home.classList.toggle("ready", homeReady());
+      updateUi();
+    };
   });
 }
 /** the rocket is complete: lift-off, up past the clouds, toward the Moon */
@@ -1297,6 +1321,7 @@ function updateUi() {
   renderUpBar();
   $("rateN").textContent = incomePerSec() > 0 ? ` +${short(incomePerSec())}/s` : "";
   renderRace();
+  $("worldBtn").classList.toggle("ready", homeReady());
   placeGuide();
   // the first legend you own: tell the player it can come along
 
