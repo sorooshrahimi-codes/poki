@@ -303,6 +303,7 @@ async function goPark() {
   mode = "park";
   // the jar empties onto the pedestals: each critter earns from now on
   const brought = jar.length;
+  const brandNew = [...new Set(jar.map((j) => j.id))].filter((id) => !save.index[id]);
   parkBiome = save.biome;
   newIn.clear();
   for (const j of jar) newIn.add(j.id);
@@ -318,7 +319,10 @@ async function goPark() {
   if (brought) { sfx.reveal("rare"); jarSounds(brought); }
   gameplayStop();
   busy = false;
+  for (const id of brandNew) celebrating.add(id);
+  mapKey = "";
   updateUi();
+  void celebrate(brandNew);
 }
 
 async function goField() {
@@ -440,7 +444,7 @@ function renderMap() {
           const e = save.index[d.id];
           if (!e) return `<span class="spot empty">?</span>`;
           const st = starOf(e.count);
-          return `<span class="spot${newIn.has(d.id) ? " got" : ""}" style="--d:${(i * 0.37) % 1.6}s;--rc:${RARITY_COLOR[d.rarity]}"><img src="./art/${d.art}.webp" alt="">${st ? `<i class="stars">${"★".repeat(st)}</i>` : ""}</span>`;
+          return `<span class="spot${newIn.has(d.id) ? " got" : ""}${celebrating.has(d.id) ? " wait" : ""}" data-id="${d.id}" style="--d:${(i * 0.37) % 1.6}s;--rc:${RARITY_COLOR[d.rarity]}"><img src="./art/${d.art}.webp" alt="">${st ? `<i class="stars">${"★".repeat(st)}</i>` : ""}</span>`;
         }).join("");
         const inc = plotIncome(bi.id);
         el.innerHTML = `<div class="sign">${bi.icon} <small>${got}/${list.length}</small></div><div class="pen">${spots}</div><div class="earn">${coinStack(inc)}<b>${short(inc)}/s</b></div>${save.biome === bi.id ? '<div class="here">🫙</div>' : ""}`;
@@ -540,6 +544,35 @@ function closeSheet() { sheet = null; $("sheet").classList.add("hidden"); }
 $("shClose").onclick = closeSheet;
 $("sheet").onclick = (e) => { if (e.target === $("sheet")) closeSheet(); };
 $("shHunt").onclick = () => { if (sheet && sheet !== "lab" && sheet !== "nest" && sheet !== "shop") { save.biome = sheet; writeSave(save); closeSheet(); void goField(); } };
+
+/** a species seen for the first time gets its moment: it pops up big in a burst of light, then hops into its own spot */
+const celebrating = new Set<string>();
+async function celebrate(ids: string[]) {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  for (const id of ids.slice(0, 4)) {
+    const d = CRITTER_BY_ID[id];
+    const box = document.createElement("div");
+    box.className = "newcomer";
+    box.style.setProperty("--rc", RARITY_COLOR[d.rarity]);
+    box.innerHTML = `<div class="rays"></div><img src="./art/${d.art}.webp" alt=""><b>🆕</b>`;
+    document.body.appendChild(box);
+    sfx.reveal(d.rarity === "legendary" ? "legendary" : d.rarity === "epic" ? "epic" : "rare");
+    await wait(1100);
+    const spot = document.querySelector<HTMLElement>(`.spot[data-id="${id}"]`);
+    const im = box.querySelector("img")!;
+    if (spot) {
+      const a = im.getBoundingClientRect(), b = spot.getBoundingClientRect();
+      box.classList.add("go");
+      im.style.transform = `translate(${b.left + b.width / 2 - (a.left + a.width / 2)}px, ${b.top + b.height / 2 - (a.top + a.height / 2)}px) scale(${Math.max(0.15, b.height / a.height)})`;
+      await wait(650);
+      celebrating.delete(id);
+      spot.classList.remove("wait"); spot.classList.add("got");
+      sfx.coin(3);
+    } else celebrating.delete(id);
+    box.remove();
+  }
+  mapKey = "";
+}
 
 /** coins float from each earning pen up to the coin counter, more often the more it earns */
 const coinClock: Partial<Record<Plot, number>> = {};
