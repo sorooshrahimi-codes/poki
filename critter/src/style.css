@@ -470,3 +470,11 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 #finale .confetti { position: absolute; top: -10px; width: 9px; height: 14px; border-radius: 2px; animation: fall 2.6s linear forwards; }
 @keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
 .corner .best { position: absolute; left: 50%; top: -14px; translate: -50% 0; font-size: 11px; font-weight: 700; color: #ffe066; white-space: nowrap; text-shadow: 0 0 4px #0d1e45, 0 1px 0 #0d1e45; }
+#fieldHead.nope .gbar { animation: nope .25s 5; box-shadow: 0 0 0 3px #ff4d6d, 0 0 16px #ff4d6d; }
+#fieldHead.nope .me { animation: nope .25s 5; }
+@keyframes nope { 50% { transform: translateX(-5px); } }
+#shTitle { flex-direction: column; align-items: stretch; gap: 6px; }
+#shTitle .skins, #shTitle .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.skin { width: 40px; height: 40px; border: 0; border-radius: 50%; font-size: 20px; cursor: pointer; background: radial-gradient(circle, var(--sk), rgba(0,0,0,.2)); box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+.skin.on { box-shadow: 0 0 0 3px #fff, 0 0 14px var(--sk); }
+.skin.locked { background: rgba(255,255,255,.1); font-size: 14px; }

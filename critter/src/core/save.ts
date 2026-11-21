@@ -20,6 +20,8 @@ export interface SaveData {
   nest: Egg[];
   /** giants beaten so far: the step on the giant ladder */
   giantWins?: number;
+  /** the suction style in use */
+  skin?: string;
   /** places whose colour is back (their giant boss was caught) */
   restored?: string[];
   /** the legend that comes along on the hunt */

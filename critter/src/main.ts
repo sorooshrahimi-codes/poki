@@ -6,7 +6,7 @@ import { newField, sizeField, stepField, spawn, type Field } from "./core/field.
 import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tankSize, upgradeCost, type UpgradeId } from "./core/economy.ts";
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
-import { GIANTS, giantOf, giantStep } from "./data/critters.ts";
+import { GIANTS, SKINS, giantOf, giantStep } from "./data/critters.ts";
 import { MOUTH_FULL, REACH_FULL, vacLevel, valueMult } from "./core/economy.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
@@ -95,7 +95,9 @@ function handleEvents() {
       // quick catches in a row build a chain: each link adds a quarter more coins
       combo = t - lastCatch < 1.7 ? combo + 1 : 1;
       lastCatch = t;
-      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up)));
+      const airborne = (c.launch ?? 0) > 0;
+      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up)) * (airborne ? 2 : 1));
+      if (airborne) view.text(field.nozzle.x + 50 * field.kid.face, field.nozzle.y - 100, "🔥×2", "#ff9a3a", 22);
       if (c.boss > 0) coins += Math.round(c.def.income * 60);
       if (rush) rush.score += coins; else { save.coins += coins; save.catches++; }
       if (combo >= 3) view.text(field.nozzle.x + 70 * field.kid.face, field.nozzle.y - 70, `🔥×${combo}`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo));
@@ -115,6 +117,8 @@ function handleEvents() {
       if (c.boss > 0) {
         // the big moment: POP, a burst of light and a rain of coins, then the kid burps
         sfx.pop(); view.shake = 18;
+        const sk = SKINS[(save.giantWins ?? 0)];
+        if (sk && !rush) { save.skin = sk.id; setTimeout(() => toast(`${sk.icon} 🌀 ✔`, 2600), 2600); }
         for (let i = 0; i < 4; i++) setTimeout(() => view.burst(field.nozzle.x + (Math.random() - 0.5) * 60, field.nozzle.y - Math.random() * 40, ["#ffe066", "#ff7ad1", "#7be495", "#5bc8ff"][i], 30), i * 90);
         flyCoins(field.nozzle.x, field.nozzle.y, 14);
         setTimeout(() => { sfx.burp(); view.cheer = 1.6; view.shake = 6; view.text(field.nozzle.x - 40 * field.kid.face, field.nozzle.y - 70, "💨", "#ffffff", 34); }, 900);
@@ -160,6 +164,14 @@ function handleEvents() {
       // (no tip messages: the critter's behaviour shows on the field)
     } else if (e.kind === "flee") {
       // (no tip message)
+    } else if (e.kind === "tease") {
+      // the first meeting: the giant laughs you off. The bar flashes: you are too weak, for now
+      view.shake = 12; sfx.boing(); view.text(e.c.x, e.c.y - 170, "😂", "#ffffff", 40);
+      const fh = $("fieldHead"); fh.classList.remove("nope"); void fh.offsetWidth; fh.classList.add("nope");
+      if (!save.tips.includes("intro")) { save.tips.push("intro"); writeSave(save); }
+    } else if (e.kind === "erupt") {
+      view.shake = 9; sfx.boing();
+      for (let i = 0; i < 5; i++) view.burst(field.left + 60 + Math.random() * (field.right - field.left - 120), field.nearY - Math.random() * 60, "#ff7a2a", 16, 180);
     } else if (e.kind === "bossPhase") {
       slowT = 0.45;
       view.shake = 12; sfx.snap(); view.burst(e.c.x, e.c.y - 60, "#ffd84a", 30, 220);
@@ -418,7 +430,11 @@ function flyUp(from: HTMLElement) {
 function openBook(b: BiomeId = save.biome) {
   sheet = b as Plot; parkBiome = b; gridKey = "";
   const tabs = save.biomes.map((id) => { const bi = BIOMES.find((x) => x.id === id)!; const got = CRITTERS.filter((d) => d.biome === id && save.index[d.id]).length, all = CRITTERS.filter((d) => d.biome === id).length; return `<button class="btn tab${id === b ? " on" : ""}" data-b="${id}">${bi.icon} ${got}/${all}</button>`; }).join("");
-  $("shTitle").innerHTML = tabs;
+  // the styles you have won: one per giant beaten
+  const won = Math.min(SKINS.length, 1 + (save.giantWins ?? 0));
+  const skins = SKINS.map((k, i) => `<button class="skin${i >= won ? " locked" : ""}${(save.skin ?? "air") === k.id ? " on" : ""}" data-skin="${k.id}" style="--sk:rgb(${k.fill})">${i < won ? k.icon : "🔒"}</button>`).join("");
+  $("shTitle").innerHTML = `<div class="skins">${skins}</div><div class="tabs">${tabs}</div>`;
+  for (const el of $("shTitle").querySelectorAll<HTMLElement>("[data-skin]")) el.onclick = () => { if (el.classList.contains("locked")) { sfx.nope(); return; } save.skin = el.dataset.skin; writeSave(save); sfx.tap(); openBook(b); };
   for (const el of $("shTitle").querySelectorAll<HTMLElement>("[data-b]")) el.onclick = () => openBook(el.dataset.b as BiomeId);
   $("shHunt").classList.add("hidden");
   $("parkGrid").classList.remove("hidden"); $("nest").classList.add("hidden"); $("ups").classList.add("hidden");
@@ -906,8 +922,10 @@ function frame(now: number) {
   if (mode === "field" && !busy && field.biome !== nextGiant().biome && !field.critters.some((c) => c.boss > 0 && c.state !== "caught")) void nextPlace();
   const gH = mode === "rush" ? null : giantLeft(field.biome), L = vacLevel(save.up);
   field.giant = gH ? { id: gH.id, ready: L >= gH.need, resist: gH.resist, scale: gH.scale } : null;
-  view.giant = gH ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need, k: Math.min(1, L / gH.need) } : null;
+  const teasing = field.critters.some((c) => c.tease && c.state !== "caught");
+  view.giant = gH && !teasing ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need, k: Math.min(1, L / gH.need) } : null;
   view.vac = L;
+  view.skin = SKINS.find((k) => k.id === save.skin) ?? SKINS[0];
   if (mode === "rush" && rush) {
     rush.left -= dt;
     stepField(field, dt, input, RUSH_UP, rushRng);
@@ -951,6 +969,12 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
   // the story, once: one short card, then straight into play
 
   setTimeout(offerRush, 700);
+  // a brand-new player meets the giant first, and loses: that is the whole game in ten seconds
+  if (!save.tips.includes("intro") && save.catches === 0 && field.biome === "meadow") {
+    const g = giantStep(0);
+    const c = spawn(field, rng, { def: CRITTER_BY_ID[g.id], mut: null, x: field.left + Math.min(300, (field.right - field.left) * 0.62), y: field.farY + (field.nearY - field.farY) * 0.45 });
+    c.boss = 1; c.scale = 2.6; c.resist = 9; c.tease = true; c.dir = -1; c.hopPer = 1.4;
+  }
   if (!save.tips.includes("road")) { save.tips.push("road"); writeSave(save); setTimeout(() => void showJourney(0, 0), 400); }
   if (save.catches > 0) $("hint").classList.add("hidden");
   const coin = img("coin"), jarImg = img("jar");

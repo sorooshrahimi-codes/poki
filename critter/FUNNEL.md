@@ -66,6 +66,21 @@ Scale is the wow: a little kid, a little nozzle, and a giant cute monster stretc
 Jar and park trips, eggs, bubble wand, flute, companions, lab: each added a rule to learn without a clear need. The game is one line now:
 **catch critters → coins → stronger vacuum → giant → next place.**
 
+## What the hits have that we must have (and status)
+| Ingredient | Why it matters | In Critter Vac | Status |
+|---|---|---|---|
+| Understood in 10 s, no words | Poki players leave in seconds | Fail first: the giant laughs you off, the bar flashes red, the hand shows the small critters | done |
+| A visible goal from second one | A reason to play | Giant on the horizon + bar, road to the Moon picture | done |
+| Constant small wins | Dopamine every few seconds | Pops, combo pitch, coins flying, upgrade every ~10 s | done |
+| Each stage plays differently | Novelty keeps the session going | Ice: critters slide · Candy: sugar rush of golden ones · Volcano: eruptions throw critters up, ×2 in the air · Moon: low gravity | done |
+| A big shareable moment | Clips, word of mouth | Giant taffy-stretch, slow motion, POP, burp; Moon finale with share | done |
+| Something to show off | Identity, pride | Suction styles won from each giant (honey, forest, ice, candy, lava, stars), chosen in the book | done |
+| A choice that matters | Ownership of your run | Three upgrade paths (power / reach→mouth→value / coin value) | basic — next: after each giant pick 1 of 2 perks |
+| Competition | "Beat me" | 60 s Rush, friend link, two bars, best on the button | done — next: weekly seeded Rush |
+| A reason to come back | Day-2 retention | Offline coins (2 h cap) | next: a daily gift and a daily Rush seed |
+| An end and an after | Completion + long tail | The Moon finale, then ★2 giants forever | done |
+| Polished store page | Click-through on Poki | Giant thumbnail, one-line pitch, trailer clips | done — next: trailer with music and title card |
+
 ## Next steps, in order
 Done: giant moment, giant thumbnail, promo text, sound pass, road to the Moon (6 places), giant that stirs as the bar fills, Moon finale with share.
 1. Second-by-second check in a real playthrough (timings above are from the pacing simulator).

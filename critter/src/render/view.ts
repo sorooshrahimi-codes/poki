@@ -1,7 +1,7 @@
 import { depthK, type Critter, type Field } from "../core/field.ts";
 import { cone, range, type Upgrades } from "../core/economy.ts";
 import type { MutationId } from "../core/types.ts";
-import { BIOMES, CRITTERS, RARITY_COLOR, RECIPES, STAR_MULT, critterOf, starOf } from "../data/critters.ts";
+import { BIOMES, CRITTERS, RARITY_COLOR, RECIPES, STAR_MULT, critterOf, starOf , SKINS, type Skin } from "../data/critters.ts";
 import type { BiomeId } from "../core/types.ts";
 import { EYES } from "../data/eyes.ts";
 import type { SaveData } from "../core/save.ts";
@@ -175,6 +175,7 @@ export class View {
     this.foreground(f, t);
   }
   zoom = 1;
+  skin: Skin = SKINS[0];
   /** set by the controller for the giant's finale (0 = normal) */
   zoomTarget = 0;
   private faceAnim = 1;
@@ -377,13 +378,15 @@ export class View {
   private cone(f: Field, up: Upgrades, t: number) {
     const c = this.c, R = range(up), CONE = cone(up), ang = Math.atan2(f.aim.y - f.nozzle.y, f.aim.x - f.nozzle.x);
     c.save(); c.translate(f.nozzle.x, f.nozzle.y); c.rotate(ang);
+    const sk = this.skin;
     const g = c.createLinearGradient(0, 0, R, 0);
-    g.addColorStop(0, "rgba(190,240,255,0.55)"); g.addColorStop(1, "rgba(190,240,255,0)");
+    g.addColorStop(0, `rgba(${sk.fill},0.55)`); g.addColorStop(1, `rgba(${sk.fill},0)`);
     c.fillStyle = g;
     c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, R, -CONE, CONE); c.closePath(); c.fill();
     // wind streaks rushing into the nozzle
-    c.strokeStyle = "rgba(255,255,255,0.8)"; c.lineWidth = 2.5; c.lineCap = "round";
+    c.lineWidth = 2.5; c.lineCap = "round";
     for (let i = 0; i < 14; i++) {
+      c.strokeStyle = sk.streak[i % sk.streak.length];
       const p = 1 - ((t * 1.8 + i * 0.37) % 1), r = 14 + p * (R - 14), a = (((i * 0.61) % 1) - 0.5) * 2 * CONE * 0.9 * (r / R);
       const x = Math.cos(a) * r, y = Math.sin(a) * r;
       c.globalAlpha = Math.min(1, p * 1.5) * 0.8;

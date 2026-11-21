@@ -182,3 +182,15 @@ export function giantStep(i: number): GiantStep {
   const need = i < GIANTS.length ? g.need : GIANTS[GIANTS.length - 1].need + (i - GIANTS.length + 1) * 8;
   return { ...g, tier, need, resist: g.resist + (tier - 1) * 1.2, scale: 3.3 + (tier - 1) * 0.35 };
 }
+
+/** suction styles: one is won with each giant. Purely for show: they colour the wind cone and its streaks. */
+export interface Skin { id: string; icon: string; fill: string; streak: string[] }
+export const SKINS: Skin[] = [
+  { id: "air", icon: "🌀", fill: "190,240,255", streak: ["#ffffff"] },
+  { id: "honey", icon: "🍯", fill: "255,214,90", streak: ["#fff3b0", "#ffc93c"] },
+  { id: "forest", icon: "🍃", fill: "140,230,140", streak: ["#d8ffd0", "#7be495"] },
+  { id: "ice", icon: "❄️", fill: "170,225,255", streak: ["#ffffff", "#9fe0ff"] },
+  { id: "candy", icon: "🍭", fill: "255,160,220", streak: ["#ff7ad1", "#ffe066", "#7be495", "#5bc8ff"] },
+  { id: "lava", icon: "🔥", fill: "255,140,60", streak: ["#ffe066", "#ff6a2a"] },
+  { id: "stars", icon: "✨", fill: "170,140,255", streak: ["#ffffff", "#ffe066", "#c9a7ff"] },
+];

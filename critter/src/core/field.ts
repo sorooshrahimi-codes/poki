@@ -43,6 +43,11 @@ export interface Critter {
   frozen: number;
   /** seconds left being herded toward the kid */
   herd: number;
+  /** the first-time giant: it cannot be pulled in yet, it laughs and walks off */
+  tease?: boolean;
+  leaving?: boolean;
+  /** volcano: seconds left flying after an eruption threw it up */
+  launch?: number;
 }
 export type ToolId = "vac" | "bubble" | "flute";
 /** companions: legends that come along and help */
@@ -50,7 +55,7 @@ export type CompanionId = "sunpup" | "prismane" | "elderoak" | "moonfawn" | "fro
 export const COMPANIONS: CompanionId[] = ["sunpup", "prismane", "elderoak", "moonfawn", "frostking", "wyrmling"];
 
 export type Surprise = "visitor" | "golden_rain" | "stampede" | "boss";
-export type FieldEv = { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter } | { kind: "split"; c: Critter } | { kind: "hide"; c: Critter } | { kind: "flee"; c: Critter } | { kind: "bossPhase"; c: Critter } | { kind: "bubbled"; c: Critter } | { kind: "ability"; id: CompanionId };
+export type FieldEv = { kind: "tease"; c: Critter } | { kind: "erupt" } | { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter } | { kind: "split"; c: Critter } | { kind: "hide"; c: Critter } | { kind: "flee"; c: Critter } | { kind: "bossPhase"; c: Critter } | { kind: "bubbled"; c: Critter } | { kind: "ability"; id: CompanionId };
 
 export interface Field {
   biome: BiomeId;
@@ -67,6 +72,8 @@ export interface Field {
   /** this place's giant, when it is still to be caught; ready = the vacuum is strong enough, so it comes down */
   giant: { id: string; ready: boolean; resist: number; scale: number } | null;
   giantT: number;
+  /** volcano: seconds to the next eruption */
+  eruptT: number;
   critters: Critter[];
   beam: boolean; aim: { x: number; y: number };
   jar: number; cap: number;
@@ -100,7 +107,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -117,7 +124,8 @@ export function spawn(f: Field, rng: Rng, opt: { def?: CritterDef; mut?: Mutatio
   let mut: MutationId | null = opt.mut === undefined ? null : opt.mut;
   if (opt.mut === undefined) {
     if (f.lure > 0) { mut = "gold"; f.lure--; }
-    else for (const m of MUTATIONS) if (rng() < m.chance * (f.companion === "prismane" ? 2.2 : 1)) { mut = m.id; break; }
+    // candy hills: a sugar rush of golden critters
+    else for (const m of MUTATIONS) if (rng() < m.chance * (f.companion === "prismane" ? 2.2 : 1) * (f.biome === "candy" && m.id === "gold" ? 3.5 : 1)) { mut = m.id; break; }
   }
   const mr = MUTATIONS.find((m) => m.id === mut)?.resist ?? 1;
   const c: Critter = {
@@ -217,6 +225,14 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
   }
 
   bossClock -= dt;
+  if (f.biome === "volcano" && f.script >= 2) {
+    f.eruptT -= dt;
+    if (f.eruptT <= 0) {
+      f.eruptT = 9 + rng() * 5;
+      for (const c of f.critters) if (c.state === "roam" && c.boss === 0 && c.def.behave !== "fly" && !c.hidden) { c.launch = 1.5; c.dir = rng() < 0.5 ? 1 : -1; }
+      f.ev.push({ kind: "erupt" });
+    }
+  }
   // the giant: once the vacuum is strong enough it climbs down from the horizon and fights, three rounds
   if (f.giant?.ready && f.script >= 2 && !f.critters.some((c) => c.boss > 0)) {
     f.giantT -= dt;
@@ -271,7 +287,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
     let da = Math.atan2(dy, dx) - ang; da = Math.atan2(Math.sin(da), Math.cos(da));
     // a critter already in a tug stays caught a little past the cone's reach: fair to a moving finger
     const reach = c.state === "tug" ? R * 1.15 : R, spread = c.state === "tug" ? CONE * 1.1 : CONE;
-    const inCone = f.beam && dist < reach && Math.abs(da) < spread;
+    const inCone = f.beam && !c.leaving && dist < reach && Math.abs(da) < spread;
 
     // behaviours that react to the cone before it catches them
     const nearCone = f.beam && dist < reach * 1.35 && Math.abs(da) < spread * 1.8;
@@ -310,6 +326,11 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
         else {
           if (c.state !== "tug") { c.state = "tug"; f.ev.push({ kind: "tug", c }); }
           c.grip += dt * (P / 230) / c.resist * 0.95 * (c.boss > 0 ? 1.6 : 1) * (f.companion === "elderoak" ? 1.6 : 1) * (c.frozen > 0 ? 2 : 1);
+          if (c.tease) {
+            // too strong for you yet: it holds, then laughs and stomps off
+            c.grip = Math.min(c.grip, 0.4); c.cycleT += dt;
+            if (c.cycleT > 2.4) { c.state = "roam"; c.grip = 0; c.boss = 0; c.leaving = true; c.dir = 1; f.ev.push({ kind: "tease", c }); }
+          }
           // it struggles: little scrambles sideways, trying to slip out of the cone
           c.x += Math.sin(f.t * 7 + c.uid) * 60 * dt;
           // (a flier keeps its height: dropping it would pull it out of the cone and it would flicker in and out)
@@ -328,7 +349,18 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
         if (c.grip <= 0) { c.grip = 0; c.state = "roam"; f.ev.push({ kind: "escape", c }); c.dir = dx > 0 ? 1 : -1; }
       }
     }
-    if (c.state === "roam" && (c.bubbled > 0 || c.frozen > 0)) {
+    if (c.leaving) {
+      // the teasing giant stomps away over the hill
+      c.hopT += dt * 2.2; c.lift = Math.abs(Math.sin(c.hopT * Math.PI)) * 30; c.x += 160 * dt;
+      if (c.x > f.right + 160) c.state = "caught";
+    } else if (c.launch && c.launch > 0 && c.state === "roam") {
+      // thrown up by the volcano: a high arc, worth double if caught in the air
+      c.launch -= dt;
+      const k = 1 - Math.max(0, c.launch) / 1.5;
+      c.lift = Math.sin(k * Math.PI) * 170 * depthK(f, c.y);
+      c.x += c.dir * 40 * dt;
+      c.x = Math.max(f.left + 20, Math.min(f.right - 20, c.x));
+    } else if (c.state === "roam" && (c.bubbled > 0 || c.frozen > 0)) {
       // held still: no hopping, no flying off
     } else if (c.state === "roam" && c.def.behave === "fly" && c.boss === 0) {
       // fliers cruise high above the meadow on a lazy wave: aim up
@@ -339,10 +371,13 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
       if (c.x > f.right - 24) c.dir = -1;
     } else if (c.state === "roam") {
       // hop about, turning at the edges
-      c.hopT += dt / c.hopPer;
-      const ph = c.hopT % 1;
-      c.lift = ph < 0.45 ? Math.sin((ph / 0.45) * Math.PI) * c.def.hop * depthK(f, c.y) * (c.boss ? 2 : 1) : 0;
-      if (ph < 0.45) c.x += c.dir * 34 * dt;
+      // the moon: low gravity, slow high floaty hops · the ice: they slide on and on
+      const moon = f.biome === "moon", ice = f.biome === "frost";
+      c.hopT += dt / (c.hopPer * (moon ? 1.8 : 1));
+      const ph = c.hopT % 1, air = moon ? 0.75 : 0.45;
+      c.lift = ph < air ? Math.sin((ph / air) * Math.PI) * c.def.hop * depthK(f, c.y) * (c.boss ? 2 : 1) * (moon && !c.boss ? 3.2 : 1) : 0;
+      if (ph < air) c.x += c.dir * (ice ? 62 : 34) * dt;
+      else if (ice) c.x += c.dir * 30 * dt;
       if (c.x < f.left + 24) c.dir = 1;
       if (c.x > f.right - 24) c.dir = -1;
       c.pullT = Math.max(0, c.pullT - dt);
