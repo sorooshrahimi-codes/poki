@@ -22,6 +22,8 @@ export interface SaveData {
   giantWins?: number;
   /** what catches have added to the giant bar since the last giant (on top of the vacuum level) */
   charge?: number;
+  /** stars per level, per place (5 levels each) */
+  stars?: Record<string, number[]>;
   /** seconds of play on the road (the speedrun clock) */
   playTime?: number;
   /** best time to the Moon, in seconds */

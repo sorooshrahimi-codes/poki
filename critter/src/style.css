@@ -499,3 +499,40 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 #finale .times .t img { height: 36px; }
 #finale .times .t.win { background: rgba(255,224,102,.3); box-shadow: 0 0 14px rgba(255,224,102,.6); }
 @media (orientation: landscape) and (max-height: 600px) { #race { width: 220px; margin-top: 2px; } }
+/* ---------------------------------------------------------------- levels */
+#levels { position: absolute; left: 0; right: 0; top: 130px; bottom: 120px; z-index: 3; pointer-events: auto; }
+#levels .path { position: absolute; inset: 0; width: 100%; height: 100%; }
+#levels .path polyline { fill: none; stroke: rgba(255,255,255,.75); stroke-width: 1.2; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; stroke-width: 5px; }
+#levels .node { position: absolute; translate: -50% -50%; width: 72px; height: 72px; border: 0; border-radius: 50%; cursor: pointer; font-family: inherit; color: #fff;
+  background: radial-gradient(circle at 50% 35%, #5bc8ff, #2f7fe0); box-shadow: 0 5px 0 #1d4f9a, 0 8px 16px rgba(0,0,0,.3); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+#levels .node .ni { font-size: 30px; line-height: 1; display: flex; align-items: center; }
+#levels .node .ni img { height: 38px; width: 38px; object-fit: contain; }
+#levels .node .ns { position: absolute; bottom: -16px; font-size: 15px; letter-spacing: -1px; }
+#levels .node .ns i { font-style: normal; color: rgba(255,255,255,.35); text-shadow: 0 1px 0 #0d1e45; }
+#levels .node .ns i.on { color: #ffd43b; }
+#levels .node.next { animation: pulse 1s infinite; box-shadow: 0 5px 0 #1d4f9a, 0 0 20px 6px rgba(255,224,102,.8); }
+#levels .node.locked { background: radial-gradient(circle at 50% 35%, #9aa5b8, #5d6880); box-shadow: 0 5px 0 #3b4458; }
+#levels .node.giant { width: 104px; height: 104px; background: radial-gradient(circle at 50% 35%, #ffcf5a, #ff7a2a); box-shadow: 0 6px 0 #a04a10, 0 8px 18px rgba(0,0,0,.35); }
+#levels .node.giant img.gi { width: 80px; height: 80px; }
+#levels .node.giant.locked img.gi { filter: brightness(0) opacity(.5); }
+#levels .node.giant.go { animation: pulse 0.9s infinite; box-shadow: 0 6px 0 #a04a10, 0 0 26px 8px rgba(255,90,90,.8); }
+#levels .node.giant i { position: absolute; font-style: normal; font-size: 22px; bottom: -4px; right: -4px; }
+#levels .node.nope { animation: nope .25s 4; }
+.upb, #upBar, .corner { z-index: 5; }
+/* the task during a level */
+.task { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 700; background: rgba(13,30,69,.5); padding: 4px 14px; border-radius: 999px; }
+.task .ti { display: flex; align-items: center; gap: 2px; font-size: 26px; }
+.task .ti img { height: 34px; width: 34px; object-fit: contain; }
+.task b { color: #ffe066; }
+.task .tt { font-size: 18px; color: #cfe3ff; }
+.task .lives { font-size: 16px; letter-spacing: 2px; }
+/* the end of a level */
+#lvlEnd { position: absolute; inset: 0; z-index: 8; pointer-events: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: rgba(13,30,69,.6); animation: fadeIn .25s; }
+#lvlEnd .stars { display: flex; gap: 6px; }
+#lvlEnd .stars i { font-style: normal; font-size: 64px; color: rgba(255,255,255,.25); text-shadow: 0 4px 0 #0d1e45; }
+#lvlEnd .stars i.on { color: #ffd43b; animation: popIn .45s both cubic-bezier(.3,1.6,.5,1); }
+#lvlEnd .prize { display: flex; align-items: center; gap: 6px; font-size: 28px; font-weight: 700; color: #ffe066; }
+#lvlEnd .prize img { height: 34px; }
+#lvlEnd .fail { font-size: 64px; }
+@media (orientation: landscape) and (max-height: 600px) { #levels { top: 70px; bottom: 50px; } #levels .node { width: 56px; height: 56px; } #levels .node.giant { width: 78px; height: 78px; } #levels .node.giant img.gi { width: 60px; height: 60px; } }
+#levels::before { content: ""; position: fixed; inset: 0; z-index: -1; background: radial-gradient(ellipse at 50% 55%, rgba(13,30,69,.35), rgba(13,30,69,.7)); pointer-events: none; }

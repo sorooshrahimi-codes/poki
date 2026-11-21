@@ -6,7 +6,7 @@ import { newField, sizeField, stepField, spawn, type Field } from "./core/field.
 import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tankSize, upgradeCost, type UpgradeId } from "./core/economy.ts";
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
-import { GIANTS, SKINS, giantOf, giantStep } from "./data/critters.ts";
+import { GIANTS, SKINS, critterOf, giantOf, giantStep } from "./data/critters.ts";
 import { MOUTH_FULL, REACH_FULL, vacLevel, valueMult } from "./core/economy.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
@@ -48,7 +48,7 @@ const canvas = $("game");
 const aimAt = (e: PointerEvent) => { const p = view.toWorld(e.clientX, e.clientY); input.x = p.x; input.y = p.y; };
 canvas.addEventListener("pointerdown", (e) => {
   unlockAudio(); aimAt(e);
-  if (mode === "field" || mode === "rush") { input.on = true; input.tap = true; firstTouch(); }
+  if ((mode === "field" && lvl && !lvl.done) || mode === "rush") { input.on = true; input.tap = true; firstTouch(); }
 
 });
 window.addEventListener("pointermove", (e) => { if (input.on || e.pointerType === "mouse") aimAt(e); });
@@ -125,6 +125,8 @@ function handleEvents() {
         setTimeout(() => sfx.reveal("legendary"), 1400);
         // after the celebration: on to where the next giant waits (a natural moment for a break);
         // the Moon itself is the end of the road and gets its own big moment first
+        if (lvl?.task === "giant") endLevel(true);
+        lvl = null;
         const theEnd = field.biome === "moon" && !save.tips.includes("moonDone");
         if (theEnd) { save.tips.push("moonDone"); setTimeout(() => void moonFinale(), 3600); }
         else setTimeout(() => void nextPlace(), 4200);
@@ -134,6 +136,11 @@ function handleEvents() {
       view.burst(field.nozzle.x, field.nozzle.y, c.mut === "gold" ? "#ffd84a" : RARITY_COLOR[c.def.rarity], c.def.rarity === "common" && !c.mut ? 10 : 24);
       view.text(field.nozzle.x + 40 * field.kid.face, field.nozzle.y - 34 - (save.catches % 2) * 22, `+🪙${short(coins)}`, "#ffe066", 17);
       if (!rush) flyCoins(field.nozzle.x, field.nozzle.y, Math.min(4, 1 + Math.floor(Math.log10(coins + 1))));
+      if (lvl && !lvl.done && c.boss === 0) {
+        if (lvl.task === "any" || lvl.task === "rival" || (lvl.task === "species" && c.def.id === lvl.target) || (lvl.task === "golden" && c.mut === "gold")) lvl.count++;
+        else if (lvl.task === "combo") lvl.count = Math.max(lvl.count, combo);
+        if (lvl.count >= lvl.goal) { lvl.count = lvl.goal; setTimeout(() => endLevel(true), 400); }
+      }
       // every catch also pushes the giant bar a little, right away
       if (!rush && c.boss === 0) {
         const add = ({ common: 0.06, rare: 0.12, epic: 0.25, legendary: 0.5, secret: 0.5 } as const)[c.def.rarity] * (c.mut ? 2 : 1);
@@ -175,6 +182,7 @@ function handleEvents() {
       sfx.event();
     } else if (e.kind === "stolen") {
       sfx.nope(); if (field.rival) view.text(field.rival.x, field.rival.y - 130, "😏", "#ffffff", 34);
+      if (lvl && lvl.task === "rival" && !lvl.done) { lvl.stolen++; if (lvl.stolen >= 3) setTimeout(() => endLevel(false), 600); }
     } else if (e.kind === "rivalMiss") {
       if (field.rival) view.text(field.rival.x, field.rival.y - 130, "😤", "#ffffff", 34);
     } else if (e.kind === "rivalBlown") {
@@ -359,7 +367,7 @@ async function nextPlace() {
   field = newField(view.W, view.H, save.up, save.biome); field.script = 2;
   for (let i = 0; i < 5; i++) spawn(field, rng);
   colourTarget = (save.restored ?? []).includes(save.biome) ? 1 : 0; view.colour = colourTarget;
-  writeSave(save); updateUi();
+  writeSave(save); lvl = null; renderLevels(); updateUi();
 }
 /** the journey: a road of every place with its giant, the kid walking from the last place to the new one,
  *  and the Moon waiting at the end. Shown at the very start and whenever a new place opens. No words. */
@@ -846,6 +854,92 @@ function toast(html: string, ms = 1800) {
   clearTimeout(toastT); toastT = window.setTimeout(() => el.classList.add("hidden"), ms);
 }
 /** the giant still standing in a place (null once caught) and the next giant on the road */
+// ------------------------------------------------------------------ levels
+/** every place: five short levels, each with its own task, then the giant */
+type Task = "any" | "species" | "combo" | "golden" | "rival" | "giant";
+const LEVEL_TASKS: Task[] = ["any", "species", "combo", "golden", "rival"];
+interface Level { biome: BiomeId; idx: number; task: Task; goal: number; count: number; left: number; total: number; stolen: number; target: string | null; done: boolean }
+let lvl: Level | null = null;
+const placeIndex = (b: BiomeId) => BIOMES.findIndex((x) => x.id === b);
+const starsOf = (b: BiomeId) => (save.stars ??= {})[b] ??= [0, 0, 0, 0, 0];
+const levelsDone = (b: BiomeId) => starsOf(b).every((x) => x > 0);
+const TASK_ICON: Record<Task, string> = { any: "🎯", species: "", combo: "🔥", golden: "✨", rival: "🛡️", giant: "👑" };
+function makeLevel(b: BiomeId, idx: number): Level {
+  const k = placeIndex(b), task = idx >= 5 ? "giant" : LEVEL_TASKS[idx];
+  const commons = critterOf(b).filter((d) => d.rarity === "common");
+  const target = task === "species" ? commons[(k + idx) % commons.length].id : null;
+  const goal = task === "any" ? 8 + k * 2 : task === "species" ? 5 + k : task === "combo" ? 5 + Math.min(4, k) : task === "golden" ? 4 + k : task === "rival" ? 10 + k * 2 : 1;
+  const total = task === "giant" ? 0 : task === "golden" ? 35 : task === "rival" ? 55 : 45;
+  return { biome: b, idx, task, goal, count: 0, left: total, total, stolen: 0, target, done: false };
+}
+/** what the level asks for, as a picture: the icon (or the critter), the count and the goal */
+function taskHtml(l: Level) {
+  const icon = l.task === "species" && l.target ? ic(l.target) : l.task === "rival" ? `<img src="./art/kid_rival.webp" alt="">🛡️` : TASK_ICON[l.task];
+  const extra = l.task === "rival" ? ` <span class="lives">${"😏".repeat(l.stolen)}${"·".repeat(Math.max(0, 3 - l.stolen))}</span>` : "";
+  return `<div class="task"><span class="ti">${icon}</span><b>${l.count}/${l.goal}</b>${extra}<span class="tt">⏱${Math.ceil(l.left)}</span></div>`;
+}
+async function startLevel(b: BiomeId, idx: number) {
+  if (busy) return;
+  if (idx >= 5) {
+    const g = nextGiant();
+    if (g.biome !== b || barPower() < g.need) { sfx.nope(); const fh = $("levels").querySelector(".node.giant"); fh?.classList.remove("nope"); void (fh as HTMLElement | null)?.offsetWidth; fh?.classList.add("nope"); return; }
+  }
+  $("levels").classList.add("hidden");
+  lvl = makeLevel(b, idx);
+  field = newField(view.W, view.H, save.up, b); field.script = 2;
+  field.favor = lvl.target; field.rivalFast = lvl.task === "rival";
+  if (lvl.task === "golden") field.lure = 999;
+  for (let i = 0; i < 6; i++) spawn(field, rng);
+  if (lvl.task === "giant") field.giantT = 1.5;
+  mode = "field"; gameplayStart(); updateUi();
+}
+/** the level is over: stars by time left, coins, then back to the map */
+function endLevel(win: boolean) {
+  const l = lvl; if (!l || l.done) return;
+  l.done = true; input.on = false; gameplayStop();
+  const k = l.total ? l.left / l.total : 1;
+  const stars = !win ? 0 : l.task === "giant" ? 3 : k >= 0.5 ? 3 : k >= 0.25 ? 2 : 1;
+  const prize = win ? Math.round((incomePerSec() * 25 + 80 * (1 + placeIndex(l.biome) * 3)) * (1 + stars * 0.5)) : 0;
+  if (win && l.idx < 5) { const st = starsOf(l.biome); st[l.idx] = Math.max(st[l.idx], stars); }
+  save.coins += prize; writeSave(save);
+  if (l.task === "giant") return; // the giant has its own celebration and then the journey
+  const box = $("lvlEnd");
+  box.innerHTML = `<div class="stars">${[0, 1, 2].map((i) => `<i class="${i < stars ? "on" : ""}" style="animation-delay:${0.15 + i * 0.25}s">★</i>`).join("")}</div>
+    ${win ? `<div class="prize">${COIN} +${short(prize)}</div>` : `<div class="fail">😅</div>`}
+    <div class="row">${win ? "" : `<button class="btn big rush" id="lvlRetry">↻</button>`}<button class="btn big go" id="lvlNext">▶</button></div>`;
+  box.classList.remove("hidden");
+  if (win) { sfx.reveal(stars === 3 ? "legendary" : "epic"); flyCoins(view.W / 2, view.H / 2, 8); } else sfx.nope();
+  $("lvlNext").onclick = () => { box.classList.add("hidden"); void toMap(); };
+  const r = document.getElementById("lvlRetry"); if (r) r.onclick = () => { box.classList.add("hidden"); lvl = null; void startLevel(l.biome, l.idx); };
+}
+/** between levels: the map of this place (a natural pause for an ad) */
+async function toMap() {
+  lvl = null; mode = "field";
+  busy = true; await commercialBreak(); busy = false;
+  syncRoad();
+  if (field.biome !== save.biome || field.critters.length === 0) { field = newField(view.W, view.H, save.up, save.biome); field.script = 2; for (let i = 0; i < 5; i++) spawn(field, rng); }
+  renderLevels(); updateUi();
+}
+/** the place's map: a winding path of five levels and the giant at the end */
+const NODE_POS = [[18, 82], [50, 70], [80, 56], [48, 44], [18, 30], [60, 14]];
+function renderLevels() {
+  const b = save.biome, st = starsOf(b), box = $("levels");
+  const firstOpen = st.findIndex((x) => x === 0);
+  const g = nextGiant();
+  const path = NODE_POS.map(([x, y]) => `${x},${y}`).join(" ");
+  box.innerHTML = `<svg class="path" viewBox="0 0 100 100" preserveAspectRatio="none"><polyline points="${path}" /></svg>` + NODE_POS.map(([x, y], i) => {
+    if (i === 5) {
+      const ready = levelsDone(b) && g.biome === b;
+      return `<button class="node giant${ready && barPower() >= g.need ? " go" : ""}${ready ? "" : " locked"}" data-i="5" style="left:${x}%;top:${y}%">${giantImg(g.id)}${ready ? "" : "<i>🔒</i>"}</button>`;
+    }
+    const L = makeLevel(b, i), open = i <= (firstOpen < 0 ? 4 : firstOpen);
+    const icon = L.task === "species" && L.target ? ic(L.target) : L.task === "rival" ? `<img src="./art/kid_rival.webp" alt="">` : TASK_ICON[L.task];
+    return `<button class="node${open ? "" : " locked"}${i === firstOpen ? " next" : ""}" data-i="${i}" style="left:${x}%;top:${y}%"><span class="ni">${open ? icon : "🔒"}</span><span class="ns">${[0, 1, 2].map((k) => `<i class="${k < st[i] ? "on" : ""}">★</i>`).join("")}</span></button>`;
+  }).join("");
+  box.classList.remove("hidden");
+  for (const el of box.querySelectorAll<HTMLElement>(".node")) el.onclick = () => { if (el.classList.contains("locked")) { sfx.nope(); return; } sfx.tap(); void startLevel(b, +el.dataset.i!); };
+}
+
 /** the rival's pace: when he beats each giant, in seconds of your play time. Ahead early, catchable mid-road,
  *  and a good run beats him to the Moon. After the Moon he keeps going, a giant every four minutes. */
 const RIVAL_AT = [85, 200, 370, 580, 830, 1120];
@@ -927,7 +1021,7 @@ function updateUi() {
   const found = CRITTERS.filter((d) => d.biome === field.biome && save.index[d.id]).length, total = CRITTERS.filter((d) => d.biome === field.biome).length;
   const gHere = giantLeft(field.biome);
   const ngF = nextGiant();
-  const fhHtml = mode === "rush" ? "" : gHere ? gauge(gHere) : `<span class="where">${BIOMES.find((b) => b.id === ngF.biome)!.icon}</span>${gauge(ngF)}`;
+  const fhHtml = mode === "rush" ? "" : lvl && lvl.task !== "giant" ? taskHtml(lvl) : gHere ? gauge(gHere) : `<span class="where">${BIOMES.find((b) => b.id === ngF.biome)!.icon}</span>${gauge(ngF)}`;
   // only rebuilt when it changes, so the bar can animate and a number pop is not wiped
   if ($("fhPlace").dataset.h !== fhHtml) { $("fhPlace").dataset.h = fhHtml; $("fhPlace").innerHTML = fhHtml; }
   $("fhGoal").textContent = "";
@@ -997,11 +1091,11 @@ function frame(now: number) {
   if (!(save.restored ?? []).includes(field.biome) && view.gloomFlee === 0) colourTarget = 0;
   view.colour += (colourTarget - view.colour) * Math.min(1, dt * 1.2);
   field.companion = null; // companions were cut
-  if (mode === "field" && !busy && field.biome !== nextGiant().biome && !field.critters.some((c) => c.boss > 0 && c.state !== "caught")) void nextPlace();
   const gH = mode === "rush" ? null : giantLeft(field.biome), L = barPower();
-  field.giant = gH ? { id: gH.id, ready: L >= gH.need, resist: gH.resist, scale: gH.scale } : null;
+  field.giant = gH && lvl?.task === "giant" ? { id: gH.id, ready: L >= gH.need, resist: gH.resist, scale: gH.scale } : null;
   const teasing = field.critters.some((c) => c.tease && c.state !== "caught");
-  view.giant = gH && !teasing ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need, k: Math.min(1, L / gH.need) } : null;
+  const onMap = mode === "field" && !lvl && !$("levels").classList.contains("hidden");
+  view.giant = gH && !teasing && !onMap ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need, k: Math.min(1, L / gH.need) } : null;
   view.vac = L;
   view.skin = SKINS.find((k) => k.id === save.skin) ?? SKINS[0];
   if (mode === "rush" && rush) {
@@ -1012,9 +1106,12 @@ function frame(now: number) {
     view.drawField(field, RUSH_UP, t, dt);
     if (rush.left <= 0) endRush();
   } else if (mode === "field") {
-    field.rivalOn = save.catches >= 10;
-    if (!document.hidden && started) save.playTime = (save.playTime ?? 0) + dt;
-    stepField(field, dt, input, save.up, rng);
+    field.rivalOn = !!lvl && !lvl.done && (save.catches >= 10 || lvl.task === "rival") && lvl.task !== "giant" && lvl.task !== "golden";
+    const playing = !!lvl && !lvl.done;
+    if (playing && !document.hidden && started) save.playTime = (save.playTime ?? 0) + dt;
+    if (playing && lvl!.total) { lvl!.left -= dt; if (lvl!.left <= 0) { lvl!.left = 0; endLevel(lvl!.task === "rival" && lvl!.stolen < 3 && lvl!.count >= lvl!.goal); } }
+    if (!playing) input.on = false;
+    stepField(field, playing ? dt : dt * 0.3, input, save.up, rng);
     handleEvents();
     setVacuum(field.beam, Math.min(1, barPower() / 60), field.critters.some((c) => c.state === "tug"));
     // the music picks up while a giant is on the field
@@ -1056,6 +1153,7 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
     c.boss = 1; c.scale = 2.6; c.resist = 9; c.tease = true; c.dir = -1; c.hopPer = 1.4;
   }
   if (!save.tips.includes("road")) { save.tips.push("road"); writeSave(save); setTimeout(() => void showJourney(0, 0), 400); }
+  if (!save.tips.includes("intro") && save.catches === 0) { lvl = makeLevel("meadow", 0); lvl.left = lvl.total = 60; } else renderLevels();
   if (save.catches > 0) $("hint").classList.add("hidden");
   const coin = img("coin"), jarImg = img("jar");
   if (coin) $("coinIco").innerHTML = `<img src="./art/coin.webp" alt="">`;

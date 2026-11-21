@@ -79,6 +79,9 @@ export interface Field {
   rivalT: number;
   /** set by the controller: rivals only show up once the player knows the basics */
   rivalOn: boolean;
+  /** level tweaks: a species that shows up often, a rival who raids nonstop */
+  favor: string | null;
+  rivalFast: boolean;
   critters: Critter[];
   beam: boolean; aim: { x: number; y: number };
   jar: number; cap: number;
@@ -112,10 +115,11 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, rival: null, rivalT: 25, rivalOn: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
+  if (f.favor && rng() < 0.45) return CRITTER_BY_ID[f.favor];
   const pool = critterOf(f.biome);
   let total = 0;
   for (const d of pool) total += RARITY_WEIGHT[d.rarity];
@@ -412,7 +416,7 @@ function stepRival(f: Field, dt: number, inp: FieldInput, up: Upgrades, rng: Rng
     // he goes for one in the middle of the field, where you can see him and blow him away
     const mid = (f.left + f.right) / 2 + 40;
     const prey = f.critters.filter((c) => c.state === "roam" && c.boss === 0 && !c.hidden && c.def.behave !== "fly" && c.x < f.right - 110).sort((a, b) => Math.abs(a.x - mid) - Math.abs(b.x - mid))[0];
-    f.rivalT = 35 + rng() * 25;
+    f.rivalT = f.rivalFast ? 5 + rng() * 4 : 35 + rng() * 25;
     if (!prey) return;
     f.rival = { x: f.right + 60, y: Math.min(f.nearY, prey.y + 6), phase: "in", t: 0, target: prey.uid, got: false };
     f.ev.push({ kind: "rivalIn" });

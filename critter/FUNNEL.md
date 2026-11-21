@@ -75,6 +75,7 @@ Jar and park trips, eggs, bubble wand, flute, companions, lab: each added a rule
 | Each stage plays differently | Novelty keeps the session going | Ice: critters slide · Candy: sugar rush of golden ones · Volcano: eruptions throw critters up, ×2 in the air · Moon: low gravity | done |
 | A big shareable moment | Clips, word of mouth | Giant taffy-stretch, slow motion, POP, burp; Moon finale with share | done |
 | Something to show off | Identity, pride | Suction styles won from each giant (honey, forest, ice, candy, lava, stars), chosen in the book | done |
+| Short varied levels | Variety + a sense of progress | Each place: 5 levels (catch N, a species, a combo, golden rain, fend off the rival), 1–3 stars, then the giant node | done |
 | A choice that matters | Ownership of your run | Three upgrade paths (power / reach→mouth→value / coin value) | basic — next: after each giant pick 1 of 2 perks |
 | Competition | "Beat me" | 60 s Rush, friend link, two bars, best on the button | done — next: weekly seeded Rush |
 | A reason to come back | Day-2 retention | Offline coins (2 h cap) | next: a daily gift and a daily Rush seed |
