@@ -48,6 +48,8 @@ export interface Critter {
   leaving?: boolean;
   /** volcano: seconds left flying after an eruption threw it up */
   launch?: number;
+  /** event critters: a bomb (short-circuits the vacuum), a treasure runner, a mystery box */
+  kind?: "bomb" | "treasure" | "box";
 }
 export type ToolId = "vac" | "bubble" | "flute";
 /** companions: legends that come along and help */
@@ -55,7 +57,7 @@ export type CompanionId = "sunpup" | "prismane" | "elderoak" | "moonfawn" | "fro
 export const COMPANIONS: CompanionId[] = ["sunpup", "prismane", "elderoak", "moonfawn", "frostking", "wyrmling"];
 
 export type Surprise = "visitor" | "golden_rain" | "stampede" | "boss";
-export type FieldEv = { kind: "rivalIn" } | { kind: "stolen"; c: Critter } | { kind: "rivalBlown" } | { kind: "rivalMiss" } | { kind: "tease"; c: Critter } | { kind: "erupt" } | { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter } | { kind: "split"; c: Critter } | { kind: "hide"; c: Critter } | { kind: "flee"; c: Critter } | { kind: "bossPhase"; c: Critter } | { kind: "bubbled"; c: Critter } | { kind: "ability"; id: CompanionId };
+export type FieldEv = { kind: "event"; e: EventId } | { kind: "boom"; c: Critter } | { kind: "rivalIn" } | { kind: "stolen"; c: Critter } | { kind: "rivalBlown" } | { kind: "rivalMiss" } | { kind: "tease"; c: Critter } | { kind: "erupt" } | { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter } | { kind: "split"; c: Critter } | { kind: "hide"; c: Critter } | { kind: "flee"; c: Critter } | { kind: "bossPhase"; c: Critter } | { kind: "bubbled"; c: Critter } | { kind: "ability"; id: CompanionId };
 
 export interface Field {
   biome: BiomeId;
@@ -87,6 +89,13 @@ export interface Field {
   goldK: number;
   magnet: number;
   rivalSlow: number;
+  /** random events during a level: the next one in this many seconds; on = the controller allows them */
+  eventT: number;
+  eventsOn: boolean;
+  /** a bomb short-circuited the vacuum: seconds left */
+  stun: number;
+  /** frenzy: seconds of double coins left */
+  frenzy: number;
   /** level tweaks: a species that shows up often, a rival who raids nonstop */
   favor: string | null;
   rivalFast: boolean;
@@ -123,7 +132,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, special: 0, specialFx: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, special: 0, specialFx: 0, eventT: 12, eventsOn: false, stun: 0, frenzy: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -164,7 +173,8 @@ export const MAX_CHARGES = 3;
 export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, rng: Rng) {
   f.t += dt;
   f.cap = Math.round(tankSize(up) * (f.companion === "wyrmling" ? 1.5 : 1));
-  f.beam = inp.on && f.tool === "vac" && f.jar < f.cap;
+  f.stun = Math.max(0, f.stun - dt); f.frenzy = Math.max(0, f.frenzy - dt);
+  f.beam = inp.on && f.tool === "vac" && f.jar < f.cap && f.stun <= 0;
   const flute = inp.on && f.tool === "flute";
   // bubble wand: each tap fires a bubble toward the finger; charges refill over time
   f.charges = Math.min(MAX_CHARGES, f.charges + dt / 1.4);
@@ -242,6 +252,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
   }
 
   bossClock -= dt;
+  stepEvents(f, dt, rng);
   f.specialFx = Math.max(0, f.specialFx - dt);
   stepRival(f, dt, inp, up, rng);
   if (f.biome === "volcano" && f.script >= 2) {
@@ -332,6 +343,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
         f.ev.push({ kind: "flee", c });
       }
     }
+    if (c.kind === "treasure" && c.state === "roam") { c.fleeT = Math.max(c.fleeT, 0.2); if (c.x < f.left + 30) c.dir = 1; if (c.x > f.right - 30) c.dir = -1; }
     if (c.fleeT > 0) { c.fleeT -= dt; c.x += c.dir * 150 * dt; c.x = Math.max(f.left + 20, Math.min(f.right - 20, c.x)); }
     if (c.hidden) { c.lift = 0; continue; }
     if (inCone && c.def.behave === "split" && !c.split && c.state === "roam" && c.boss === 0) {
@@ -343,6 +355,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
     }
     if (c.state === "roam" || c.state === "tug") {
       if (inCone) {
+        if (c.kind === "bomb") { c.state = "caught"; f.stun = 2; f.ev.push({ kind: "boom", c }); continue; }
         if (c.resist <= 1.5 || c.bubbled > 0) c.state = "pulled";
         else {
           if (c.state !== "tug") { c.state = "tug"; f.ev.push({ kind: "tug", c }); }
@@ -370,6 +383,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
         if (c.grip <= 0) { c.grip = 0; c.state = "roam"; f.ev.push({ kind: "escape", c }); c.dir = dx > 0 ? 1 : -1; }
       }
     }
+    if (c.kind === "box" && c.state === "roam") { c.lift = Math.max(0, c.lift - 90 * dt); c.hopT = 0; continue; }
     if (c.leaving) {
       // the teasing giant stomps away over the hill
       c.hopT += dt * 2.2; c.lift = Math.abs(Math.sin(c.hopT * Math.PI)) * 30; c.x += 160 * dt;
@@ -479,4 +493,32 @@ export function fireSpecial(f: Field, tier: number) {
   }
   if (f.rival && (f.rival.phase === "in" || f.rival.phase === "grab")) { f.rival.phase = "blown"; f.rival.t = 0; f.ev.push({ kind: "rivalBlown" }); }
   return true;
+}
+
+/** the event deck: something unexpected every 12-18 s during a level */
+export type EventId = "box" | "bombs" | "treasure" | "gust" | "parade" | "frenzy";
+const EVENTS: EventId[] = ["box", "bombs", "treasure", "gust", "parade", "frenzy"];
+function stepEvents(f: Field, dt: number, rng: Rng) {
+  if (!f.eventsOn || f.script < 2 || f.critters.some((c) => c.boss > 0 && c.state !== "caught")) return;
+  f.eventT -= dt;
+  if (f.eventT > 0) return;
+  f.eventT = 12 + rng() * 6;
+  const e = EVENTS[Math.floor(rng() * EVENTS.length)];
+  const pool = critterOf(f.biome).filter((d) => d.rarity === "common");
+  const y = () => f.farY + (f.nearY - f.farY) * (0.2 + rng() * 0.7);
+  if (e === "box") {
+    const c = spawn(f, rng, { def: pool[0], mut: null, x: f.left + 120 + rng() * (f.right - f.left - 180), y: y() });
+    c.kind = "box"; c.resist = 1; c.lift = 170; c.air = 0;
+  } else if (e === "bombs") {
+    for (let i = 0; i < 3; i++) { const c = spawn(f, rng, { def: pool[Math.floor(rng() * pool.length)], mut: null, x: f.right - 40 - i * 70, y: y() }); c.kind = "bomb"; c.resist = 1; }
+  } else if (e === "treasure") {
+    const c = spawn(f, rng, { def: pool[Math.floor(rng() * pool.length)], mut: "gold", x: f.right - 30, y: y() }); c.kind = "treasure"; c.resist = 1.3; c.dir = -1;
+  } else if (e === "gust") {
+    const dir = rng() < 0.5 ? -1 : 1;
+    for (const c of f.critters) if (c.state === "roam" && c.boss === 0) { c.dir = dir; c.fleeT = 1.4; }
+  } else if (e === "parade") {
+    const d = pool[Math.floor(rng() * pool.length)], yy = y();
+    for (let i = 0; i < 7; i++) { const c = spawn(f, rng, { def: d, mut: i === 3 ? "gold" : null, x: f.right + 20 + i * 38, y: yy }); c.dir = -1; c.fleeT = 3; }
+  } else f.frenzy = 10;
+  f.ev.push({ kind: "event", e });
 }

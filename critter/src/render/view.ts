@@ -173,6 +173,7 @@ export class View {
         blink(c, f.companion, px - w / 2, py - h - hop, w, h, t, 77);
       }
     }
+    this.signs(f, t);
     this.drawRival(f, t);
     if (f.specialFx > 0) this.drawSpecial(f, t);
     this.particles(dt);
@@ -199,6 +200,20 @@ export class View {
     }
   }
   tier = 0;
+  /** event critters carry a sign above them, drawn on top of everything so a crowd never hides it */
+  private signs(f: Field, t: number) {
+    const c = this.c;
+    for (const cr of f.critters) {
+      if (!cr.kind || cr.kind === "box" || cr.state === "caught" || cr.state === "pulled") continue;
+      const s = cr.def.size * depthK(f, cr.y) * cr.scale, bx = cr.x, by = cr.y - cr.lift - s * 0.5;
+      c.save();
+      if (cr.kind === "bomb") { c.globalAlpha = 0.3 + 0.25 * Math.sin(t * 10); c.fillStyle = "#ff3030"; c.beginPath(); c.arc(bx, by, s * 0.62, 0, Math.PI * 2); c.fill(); c.globalAlpha = 1; }
+      c.font = `${Math.max(28, Math.round(s * 0.7))}px system-ui`; c.textAlign = "center"; c.textBaseline = "bottom";
+      c.shadowColor = cr.kind === "bomb" ? "#ff3030" : "#ffe066"; c.shadowBlur = 14;
+      c.fillText(cr.kind === "bomb" ? "💣" : "💰", bx, by - s * 0.42 + Math.sin(t * 6 + cr.uid) * 4);
+      c.restore();
+    }
+  }
   /** the special: a spinning swirl that grows out of the nozzle */
   private drawSpecial(f: Field, t: number) {
     const c = this.c, k = 1 - f.specialFx / 1.2, R = (this.tier >= 3 ? 700 : this.tier === 2 ? 330 : 230) * Math.min(1, k * 2.2);
@@ -282,8 +297,16 @@ export class View {
       c.fillStyle = "#a8774a"; for (let i = 0; i < 3; i++) { c.beginPath(); c.arc(cr.x - s * 0.2 + i * s * 0.2, cr.y - 6 - (i % 2) * 3, 2.5, 0, Math.PI * 2); c.fill(); }
       return;
     }
-    const sp = tinted(cr.def.art, cr.mut);
     const bx = cr.x, by = cr.y - cr.lift - s * 0.5;
+    if (cr.kind === "box") {
+      // a mystery gift floating down
+      c.save(); c.translate(bx, by); c.rotate(Math.sin(t * 3 + cr.uid) * 0.15);
+      const sc = cr.state === "pulled" ? 0.6 : 1;
+      c.font = `${Math.round(s * 1.1 * sc)}px system-ui`; c.textAlign = "center"; c.textBaseline = "middle";
+      c.shadowColor = "#ffe066"; c.shadowBlur = 18; c.fillText("🎁", 0, 0); c.shadowBlur = 0; c.restore();
+      return;
+    }
+    const sp = tinted(cr.def.art, cr.mut);
     c.save();
     c.translate(bx, by);
     // rare and mutated ones glow softly

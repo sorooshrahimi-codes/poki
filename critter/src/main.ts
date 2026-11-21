@@ -97,7 +97,9 @@ function handleEvents() {
       combo = t - lastCatch < 1.7 + 0.5 * perkN("combo") ? combo + 1 : 1;
       lastCatch = t;
       const airborne = (c.launch ?? 0) > 0;
-      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up) * (1 + 0.25 * perkN("coins"))) * (airborne ? 2 : 1));
+      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up) * (1 + 0.25 * perkN("coins"))) * (airborne ? 2 : 1) * (field.frenzy > 0 ? 2 : 1) * (c.kind === "treasure" ? 12 : 1));
+      if (c.kind === "treasure") { view.text(field.nozzle.x, field.nozzle.y - 110, "💰💰💰", "#ffe066", 30); view.shake = 6; }
+      if (c.kind === "box") openBox();
       if (airborne) view.text(field.nozzle.x + 50 * field.kid.face, field.nozzle.y - 100, "🔥×2", "#ff9a3a", 22);
       if (c.boss > 0) coins += Math.round(c.def.income * 60);
       if (rush) rush.score += coins; else { save.coins += coins; save.catches++; }
@@ -180,6 +182,14 @@ function handleEvents() {
       // (no tip messages: the critter's behaviour shows on the field)
     } else if (e.kind === "flee") {
       // (no tip message)
+    } else if (e.kind === "event") {
+      // the event announces itself with a big icon and a sound, no words
+      const icon = { box: "🎁", bombs: "💣", treasure: "💰", gust: "🌬️", parade: "🏃", frenzy: "🔥×2" }[e.e];
+      view.text(view.W / 2, field.farY - 30, icon, "#ffffff", 46); sfx.event();
+      if (e.e === "gust") { view.shake = 5; sfx.boing(); }
+    } else if (e.kind === "boom") {
+      view.shake = 16; sfx.pop(); view.burst(e.c.x, e.c.y - 30, "#ff5a2a", 30, 220);
+      view.text(field.nozzle.x, field.nozzle.y - 80, "💥💫", "#ffffff", 34);
     } else if (e.kind === "rivalIn") {
       sfx.event();
     } else if (e.kind === "stolen") {
@@ -896,6 +906,17 @@ function applyPerks(f: Field) {
   f.rivalSlow = 1 + 0.6 * perkN("shield");
 }
 
+/** a mystery box: one of five surprises */
+function openBox() {
+  const r = Math.random();
+  sfx.reveal("epic");
+  if (r < 0.2 && tierOf(vacLevel(save.up)) > 0) { field.special = 1; view.text(field.nozzle.x, field.nozzle.y - 110, "🎁➜🌪️", "#9fe0ff", 30); }
+  else if (r < 0.4) { field.frenzy = 10; view.text(field.nozzle.x, field.nozzle.y - 110, "🎁➜🔥×2", "#ffb347", 30); }
+  else if (r < 0.6) { field.lure += 5; view.text(field.nozzle.x, field.nozzle.y - 110, "🎁➜✨✨✨", "#ffe066", 30); for (let i = 0; i < 4; i++) spawn(field, rng); }
+  else if (r < 0.8 && lvl && lvl.total) { lvl.left += 10; lvl.total += 10; view.text(field.nozzle.x, field.nozzle.y - 110, "🎁➜⏱+10", "#7be495", 30); }
+  else { const n = Math.max(50, Math.round(incomePerSec() * 40)); save.coins += n; flyCoins(field.nozzle.x, field.nozzle.y, 8); view.text(field.nozzle.x, field.nozzle.y - 110, `🎁➜${COIN}`, "#ffe066", 30); }
+}
+
 // ------------------------------------------------------------------ the daily gift
 const today = () => new Date().toISOString().slice(0, 10);
 async function dailyGift() {
@@ -1171,6 +1192,7 @@ function frame(now: number) {
     view.drawField(field, RUSH_UP, t, dt);
     if (rush.left <= 0) endRush();
   } else if (mode === "field") {
+    field.eventsOn = !!lvl && !lvl.done && lvl.task !== "giant" && save.catches >= 8;
     field.rivalOn = !!lvl && !lvl.done && (save.catches >= 10 || lvl.task === "rival") && lvl.task !== "giant" && lvl.task !== "golden";
     const playing = !!lvl && !lvl.done;
     if (playing && !document.hidden && started) save.playTime = (save.playTime ?? 0) + dt;
