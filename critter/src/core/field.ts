@@ -83,6 +83,10 @@ export interface Field {
   special: number;
   /** seconds the special's swirl is still showing (for the drawing) */
   specialFx: number;
+  /** perks: golden chance multiplier, a pull drawing critters toward the kid, slower rival */
+  goldK: number;
+  magnet: number;
+  rivalSlow: number;
   /** level tweaks: a species that shows up often, a rival who raids nonstop */
   favor: string | null;
   rivalFast: boolean;
@@ -119,7 +123,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, special: 0, specialFx: 0, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, special: 0, specialFx: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -138,7 +142,7 @@ export function spawn(f: Field, rng: Rng, opt: { def?: CritterDef; mut?: Mutatio
   if (opt.mut === undefined) {
     if (f.lure > 0) { mut = "gold"; f.lure--; }
     // candy hills: a sugar rush of golden critters
-    else for (const m of MUTATIONS) if (rng() < m.chance * (f.companion === "prismane" ? 2.2 : 1) * (f.biome === "candy" && m.id === "gold" ? 3.5 : 1)) { mut = m.id; break; }
+    else for (const m of MUTATIONS) if (rng() < m.chance * (f.companion === "prismane" ? 2.2 : 1) * (f.biome === "candy" && m.id === "gold" ? 3.5 : 1) * (m.id === "gold" ? f.goldK : 1)) { mut = m.id; break; }
   }
   const mr = MUTATIONS.find((m) => m.id === mut)?.resist ?? 1;
   const c: Critter = {
@@ -293,6 +297,8 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
       c.hidden = false; c.fleeT = 0; c.herd = Math.max(c.herd, 0.2);
       if (c.def.behave === "fly") c.air = Math.max(30, c.air - 60 * dt);
     }
+    // magnet perk: everything drifts slowly toward the kid
+    if (f.magnet > 0 && c.state === "roam" && c.boss === 0 && Math.abs(f.nozzle.x - c.x) > 90) c.x += Math.sign(f.nozzle.x - c.x) * 14 * f.magnet * dt;
     if (c.herd > 0 && c.state === "roam") { c.herd -= dt; const s = Math.sign(f.nozzle.x - c.x); c.dir = s >= 0 ? 1 : -1; if (Math.abs(f.nozzle.x - c.x) > 70) c.x += s * 70 * dt; }
     // moonlight: shy ones stay calm, burrowers stay up
     if (f.companion === "moonfawn") { c.fleeT = 0; if (c.def.behave === "burrow") c.hidden = false; }
@@ -421,7 +427,7 @@ function stepRival(f: Field, dt: number, inp: FieldInput, up: Upgrades, rng: Rng
     // he goes for one in the middle of the field, where you can see him and blow him away
     const mid = (f.left + f.right) / 2 + 40;
     const prey = f.critters.filter((c) => c.state === "roam" && c.boss === 0 && !c.hidden && c.def.behave !== "fly" && c.x < f.right - 110).sort((a, b) => Math.abs(a.x - mid) - Math.abs(b.x - mid))[0];
-    f.rivalT = f.rivalFast ? 5 + rng() * 4 : 35 + rng() * 25;
+    f.rivalT = (f.rivalFast ? 5 + rng() * 4 : 35 + rng() * 25) * f.rivalSlow;
     if (!prey) return;
     f.rival = { x: f.right + 60, y: Math.min(f.nearY, prey.y + 6), phase: "in", t: 0, target: prey.uid, got: false };
     f.ev.push({ kind: "rivalIn" });

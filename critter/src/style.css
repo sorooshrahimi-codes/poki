@@ -554,3 +554,20 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 #evolve .btn { position: relative; animation: popIn .4s 1.8s both; }
 @keyframes evoOut { 0% { opacity: 1; filter: brightness(1); } 60% { opacity: 1; filter: brightness(4); transform: scale(1.1); } 100% { opacity: 0; filter: brightness(6); transform: scale(1.3); } }
 @keyframes evoIn { 0%, 55% { opacity: 0; transform: scale(.6); filter: brightness(5); } 100% { opacity: 1; transform: scale(1); filter: brightness(1) drop-shadow(0 0 24px rgba(255,240,180,.8)); } }
+/* perk choice */
+#perks, #gift { position: absolute; inset: 0; z-index: 9; pointer-events: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: rgba(13,30,69,.82); animation: fadeIn .3s; }
+#perks .cards { display: flex; gap: 18px; }
+#perks .card { width: 130px; height: 170px; border: 0; border-radius: 22px; cursor: pointer; font-family: inherit; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  background: linear-gradient(#5bc8ff, #2f7fe0); box-shadow: 0 6px 0 #1d4f9a, 0 10px 24px rgba(0,0,0,.35); animation: popIn .45s both cubic-bezier(.3,1.6,.5,1); }
+#perks .card:nth-child(2) { background: linear-gradient(#c9a7ff, #7a4ff0); box-shadow: 0 6px 0 #4a2a9a, 0 10px 24px rgba(0,0,0,.35); animation-delay: .12s; }
+#perks .card .pi { font-size: 64px; }
+#perks .card .pl { font-size: 14px; letter-spacing: 2px; opacity: .8; }
+#perks .card .pl b { color: #ffe066; animation: pulse .8s infinite; display: inline-block; }
+#perks .card.picked { transform: scale(1.15); box-shadow: 0 0 30px 10px rgba(255,224,102,.8); }
+/* daily gift */
+#gift .chest { font-size: 96px; animation: wobble .6s infinite; }
+#gift .days { display: flex; gap: 8px; font-size: 18px; }
+#gift .days i { font-style: normal; color: rgba(255,255,255,.3); }
+#gift .days i.on { color: #ffe066; text-shadow: 0 0 8px #ffe066; }
+#gift .prize { display: flex; align-items: center; gap: 6px; font-size: 30px; font-weight: 700; color: #ffe066; }
+#gift .prize img { height: 36px; }

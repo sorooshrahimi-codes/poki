@@ -77,9 +77,9 @@ Jar and park trips, eggs, bubble wand, flute, companions, lab: each added a rule
 | Something to show off | Identity, pride | Suction styles won from each giant (honey, forest, ice, candy, lava, stars), chosen in the book | done |
 | Short varied levels | Variety + a sense of progress | Each place: 5 levels (catch N, a species, a combo, golden rain, fend off the rival), 1–3 stars, then the giant node | done |
 | Visible growth | "I am getting stronger" you can see | The vacuum evolves at levels 8 / 25 / 60 (turbo, golden mega, cosmic): new look + a special move filled by catches (tornado → tornado + freeze → black hole) | done |
-| A choice that matters | Ownership of your run | Three upgrade paths (power / reach→mouth→value / coin value) | basic — next: after each giant pick 1 of 2 perks |
+| A choice that matters | Ownership of your run | Three upgrade paths + after each giant pick 1 of 2 perks (💰 coins, 🌪️ special, ⏱ time, 🧲 magnet, ✨ gold, 🛡️ rival, 🔥 combo), stacking | done |
 | Competition | "Beat me" | 60 s Rush, friend link, two bars, best on the button | done — next: weekly seeded Rush |
-| A reason to come back | Day-2 retention | Offline coins (2 h cap) | next: a daily gift and a daily Rush seed |
+| A reason to come back | Day-2 retention | Offline coins (2 h cap) + a daily gift chest with a 7-day streak | done — next: a daily Rush seed |
 | An end and an after | Completion + long tail | The Moon finale, then ★2 giants forever | done |
 | Polished store page | Click-through on Poki | Giant thumbnail, one-line pitch, trailer clips | done — next: trailer with music and title card |
 

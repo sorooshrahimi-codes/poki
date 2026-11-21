@@ -94,10 +94,10 @@ function handleEvents() {
       const isNew = !rush && !save.index[c.def.id];
       if (!rush) { const en = (save.index[c.def.id] ??= { count: 0, muts: [] }); en.count++; if (c.mut && !en.muts.includes(c.mut)) en.muts.push(c.mut); }
       // quick catches in a row build a chain: each link adds a quarter more coins
-      combo = t - lastCatch < 1.7 ? combo + 1 : 1;
+      combo = t - lastCatch < 1.7 + 0.5 * perkN("combo") ? combo + 1 : 1;
       lastCatch = t;
       const airborne = (c.launch ?? 0) > 0;
-      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up)) * (airborne ? 2 : 1));
+      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up) * (1 + 0.25 * perkN("coins"))) * (airborne ? 2 : 1));
       if (airborne) view.text(field.nozzle.x + 50 * field.kid.face, field.nozzle.y - 100, "🔥×2", "#ff9a3a", 22);
       if (c.boss > 0) coins += Math.round(c.def.income * 60);
       if (rush) rush.score += coins; else { save.coins += coins; save.catches++; }
@@ -130,7 +130,7 @@ function handleEvents() {
         lvl = null;
         const theEnd = field.biome === "moon" && !save.tips.includes("moonDone");
         if (theEnd) { save.tips.push("moonDone"); setTimeout(() => void moonFinale(), 3600); }
-        else setTimeout(() => void nextPlace(), 4200);
+        else setTimeout(() => void pickPerk().then(() => nextPlace()), 4200);
       }
       if (c.boss > 0 || c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") view.cheer = 1.2;
       sfx.catchPop(combo, c.def.rarity);
@@ -142,7 +142,7 @@ function handleEvents() {
         else if (lvl.task === "combo") lvl.count = Math.max(lvl.count, combo);
         if (lvl.count >= lvl.goal) { lvl.count = lvl.goal; setTimeout(() => endLevel(true), 400); }
       }
-      if (!rush && c.boss === 0 && tierOf(vacLevel(save.up)) > 0) field.special = Math.min(1, field.special + 0.09);
+      if (!rush && c.boss === 0 && tierOf(vacLevel(save.up)) > 0) field.special = Math.min(1, field.special + 0.09 * (1 + 0.35 * perkN("special")));
       // every catch also pushes the giant bar a little, right away
       if (!rush && c.boss === 0) {
         const add = ({ common: 0.06, rare: 0.12, epic: 0.25, legendary: 0.5, secret: 0.5 } as const)[c.def.rarity] * (c.mut ? 2 : 1);
@@ -428,6 +428,7 @@ async function moonFinale() {
   };
   await new Promise<void>((r) => { $("finGo").onclick = () => r(); });
   box.classList.add("hidden");
+  await pickPerk();
   await nextPlace();
 }
 
@@ -872,6 +873,46 @@ function toast(html: string, ms = 1800) {
   clearTimeout(toastT); toastT = window.setTimeout(() => el.classList.add("hidden"), ms);
 }
 /** the giant still standing in a place (null once caught) and the next giant on the road */
+// ------------------------------------------------------------------ perks: after each giant, pick one of two
+interface Perk { id: string; icon: string }
+const PERKS: Perk[] = [
+  { id: "coins", icon: "💰" }, { id: "special", icon: "🌪️" }, { id: "time", icon: "⏱" },
+  { id: "magnet", icon: "🧲" }, { id: "gold", icon: "✨" }, { id: "shield", icon: "🛡️" }, { id: "combo", icon: "🔥" },
+];
+const perkN = (id: string) => (save.perks ?? []).filter((x) => x === id).length;
+/** two different perks, shown as big picture cards; the pick stays for good (they stack) */
+async function pickPerk() {
+  const pool = [...PERKS].sort(() => Math.random() - 0.5).slice(0, 2);
+  const box = $("perks");
+  box.innerHTML = `<div class="cards">${pool.map((p) => `<button class="card" data-p="${p.id}"><span class="pi">${p.icon}</span><span class="pl">${"●".repeat(perkN(p.id))}<b>●</b></span></button>`).join("")}</div>`;
+  box.classList.remove("hidden"); sfx.event();
+  await new Promise<void>((r) => { for (const el of box.querySelectorAll<HTMLElement>(".card")) el.onclick = () => { (save.perks ??= []).push(el.dataset.p!); writeSave(save); el.classList.add("picked"); sfx.reveal("epic"); setTimeout(r, 650); }; });
+  box.classList.add("hidden");
+}
+/** the perks' effects on the field */
+function applyPerks(f: Field) {
+  f.goldK = 1 + perkN("gold");
+  f.magnet = perkN("magnet");
+  f.rivalSlow = 1 + 0.6 * perkN("shield");
+}
+
+// ------------------------------------------------------------------ the daily gift
+const today = () => new Date().toISOString().slice(0, 10);
+async function dailyGift() {
+  const d = today();
+  if (save.giftDay === d || save.catches < 5) return;
+  const y = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const streak = save.giftDay === y ? Math.min(7, (save.giftStreak ?? 0) + 1) : 1;
+  const prize = Math.round(Math.max(150, incomePerSec() * 90) * streak);
+  const box = $("gift");
+  box.innerHTML = `<div class="chest">🎁</div><div class="days">${Array.from({ length: 7 }, (_, i) => `<i class="${i < streak ? "on" : ""}">${i === 6 ? "⭐" : "●"}</i>`).join("")}</div><div class="prize">${COIN} +${short(prize)}</div><button class="btn big go" id="giftGo">✔</button>`;
+  box.classList.remove("hidden"); sfx.reveal("epic");
+  await new Promise<void>((r) => { $("giftGo").onclick = () => r(); });
+  save.giftDay = d; save.giftStreak = streak; save.coins += prize; writeSave(save);
+  flyCoins(view.W / 2, view.H / 2, 10);
+  box.classList.add("hidden"); updateUi();
+}
+
 // ------------------------------------------------------------------ levels
 /** every place: five short levels, each with its own task, then the giant */
 type Task = "any" | "species" | "combo" | "golden" | "rival" | "giant";
@@ -888,7 +929,8 @@ function makeLevel(b: BiomeId, idx: number): Level {
   const target = task === "species" ? commons[(k + idx) % commons.length].id : null;
   const goal = task === "any" ? (k ? 11 + k * 3 : 8) : task === "species" ? 7 + k : task === "combo" ? 6 + (k >= 2 ? 1 : 0) : task === "golden" ? 7 + k : task === "rival" ? 18 + k * 3 : 1;
   const total = task === "giant" ? 0 : task === "golden" ? 35 : task === "rival" ? 55 : idx === 0 ? 60 : 45;
-  return { biome: b, idx, task, goal, count: 0, left: total, total, stolen: 0, target, done: false };
+  const more = task === "giant" ? 0 : 8 * perkN("time");
+  return { biome: b, idx, task, goal, count: 0, left: total + more, total: total + more, stolen: 0, target, done: false };
 }
 /** what the level asks for, as a picture: the icon (or the critter), the count and the goal */
 function taskHtml(l: Level) {
@@ -905,7 +947,7 @@ async function startLevel(b: BiomeId, idx: number) {
   $("levels").classList.add("hidden");
   lvl = makeLevel(b, idx);
   field = newField(view.W, view.H, save.up, b); field.script = 2;
-  field.favor = lvl.target; field.rivalFast = lvl.task === "rival";
+  field.favor = lvl.target; field.rivalFast = lvl.task === "rival"; applyPerks(field);
   if (lvl.task === "golden") field.lure = 999;
   for (let i = 0; i < 6; i++) spawn(field, rng);
   if (lvl.task === "giant") field.giantT = 1.5;
@@ -1176,6 +1218,7 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
     c.boss = 1; c.scale = 2.6; c.resist = 9; c.tease = true; c.dir = -1; c.hopPer = 1.4;
   }
   if (!save.tips.includes("road")) { save.tips.push("road"); writeSave(save); setTimeout(() => void showJourney(0, 0), 400); }
+  setTimeout(() => void dailyGift(), 1200);
   if (!save.tips.includes("intro") && save.catches === 0) { lvl = makeLevel("meadow", 0); lvl.left = lvl.total = 60; } else renderLevels();
   if (save.catches > 0) $("hint").classList.add("hidden");
   const coin = img("coin"), jarImg = img("jar");

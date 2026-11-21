@@ -22,6 +22,11 @@ export interface SaveData {
   giantWins?: number;
   /** what catches have added to the giant bar since the last giant (on top of the vacuum level) */
   charge?: number;
+  /** perks picked after giants (an id may repeat: they stack) */
+  perks?: string[];
+  /** the daily gift: last day claimed (yyyy-mm-dd) and the streak */
+  giftDay?: string;
+  giftStreak?: number;
   /** stars per level, per place (5 levels each) */
   stars?: Record<string, number[]>;
   /** seconds of play on the road (the speedrun clock) */
