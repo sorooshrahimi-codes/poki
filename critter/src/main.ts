@@ -267,8 +267,11 @@ function endRush() {
   save.coins += prize;
   lastRush = { seed: r.seed, score: r.score };
   writeSave(save);
-  $("resTitle").textContent = tr(r.goal === null ? "rushOver" : won ? "won" : "close");
-  $("resBody").innerHTML = `<div>🎯 <b>${r.score.toLocaleString()}</b></div>` + (r.goal !== null ? `<div>🤝 ${r.goal.toLocaleString()}</div>` : "") + `<div><small>${tf("best", { n: best.toLocaleString() })} · 🪙+${prize.toLocaleString()}</small></div>`;
+  $("resTitle").textContent = r.goal === null ? (r.score >= best ? "🏁 🏆✨" : "🏁") : won ? "🏆🎉" : "😅";
+  // you against the friend (or your best): two bars side by side say who won at a glance
+  const other = r.goal ?? best, top = Math.max(1, r.score, other);
+  const bar = (who: string, n: number, cls: string) => `<div class="vs ${cls}"><span>${who}</span><i style="width:${Math.max(4, Math.round((n / top) * 100))}%"></i><b>${n.toLocaleString()}</b></div>`;
+  $("resBody").innerHTML = bar("🙂", r.score, "me") + bar(r.goal !== null ? "🤝" : "🏆", other, "them") + `<div class="prize">${COIN} +${short(prize)}</div>`;
   $("result").classList.remove("hidden");
   sfx.reveal(won || r.goal === null ? "epic" : "rare");
   mode = "park";
@@ -285,8 +288,8 @@ async function shareRush() {
 function offerRush() {
   const seed = parseInt(urlParam("cvr"), 10), score = parseInt(urlParam("cvs"), 10);
   if (!(seed > 0) || !(score >= 0)) return;
-  $("resTitle").textContent = tr("challenged");
-  $("resBody").innerHTML = `<div>${tf("chScore", { n: `<b>${score.toLocaleString()}</b>` })}</div><div><small>${tr("chDesc")}</small></div>`;
+  $("resTitle").textContent = "🤝 🏁";
+  $("resBody").innerHTML = `<div class="vs them"><span>🤝</span><i style="width:100%"></i><b>${score.toLocaleString()}</b></div><div class="vs me"><span>🙂</span><i style="width:4%"></i><b>?</b></div><div class="prize">⏱60 · 🎯</div>`;
   shareIsPlay = true; applyLang();
   $("resShare").onclick = () => { shareIsPlay = false; applyLang(); $("resShare").onclick = () => void shareRush(); void startRush(seed, score); };
   $("result").classList.remove("hidden");
@@ -449,7 +452,8 @@ function renderMap() {
         el.classList.add("locked");
         el.innerHTML = `<div class="sign">🧪</div><div class="lockMid">🧪</div><div class="price">📖 ${Object.keys(save.index).length}/6</div><div class="prog"><i style="width:${Math.round(Object.keys(save.index).length / 6 * 100)}%"></i></div>`;
       } else {
-        const r0 = RECIPES.find((r) => !save.index[r.hybrid]) ?? RECIPES[0];
+        const ready = (r: (typeof RECIPES)[number]) => (save.index[r.a]?.count ?? 0) >= 3 && (save.index[r.b]?.count ?? 0) >= 3;
+        const r0 = RECIPES.find(ready) ?? RECIPES.find((r) => !save.index[r.hybrid]) ?? RECIPES[0];
         const ic = (id: string, sil = false) => `<img src="./art/${CRITTER_BY_ID[id].art}.webp" class="${sil ? "sil" : ""}" alt="">`;
         el.innerHTML = `<div class="sign">🧪 <small>${made.length}/${RECIPES.length}</small></div><div class="formula">${ic(r0.a, !save.index[r0.a])}<b>+</b>${ic(r0.b, !save.index[r0.b])}<b>=</b>${ic(r0.hybrid, !save.index[r0.hybrid])}</div>${can ? `<div class="badge">${can}</div>` : ""}`;
       }
@@ -567,8 +571,8 @@ function applyLang() {
   $("parkTitle").textContent = "🏡";
   $("lureBtn").textContent = "🎬 ✨";
   $("rushBtn").textContent = tr("rush");
-  $("resOk").textContent = tr("ok");
-  $("resShare").textContent = tr(shareIsPlay ? "play" : "share");
+  $("resOk").textContent = "✔";
+  $("resShare").textContent = shareIsPlay ? "🏁 ▶" : "📤 🤝";
   $("langTitle").textContent = tr("lang");
   $("langBtn").setAttribute("aria-label", tr("lang"));
   const cur = getLang();
