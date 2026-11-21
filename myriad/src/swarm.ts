@@ -19,6 +19,8 @@ precision highp float;
 uniform sampler2D uPos, uVel, uDen, uGrid, uAtlas;
 uniform vec4 uB[64];
 uniform vec4 uB2[64];
+uniform vec4 uS2[64];
+uniform vec4 uShock; // x, z, radius, strength (a stomp)
 uniform vec3 uLeader, uLeaderVel;
 uniform float uDt, uTime, uActive, uS, uWorld, uSpeed, uRep, uLift, uRadius;
 uniform vec2 uDenTexel;
@@ -78,6 +80,11 @@ void main() {
   // 5. height: a soft floor, a soft ceiling that grows with the swarm, and the flow lifts sheets into the air
   float cap = 1.5 + uRadius * 0.45 * uLift;
   vel.y += (max(0.0, 0.4 - pos.y) * 12.0 - max(0.0, pos.y - cap) * 4.0 - 0.6) * uDt;
+  // a stomp: everything close is thrown up and away
+  if (uShock.w > 0.0) {
+    vec2 dv = pos.xz - uShock.xy; float dd = length(dv);
+    if (dd < uShock.z) vel += vec3(dv / max(dd, 0.5), 1.2) * uShock.w * (1.0 - dd / uShock.z) * (0.6 + 0.8 * r.y);
+  }
   // 6. stone: mites bore into buildings like termites, eating the voxel they are in
   float w = 1.0;
   float gi = texture(uGrid, pos.xz / uWorld + 0.5).r * 255.0;
@@ -85,7 +92,7 @@ void main() {
     int b = int(gi + 0.5) - 1;
     vec4 B = uB[b], B2 = uB2[b];
     if (B.w >= 0.0) {
-      vec3 lp = (pos - vec3(B.x, 0.0, B.y)) / ${VS_W.toFixed(3)} + vec3(16.0, 0.0, 16.0);
+      vec3 lp = (pos - vec3(B.x, uS2[b].y, B.y)) / (${VS_W.toFixed(3)} * uS2[b].x) + vec3(16.0, 0.0, 16.0);
       float here = solidAt(b, ivec3(floor(lp)));
       float above = solidAt(b, ivec3(floor(lp + vec3(0.0, 1.0, 0.0))));
       if (here > 0.5) {
@@ -190,9 +197,9 @@ void main() {
   if (body <= 1.0) {
     float tail = smoothstep(0.1, -0.6, q.x);               // the glowing abdomen behind
     float head = smoothstep(0.45, 0.8, q.x);
-    c = mix(vec3(0.10, 0.07, 0.05), vCol * 1.7 * vBright, tail) * (1.0 - head * 0.6);
+    c = mix(vec3(0.10, 0.07, 0.05), vCol * 2.6 * vBright, tail) * (1.0 - head * 0.6);
   } else {
-    c = mix(vec3(0.55, 0.70, 0.80), vCol, 0.3) * (0.35 + 0.35 * vBright); // thin bright wings
+    c = mix(vec3(0.45, 0.60, 0.70), vCol, 0.4) * (0.22 + 0.25 * vBright); // thin wings
   }
   o = vec4(c, 1.0);
 }`;
@@ -229,7 +236,8 @@ export class Swarm {
   /** the blurred density: also the swarm's light on the world */
   get light() { return this.denB.tex[0]; }
 
-  step(dt: number, t: number, leader: Float32Array, leaderVel: Float32Array, active: number, speed: number, world: { grid: WebGLTexture; atlas: WebGLTexture; b: Float32Array; b2: Float32Array }) {
+  shock = new Float32Array(4);
+  step(dt: number, t: number, leader: Float32Array, leaderVel: Float32Array, active: number, speed: number, world: { grid: WebGLTexture; atlas: WebGLTexture; b: Float32Array; b2: Float32Array; s2: Float32Array }) {
     const gl = this.gl, src = this.pos[this.cur], dst = this.pos[1 - this.cur];
     gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST);
     gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb);
@@ -238,7 +246,7 @@ export class Swarm {
     gl.useProgram(this.upd.p);
     bindTex(gl, 0, src.tex[0], u.uPos); bindTex(gl, 1, src.tex[1], u.uVel); bindTex(gl, 2, this.denB.tex[0], u.uDen);
     bindTex(gl, 3, world.grid, u.uGrid); bindTex(gl, 4, world.atlas, u.uAtlas);
-    gl.uniform4fv(u.uB, world.b); gl.uniform4fv(u.uB2, world.b2);
+    gl.uniform4fv(u.uB, world.b); gl.uniform4fv(u.uB2, world.b2); gl.uniform4fv(u.uS2, world.s2); gl.uniform4fv(u.uShock, this.shock);
     gl.uniform3fv(u.uLeader, leader); gl.uniform3fv(u.uLeaderVel, leaderVel);
     gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uActive, active); gl.uniform1f(u.uS, S); gl.uniform1f(u.uWorld, WORLD);
     gl.uniform1f(u.uSpeed, speed); gl.uniform1f(u.uRep, 1.6); gl.uniform1f(u.uLift, 1.0);

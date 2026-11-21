@@ -38,7 +38,12 @@ let milestone = 0;
 function village(seed: number) {
   let a = seed;
   const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
-  const list: { x: number; z: number; kind: Kind; seed: number }[] = [];
+  const list: { x: number; z: number; kind: Kind; seed: number; scale?: number }[] = [];
+  // the first meals are right next to the seed: little stone flower bushes, a bite away
+  for (let i = 0; i < 7; i++) {
+    const a = (i / 7) * Math.PI * 2 + rnd(), r = 5 + rnd() * 4;
+    list.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, kind: 6, seed: Math.floor(rnd() * 1e6), scale: 0.38 + rnd() * 0.15 });
+  }
   for (let gz = -3; gz <= 3; gz++) for (let gx = -3; gx <= 3; gx++) {
     if (Math.abs(gx) + Math.abs(gz) <= 0) continue; // the square in the middle stays open: the seed starts there
     if (rnd() < 0.25) continue;
@@ -65,7 +70,7 @@ resize();
 addEventListener("resize", resize);
 
 // ---------------------------------------------------------------- all state preallocated (zero garbage in the loop)
-const cityLink = { grid: city.grid, atlas: city.atlas.tex[0], b: city.bArr, b2: city.b2Arr };
+const cityLink = { grid: city.grid, atlas: city.atlas.tex[0], b: city.bArr, b2: city.b2Arr, s2: city.s2Arr };
 const proj = new Float32Array(16), view = new Float32Array(16), vp = new Float32Array(16), inv = new Float32Array(16);
 const cam = new Float32Array(3), camR = new Float32Array(3), camU = new Float32Array(3);
 const leader = new Float32Array([0, 0, 0]), leaderVel = new Float32Array(3);
@@ -111,6 +116,10 @@ const CAP = Math.min(S * S, Number(params.get("n") ?? 200_000));
 const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? 300);
 let meal = 0;
+// ---------------------------------------------------------------- the stone giant: wakes when the village is mostly colour again
+const GIANT_SCALE = 2.4, GIANT_H = 32 * 0.28 * GIANT_SCALE;
+let giant = -1, giantState: "sleep" | "rise" | "walk" | "fallen" = "sleep", giantT = 0, giantY = -GIANT_H, nextStomp = 0, won = false;
+let progress = 0;
 city.onEat = (b, amount) => {
   meal += amount * 1.2; // every voxel eaten hatches new mites
   audio.eat(amount);
@@ -136,6 +145,41 @@ function frame(now: number) {
 
   if (grow && active < CAP) active = Math.min(CAP, Math.round(100 * Math.pow(2, time / 3.6)));
   if (meal >= 1) { const add = Math.floor(meal); meal -= add; active = Math.min(CAP, active + add); }
+  // district progress (also drives the goal bar)
+  { let tot = 0, eat = 0; for (let b = 0; b < city.buildings.length; b++) { if (b === giant) continue; const B = city.buildings[b]; tot += B.solid; eat += Math.min(B.solid, B.eaten); } progress = Math.min(1, (eat / Math.max(1, tot)) * 1.15); }
+  swarm.shock[3] = 0;
+  if (giant < 0 && progress >= (params.get("giant") === "1" && time > 1.5 ? 0 : 0.55)) {
+    // it rises on the far side of the swarm from the camera, so the player sees it come up out of the ground
+    const ang = Math.atan2(leader[2] - cam[2], leader[0] - cam[0]);
+    const gx = Math.max(-60, Math.min(60, leader[0] + Math.cos(ang) * 38)), gz = Math.max(-60, Math.min(60, leader[2] + Math.sin(ang) * 38));
+    giant = city.add({ x: gx, z: gz, kind: 5, seed: 4242 }, GIANT_SCALE, -GIANT_H);
+    giantState = "rise"; giantT = 0; audio.thump(1.4); shake = 1.2;
+  }
+  if (giant >= 0 && !city.gone[giant]) {
+    const G = city.buildings[giant];
+    giantT += dt;
+    if (giantState === "rise") {
+      giantY = -GIANT_H * Math.max(0, 1 - giantT / 3.2) ** 2;
+      shake = Math.max(shake, 0.5);
+      if (giantT > 3.2) { giantState = "walk"; giantY = 0; nextStomp = giantT + 1.2; }
+      city.place(giant, G.x, G.z, giantY);
+    } else if (giantState === "walk") {
+      const dx = leader[0] - G.x, dz = leader[2] - G.z, d = Math.hypot(dx, dz);
+      const step = Math.min(d, 2.4 * dt);
+      const bob = -Math.abs(Math.sin(giantT * 3.9)) * 0.5;
+      if (d > 4) city.place(giant, G.x + (dx / d) * step, G.z + (dz / d) * step, bob);
+      if (giantT >= nextStomp) {
+        nextStomp = giantT + 1.7;
+        swarm.shock[0] = G.x; swarm.shock[1] = G.z; swarm.shock[2] = 16; swarm.shock[3] = 22;
+        shake = Math.max(shake, 0.9); audio.thump(1.1);
+      }
+      if (G.eaten > G.solid * 0.55) { giantState = "fallen"; shake = 1.4; audio.thump(1.6); city.place(giant, G.x, G.z, 0); }
+    }
+  }
+  if (giant >= 0 && city.gone[giant] && !won) {
+    won = true; shake = 1; city.bloom = 3.5;
+    for (let i = 0; i < 6; i++) setTimeout(() => audio.chime(4 + i), i * 160);
+  }
   while (milestone < MILESTONES.length && active >= MILESTONES[milestone]) audio.chime(milestone++);
   audio.swarm(active, Math.hypot(leaderVel[0], leaderVel[2]));
   // the seed: to the finger, or a slow wander when nobody touches
@@ -151,9 +195,10 @@ function frame(now: number) {
 
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
   city.feed(swarm.state.tex[0], active, dt, time);
+  if (city.bloom > 0) { city.bloom -= dt; city.flood(dt * 0.45); }
 
   // camera: behind and above the seed, pulling back as the swarm grows
-  const want = 15 + Math.sqrt(active) * 0.13;
+  const want = 15 + Math.sqrt(active) * 0.13 + (giant >= 0 && giantState !== "fallen" && !city.gone[giant] ? 14 : 0);
   camD += (want - camD) * Math.min(1, dt * 1.5);
   camX += (leader[0] - camX) * Math.min(1, dt * 3); camZ += (leader[2] - camZ) * Math.min(1, dt * 3);
   // a slow orbit gives parallax: the swarm reads as a volume, not a decal
@@ -181,9 +226,9 @@ function frame(now: number) {
   if ((gov.frames & 7) === 0) {
     const txt = active >= 10000 ? `${(active / 1000).toFixed(active >= 100000 ? 0 : 1)}k` : String(active);
     if (countN.textContent !== txt) { countN.textContent = txt; countBox.classList.remove("pop"); void countBox.offsetWidth; countBox.classList.add("pop"); }
-    let tot = 0, eat = 0;
-    for (const B of city.buildings) { tot += B.solid; eat += Math.min(B.solid, B.eaten); }
-    goalFill.style.width = `${Math.min(100, (eat / Math.max(1, tot)) * 100 * 1.15).toFixed(1)}%`;
+    const tot = 0, eat = 0;
+    void tot; void eat;
+    goalFill.style.width = `${(won ? 100 : progress * 100).toFixed(1)}%`;
   }
   if (showHud && hudCanvas.style.display !== "none" && (gov.frames & 3) === 0) gov.graph(hud, `${active.toLocaleString()} mites  ${cw}x${ch} @${Math.round(tier.scale * 100)}%`);
 }

@@ -60,7 +60,13 @@ void main() {
   float glow = 1.0 - exp(-d * 0.012);
   // colour coming back: grass and flowers where the swarm has been
   float rest = (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) ? clamp(texture(uColor, uv).r, 0.0, 1.0) : 0.0;
-  vec3 grass = mix(vec3(0.30, 0.62, 0.22), vec3(0.46, 0.78, 0.28), n);
+  // living ground seen from afar: meadow colours that vary (clover, dry patches, flower drifts)
+  float m1 = vn(p * 0.12), m2 = vn(p * 0.5 + 7.0), m3 = vn(p * 2.3);
+  vec3 grass = mix(vec3(0.20, 0.48, 0.16), vec3(0.42, 0.70, 0.22), m1);
+  grass = mix(grass, vec3(0.62, 0.66, 0.30), smoothstep(0.62, 0.85, m2) * 0.6);
+  grass *= 0.82 + 0.3 * m3;
+  grass = mix(grass, vec3(0.95, 0.82, 0.35), smoothstep(0.8, 0.95, vn(p * 1.1 + 3.0)) * 0.35);
+  grass = mix(grass, vec3(0.92, 0.55, 0.80), smoothstep(0.82, 0.97, vn(p * 1.3 + 11.0)) * 0.3);
   float flower = step(0.985, h(floor(p * 2.0)));
   grass = mix(grass, mix(vec3(1.0, 0.85, 0.3), vec3(1.0, 0.45, 0.7), h(floor(p * 2.0) + 3.1)), flower);
   // the edge of the colour is ragged and alive, like paint soaking into stone

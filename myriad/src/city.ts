@@ -23,7 +23,7 @@ export const AW = 2048, AH = 1024; // atlas: 8 x 8 tiles of 256 x 128
 export const GRID = 80;
 export const COLOR = 512;
 
-export type Kind = 0 | 1 | 2 | 3 | 4; // house, tree, tower, barn, boulders
+export type Kind = 0 | 1 | 2 | 3 | 4 | 5 | 6; // house, tree, tower, barn, boulders, giant, flower bush
 export interface Building { x: number; z: number; kind: Kind; seed: number; solid: number; eaten: number; collapseAt: number; h: number; rubble?: number }
 
 // materials (index -> colour); index 0 = empty
@@ -46,10 +46,12 @@ const MATS: [number, number, number][] = [
   [0.74, 0.20, 0.14], // 15 red plank
   [0.95, 0.95, 0.90], // 16 white trim
   [0.50, 0.50, 0.47], // 17 granite
+  [1.00, 0.60, 0.15], // 18 giant's eyes
+  [0.30, 0.48, 0.22], // 19 moss
 ];
 const MAT_GLSL = `const vec3 MAT[${MATS.length}] = vec3[${MATS.length}](${MATS.map((m) => `vec3(${m.map((v) => v.toFixed(3)).join(",")})`).join(",")});`;
 // how far support carries sideways, per material (stone short, wood long, leaves on branches longest)
-const HOLD = [0, 0.86, 0.93, 0.9, 0.85, 0.92, 0.84, 0.95, 0.965, 0.965, 0.965, 0.8, 0.86, 0.85, 0.9, 0.92, 0.9, 0.82];
+const HOLD = [0, 0.86, 0.93, 0.9, 0.85, 0.92, 0.84, 0.95, 0.965, 0.965, 0.965, 0.8, 0.86, 0.85, 0.9, 0.92, 0.9, 0.9, 0.9, 0.9];
 const HOLD_GLSL = `const float HOLD[${HOLD.length}] = float[${HOLD.length}](${HOLD.map((v) => v.toFixed(3)).join(",")});`;
 
 const ATLAS = `
@@ -103,6 +105,7 @@ const MARCH_VS = `#version 300 es
 precision highp float;
 uniform mat4 uVP;
 uniform vec4 uB[${NB}];
+uniform vec4 uS2[${NB}]; // scale, y offset
 out vec3 vW;
 flat out int vB;
 const vec3 P[8] = vec3[8](vec3(0,0,0), vec3(1,0,0), vec3(1,1,0), vec3(0,1,0), vec3(0,0,1), vec3(1,0,1), vec3(1,1,1), vec3(0,1,1));
@@ -112,8 +115,9 @@ void main() {
   vec4 B = uB[b];
   vB = b;
   if (B.w < 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
-  vec3 lo = vec3(B.x - 16.0 * ${VS.toFixed(3)}, 0.0, B.y - 16.0 * ${VS.toFixed(3)});
-  vW = lo + P[I[gl_VertexID]] * 32.0 * ${VS.toFixed(3)};
+  float vs = ${VS.toFixed(3)} * uS2[b].x;
+  vec3 lo = vec3(B.x - 16.0 * vs, uS2[b].y, B.y - 16.0 * vs);
+  vW = lo + P[I[gl_VertexID]] * 32.0 * vs;
   gl_Position = uVP * vec4(vW, 1.0);
 }`;
 const MARCH_FS = `#version 300 es
@@ -121,6 +125,7 @@ precision highp float;
 uniform sampler2D uAtlas, uColor, uLight;
 uniform mat4 uVP;
 uniform vec4 uB[${NB}];
+uniform vec4 uS2[${NB}];
 uniform vec3 uCam, uSun;
 uniform float uWorld, uShadow;
 in vec3 vW;
@@ -136,8 +141,9 @@ float occ(ivec3 v) { return vox(v).r > 0.5 ? 1.0 : 0.0; }
 void main() {
   b = vB;
   vec4 B = uB[b];
-  vec3 lo = vec3(B.x - 16.0 * ${VS.toFixed(3)}, 0.0, B.y - 16.0 * ${VS.toFixed(3)});
-  vec3 ro = (uCam - lo) / ${VS.toFixed(3)}, rd = normalize(vW - uCam);
+  float vs = ${VS.toFixed(3)} * uS2[b].x;
+  vec3 lo = vec3(B.x - 16.0 * vs, uS2[b].y, B.y - 16.0 * vs);
+  vec3 ro = (uCam - lo) / vs, rd = normalize(vW - uCam);
   // enter the 32^3 box (or start inside it)
   vec3 inv = 1.0 / rd;
   vec3 t0 = (vec3(0.0) - ro) * inv, t1 = (vec3(32.0) - ro) * inv;
@@ -162,7 +168,7 @@ void main() {
   }
   if (hit.r < 0.5) discard;
   vec3 hp = ro + rd * t;
-  vec3 wp = lo + hp * ${VS.toFixed(3)};
+  vec3 wp = lo + hp * vs;
   vec4 clip = uVP * vec4(wp, 1.0);
   gl_FragDepth = clip.z / clip.w * 0.5 + 0.5;
   // material, with a per-voxel variation and a soft bevel so it reads as many small pieces
@@ -193,6 +199,7 @@ void main() {
   vec3 sky = mix(vec3(0.30, 0.28, 0.36), vec3(0.55, 0.62, 0.75), rest);
   vec3 sunC = mix(vec3(0.85, 0.72, 0.65), vec3(1.25, 1.12, 0.95), rest);
   vec3 c = base * (sky * (0.55 + 0.45 * nrm.y) * ao + sunC * diff * 0.9) * bevel + base * glow * 1.4 + vec3(1.0, 0.5, 0.15) * glow * 0.25;
+  if (int(hit.b + 0.5) == 18) c = vec3(3.0, 1.6, 0.4); // the giant's eyes burn
   float dist = length(wp - uCam);
   c = mix(c, vec3(0.20, 0.16, 0.22), smoothstep(80.0, 240.0, dist));
   o = vec4(c, 1.0);
@@ -204,6 +211,7 @@ precision highp float;
 uniform sampler2D uPos;
 uniform float uS, uMode;
 uniform vec4 uB[${NB}];
+uniform vec4 uS2[${NB}];
 ${ATLAS}
 void main() {
   int i = gl_VertexID;
@@ -212,7 +220,7 @@ void main() {
   if (p.w < 1.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   int b = int(p.w - 2.0 + 0.5);
   vec4 B = uB[b];
-  vec3 lp = (p.xyz - vec3(B.x, 0.0, B.y)) / ${VS.toFixed(3)} + vec3(16.0, 0.0, 16.0);
+  vec3 lp = (p.xyz - vec3(B.x, uS2[b].y, B.y)) / (${VS.toFixed(3)} * uS2[b].x) + vec3(16.0, 0.0, 16.0);
   ivec3 v = clamp(ivec3(floor(lp)), ivec3(0), ivec3(31));
   if (uMode < 0.5) gl_Position = vec4((vec2(atl(b, v)) + 0.5) / vec2(${AW}.0, ${AH}.0) * 2.0 - 1.0, 0.0, 1.0);
   else gl_Position = vec4((float(b) + 0.5) / ${NB}.0 * 2.0 - 1.0, 0.0, 0.0, 1.0);
@@ -246,10 +254,11 @@ export class City {
   gl: GL;
   atlas: Target; atlasB: Target; counter: Target; color: Target;
   grid: WebGLTexture; gridData = new Uint8Array(GRID * GRID);
-  march: Program; sim: Program; eat: Program; paint: Program;
+  march: Program; sim: Program; eat: Program; paint: Program; fillP: Program;
   vao: WebGLVertexArrayObject;
   buildings: Building[] = [];
   bArr = new Float32Array(NB * 4); b2Arr = new Float32Array(NB * 4);
+  s2Arr = new Float32Array(NB * 4); // per building: scale, y offset
   gone = new Uint8Array(NB);
   active = new Float32Array(NB); // seconds of physics left per building (woken by eating)
   pbo: WebGLBuffer; fence: WebGLSync | null = null; readBuf = new Float32Array(NB * 4); readAt = 0;
@@ -268,6 +277,11 @@ export class City {
     this.sim = program(gl, FULLSCREEN_VS, SIM_FS, "sim");
     this.eat = program(gl, EAT_VS, EAT_FS, "eat");
     this.paint = program(gl, PAINT_VS, PAINT_FS, "paint");
+    this.fillP = program(gl, FULLSCREEN_VS, `#version 300 es
+precision highp float;
+uniform float uAmount;
+out vec4 o;
+void main() { o = vec4(uAmount); }`, "fill");
     this.vao = gl.createVertexArray()!;
     this.pbo = gl.createBuffer()!;
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
@@ -275,7 +289,7 @@ export class City {
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
   }
 
-  build(list: { x: number; z: number; kind: Kind; seed: number }[]) {
+  build(list: { x: number; z: number; kind: Kind; seed: number; scale?: number }[]) {
     const gl = this.gl;
     const data = new Float32Array(AW * AH * 4);
     this.gridData.fill(0);
@@ -294,7 +308,8 @@ export class City {
         solid++; top = Math.max(top, y);
       }
       this.buildings.push({ x: L.x, z: L.z, kind: L.kind, seed: L.seed, solid, eaten: 0, collapseAt: -1, h: top + 1 });
-      const half = (V * VS) / 2 + 1.0;
+      this.s2Arr[b * 4] = L.scale ?? 1; this.s2Arr[b * 4 + 1] = 0;
+      const half = (V * VS * (L.scale ?? 1)) / 2 + 1.0;
       for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) {
         const wx = (gx + 0.5) / GRID * WORLD - WORLD / 2, wz = (gz + 0.5) / GRID * WORLD - WORLD / 2;
         if (Math.abs(wx - L.x) <= half && Math.abs(wz - L.z) <= half) this.gridData[gz * GRID + gx] = b + 1;
@@ -334,6 +349,7 @@ export class City {
       if (!B || this.gone[b]) { this.bArr[b * 4 + 3] = -1; this.b2Arr[b * 4] = -1; continue; }
       this.bArr[b * 4] = B.x; this.bArr[b * 4 + 1] = B.z; this.bArr[b * 4 + 2] = B.kind; this.bArr[b * 4 + 3] = B.seed % 97;
       this.b2Arr[b * 4] = -1; this.b2Arr[b * 4 + 1] = B.h;
+      if (this.s2Arr[b * 4] === 0) this.s2Arr[b * 4] = 1;
     }
   }
 
@@ -346,7 +362,7 @@ export class City {
     gl.useProgram(this.eat.p);
     const u = this.eat.u;
     bindTex(gl, 0, posTex, u.uPos);
-    gl.uniform1f(u.uS, S); gl.uniform4fv(u.uB, this.bArr);
+    gl.uniform1f(u.uS, S); gl.uniform4fv(u.uB, this.bArr); gl.uniform4fv(u.uS2, this.s2Arr);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.atlas.fb); gl.viewport(0, 0, AW, AH);
     gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT); gl.blendFunc(gl.ONE, gl.ONE);
     gl.uniform1f(u.uMode, 0); gl.uniform1f(u.uAmount, dt * 2.6);
@@ -403,7 +419,59 @@ export class City {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     this.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
   }
+  bloom = 0;
+  /** victory: colour soaks into the whole district at once */
+  flood(amount: number) {
+    const gl = this.gl;
+    gl.bindVertexArray(this.vao);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.color.fb); gl.viewport(0, 0, COLOR, COLOR);
+    gl.disable(gl.DEPTH_TEST);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(this.fillP.p); gl.uniform1f(this.fillP.u.uAmount, amount);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.disable(gl.BLEND);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
   remove(b: number) { this.gone[b] = 1; this.syncUniforms(); }
+  /** add one more volume (the giant) into a free slot, uploading only its tile */
+  add(L: { x: number; z: number; kind: Kind; seed: number }, scale: number, yOff: number): number {
+    const gl = this.gl, b = this.buildings.length;
+    if (b >= NB) return -1;
+    const vol = new Uint8Array(V * V * V), rnd = mulberry(L.seed);
+    generate(L.kind, vol, rnd);
+    const tile = new Float32Array(256 * 128 * 4);
+    let solid = 0;
+    for (let z = 0; z < V; z++) for (let y = 0; y < V; y++) for (let x = 0; x < V; x++) {
+      const m = vol[(z * V + y) * V + x]; if (!m) continue;
+      const o = (((Math.floor(z / 8) * 32 + y) * 256) + (z % 8) * 32 + x) * 4;
+      tile[o] = 1; tile[o + 1] = 1; tile[o + 2] = m; tile[o + 3] = rnd(); solid++;
+    }
+    for (const t of [this.atlas, this.atlasB]) {
+      gl.bindTexture(gl.TEXTURE_2D, t.tex[0]);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, (b % 8) * 256, Math.floor(b / 8) * 128, 256, 128, gl.RGBA, gl.FLOAT, tile);
+    }
+    this.buildings.push({ x: L.x, z: L.z, kind: L.kind, seed: L.seed, solid, eaten: 0, collapseAt: -1, h: 32 });
+    this.s2Arr[b * 4] = scale; this.s2Arr[b * 4 + 1] = yOff;
+    this.syncUniforms();
+    this.place(b, L.x, L.z, yOff);
+    return b;
+  }
+  /** move a volume (the walking giant): update its position and its cells in the lookup grid */
+  place(b: number, x: number, z: number, yOff: number) {
+    const B = this.buildings[b];
+    const sc = this.s2Arr[b * 4] || 1;
+    const half = (V * VS * sc) / 2 + 1.0;
+    for (let i = 0; i < this.gridData.length; i++) if (this.gridData[i] === b + 1) this.gridData[i] = 0;
+    B.x = x; B.z = z;
+    for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) {
+      const wx = (gx + 0.5) / GRID * WORLD - WORLD / 2, wz = (gz + 0.5) / GRID * WORLD - WORLD / 2;
+      if (Math.abs(wx - x) <= half && Math.abs(wz - z) <= half) this.gridData[gz * GRID + gx] = b + 1;
+    }
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, this.grid);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GRID, GRID, gl.RED, gl.UNSIGNED_BYTE, this.gridData);
+    this.bArr[b * 4] = x; this.bArr[b * 4 + 1] = z; this.s2Arr[b * 4 + 1] = yOff;
+  }
 
   draw(vp: Float32Array, cam: Float32Array, light: WebGLTexture) {
     const gl = this.gl, u = this.march.u;
@@ -413,7 +481,7 @@ export class City {
     gl.useProgram(this.march.p);
     bindTex(gl, 0, this.atlas.tex[0], u.uAtlas); bindTex(gl, 1, this.color.tex[0], u.uColor); bindTex(gl, 2, light, u.uLight);
     gl.uniformMatrix4fv(u.uVP, false, vp);
-    gl.uniform4fv(u.uB, this.bArr);
+    gl.uniform4fv(u.uB, this.bArr); gl.uniform4fv(u.uS2, this.s2Arr);
     gl.uniform3fv(u.uCam, cam); gl.uniform3f(u.uSun, -0.45, 0.78, 0.43); gl.uniform1f(u.uWorld, WORLD); gl.uniform1f(u.uShadow, this.shadows ? 1 : 0);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, this.buildings.length);
     gl.disable(gl.CULL_FACE);
@@ -504,6 +572,27 @@ function generate(kind: Kind, vol: Uint8Array, rnd: () => number) {
       }
     }
     for (let y = 1; y <= 5; y++) for (let z = 24; z <= 30; z++) for (let x = 20; x <= 29; x++) if (rnd() < 0.85 && (x - 24.5) ** 2 + (y * 1.6) ** 2 + (z - 27) ** 2 < 30) set(x, y, z, 11); // a hay pile
+  } else if (kind === 5) { // the stone giant: legs, a heavy torso, hanging arms, a head with burning eyes, moss
+    const box = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, m: number) => {
+      for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) set(x, y, z, rnd() < 0.12 ? 19 : rnd() < 0.5 ? 17 : 6);
+      void m;
+    };
+    box(9, 13, 0, 10, 13, 18, 17); box(18, 22, 0, 10, 13, 18, 17);           // legs
+    box(8, 23, 11, 22, 11, 20, 17);                                          // torso
+    box(3, 7, 9, 22, 13, 18, 17); box(24, 28, 9, 22, 13, 18, 17);            // arms
+    box(2, 7, 7, 10, 12, 19, 17); box(24, 29, 7, 10, 12, 19, 17);            // fists
+    box(11, 20, 23, 30, 12, 20, 17);                                         // head
+    for (let x = 12; x <= 14; x++) for (let y = 26; y <= 27; y++) set(x, y, 11, 18);
+    for (let x = 17; x <= 19; x++) for (let y = 26; y <= 27; y++) set(x, y, 11, 18);
+    // carve a little shape into the blocks (shoulders, a brow)
+    for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) { set(x, 31, z, 0); if ((x === 8 || x === 23) && z % 3 === 0) set(x, 22, z, 0); }
+  } else if (kind === 6) { // a flower bush: a mound of leaves with big blossoms (seen small: scale ~0.45)
+    const c = 15.5;
+    for (let y = 0; y < 22; y++) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) {
+      const d = Math.sqrt((x - c) ** 2 + ((y - 6) * 1.25) ** 2 + (z - c) ** 2);
+      if (d < 12 + (rnd() - 0.5) * 2.5 && y < 18) set(x, y, z, rnd() < 0.16 ? 10 : rnd() < 0.08 ? 13 : rnd() < 0.5 ? 9 : 8);
+    }
+    for (let y = 0; y < 4; y++) for (let z = 14; z <= 17; z++) for (let x = 14; x <= 17; x++) set(x, y, z, 7);
   } else { // boulders
     for (let i = 0; i < 3; i++) {
       const cx = 8 + rnd() * 16, cz = 8 + rnd() * 16, r = 4 + rnd() * 4;
