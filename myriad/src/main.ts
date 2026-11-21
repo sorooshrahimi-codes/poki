@@ -12,7 +12,8 @@ const canvas = document.getElementById("gl") as HTMLCanvasElement;
 const hudCanvas = document.getElementById("hud") as HTMLCanvasElement;
 const hud = hudCanvas.getContext("2d")!;
 const params = new URLSearchParams(location.search);
-const showHud = params.get("hud") === "1" || import.meta.env.MODE === "qa" && params.get("hud") !== "0";
+// test phase: the frame-time chart is on by default (H toggles it); the Poki build will hide it
+const showHud = params.get("hud") !== "0";
 hudCanvas.style.display = showHud ? "block" : "none";
 
 const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, depth: true, powerPreference: "high-performance", preserveDrawingBuffer: false })!;
