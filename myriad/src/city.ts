@@ -651,7 +651,7 @@ function generate(kind: Kind, vol: Uint8Array, rnd: () => number) {
     for (let y = 0; y < capY; y++) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) if ((x - c) ** 2 + (z - c) ** 2 <= (3.2 - y * 0.04) ** 2) set(x, y, z, 22);
     for (let y = capY; y < V; y++) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) {
       const r = Math.hypot(x - c, z - c), top = 13.5 * Math.sqrt(Math.max(0, 1 - ((y - capY) / (V - capY)) ** 2));
-      if (r <= top && (r > top - 2.6 || y >= V - 2 - (r / 13.5) * 6)) set(x, y, z, rnd() < 0.1 ? 21 : 20);
+      if (r <= top) set(x, y, z, y < capY + 2 ? 22 : rnd() < 0.1 ? 21 : 20); // a solid cap (hollow ones cannot hold their rim)
     }
   } else if (kind === 8) { // a pine: layered cones on a trunk (snow on the tiers in the snow lands)
     const c = 15.5;
