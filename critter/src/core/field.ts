@@ -180,7 +180,8 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
     for (const c of f.critters) {
       if (c.state === "caught" || c.hidden) continue;
       const bx = c.x, by = c.y - c.lift - c.def.size * c.scale * 0.4 * depthK(f, c.y);
-      const d = Math.hypot(bx - inp.x, by - inp.y) * (c.state === "tug" ? 0.4 : c.state === "pulled" ? 0.6 : 1);
+      // the giant is big: aiming anywhere on its body counts, and it wins over the little ones crowding around it
+      const d = Math.max(0, Math.hypot(bx - inp.x, by - inp.y) - (c.boss > 0 ? c.def.size * c.scale * 0.4 : 0)) * (c.state === "tug" ? 0.4 : c.state === "pulled" ? 0.6 : 1) * (c.boss > 0 ? 0.3 : 1);
       if (d < bd) { bd = d; best = c; }
     }
     if (best && bd < 90) {

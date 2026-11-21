@@ -3,6 +3,7 @@
 Files in this folder:
 - `thumb_628.jpg`: square thumbnail (628 x 628)
 - `thumb_1280x720.jpg`: wide thumbnail / banner (1280 x 720)
+- `trailer_1280x720.mp4` / `trailer_540x960.mp4`: 22-second gameplay clips of the giant moment (no sound; recorded from the real game)
 - The game build: `critter-vac-poki.zip` in the repository root (contents of `critter/dist`)
 
 ## Title

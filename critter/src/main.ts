@@ -819,6 +819,7 @@ function updateUi() {
     return [`<span class="step${own ? " own" : ""}${b.id === save.biome ? " here" : ""}">${b.icon}${b.id === save.biome ? '<img class="you" src="./art/kid_vac.webp" alt="">' : ""}</span>`, g ? `<span class="step g${done ? " done" : own ? " own" : ""}">${giantImg(g.id, done ? "" : "sil")}${done ? "<i>✔</i>" : ""}</span>` : ""];
   }).filter(Boolean).join("<em>━</em>");
   $("rushBtn").textContent = "🏁⏱" + (save.rushBest ? ` 🏆${short(save.rushBest)}` : "");
+  $("rushBtn2").innerHTML = "🏁" + (save.rushBest ? `<small class="best">🏆${short(save.rushBest)}</small>` : "");
   if (mode === "park") renderMap();
   if (sheet) renderParkGrid();
   renderNest();

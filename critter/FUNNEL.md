@@ -71,4 +71,4 @@ Done: giant moment, giant thumbnail, promo text, sound pass, road to the Moon (6
 1. Second-by-second check in a real playthrough (timings above are from the pacing simulator).
 2. Rush: a visible best-score ribbon and a "beat my score" link right after a good run.
 3. (done) **Sound pass:** one consistent sound palette (soft, toy-like); clear roles: suction loop that follows the wind strength, a "pop" per catch rising in pitch with the combo, coin sparkles, a deep rumble when a giant wakes, the finale pop and burp; music that steps up during a giant fight and calms afterwards; a mix check so nothing is louder than the catch sounds; mute remembered.
-4. Trailer: a 20-second capture of the giant moment for the Poki page.
+4. (done, first cut) Trailer: 22-second clips of the giant moment in promo/. A polished version with music, a title card and close-ups would be better.
