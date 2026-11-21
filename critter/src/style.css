@@ -616,3 +616,12 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 @keyframes slideL { from { transform: translateX(-60vw); } }
 @keyframes slideR { from { transform: scaleX(-1) translateX(-60vw); } }
 #race.flash { animation: pulse .5s 6; filter: drop-shadow(0 0 8px #ffe066); }
+#levels.wide { left: 50%; translate: -50% 0; width: min(100%, 980px); }
+@media (orientation: landscape) and (max-height: 600px) {
+  #levels.wide { top: 64px; bottom: 54px; }
+  #levels.wide .node { width: 52px; height: 52px; } #levels.wide .node .ni { font-size: 22px; } #levels.wide .node .ni img { width: 30px; height: 30px; }
+  #levels.wide .node.giant { width: 70px; height: 70px; } #levels.wide .node.giant img.gi { width: 54px; height: 54px; }
+  #levels.wide .node .ns { bottom: -13px; font-size: 12px; }
+  #levels .placeTag { font-size: 28px; }
+}
+#levels.wide { left: 0; right: 0; translate: none; margin: 0 auto; width: auto; max-width: 980px; }

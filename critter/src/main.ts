@@ -57,7 +57,7 @@ window.addEventListener("pointerup", () => { input.on = false; });
 window.addEventListener("pointercancel", () => { input.on = false; });
 window.addEventListener("keydown", (e) => { if (e.key === " ") { input.on = true; firstTouch(); } });
 window.addEventListener("keyup", (e) => { if (e.key === " ") input.on = false; });
-window.addEventListener("resize", () => { view.resize(); sizeField(field, view.W, view.H); });
+window.addEventListener("resize", () => { view.resize(); sizeField(field, view.W, view.H); if (!$("levels").classList.contains("hidden")) renderLevels(); });
 
 let started = false;
 function firstTouch() {
@@ -1065,9 +1065,14 @@ async function toMap() {
 }
 let mapKidAt: number | null = null, mapKidPlace: BiomeId | null = null;
 /** the place's map: two levels, a fork (the normal way or the risky way), one more level, the giant */
-const NODE_POS: Record<number, [number, number]> = { 0: [24, 88], 1: [50, 74], 2: [22, 57], 3: [22, 38], 5: [78, 57], 6: [78, 38], 4: [50, 24], 7: [50, 6] };
+const NODE_TALL: Record<number, [number, number]> = { 0: [24, 88], 1: [50, 74], 2: [22, 57], 3: [22, 38], 5: [78, 57], 6: [78, 38], 4: [50, 24], 7: [50, 6] };
+/** on wide screens the same map runs left to right */
+const NODE_WIDE: Record<number, [number, number]> = { 0: [6, 62], 1: [20, 50], 2: [36, 24], 3: [54, 24], 5: [36, 78], 6: [54, 78], 4: [70, 50], 7: [88, 46] };
+let NODE_POS = NODE_TALL;
 const LINKS: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 4], [1, 5], [5, 6], [6, 4], [4, 7]];
 function renderLevels() {
+  NODE_POS = innerWidth > innerHeight ? NODE_WIDE : NODE_TALL;
+  $("levels").classList.toggle("wide", NODE_POS === NODE_WIDE);
   const b = save.biome, st = starsOf(b), box = $("levels"), br = branch(b);
   const order = [0, 1, ...(br === "b" ? [5, 6] : br === "a" ? [2, 3] : [2, 5]), 4];
   const next = order.find((i) => nodeOpen(b, i) && st[i] === 0);
