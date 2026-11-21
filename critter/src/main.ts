@@ -55,7 +55,7 @@ canvas.addEventListener("pointerdown", (e) => {
 window.addEventListener("pointermove", (e) => { if (input.on || e.pointerType === "mouse") aimAt(e); });
 window.addEventListener("pointerup", () => { input.on = false; });
 window.addEventListener("pointercancel", () => { input.on = false; });
-window.addEventListener("keydown", (e) => { if (e.key === " ") { input.on = true; firstTouch(); } });
+window.addEventListener("keydown", (e) => { if (e.key === " " || e.key.startsWith("Arrow")) e.preventDefault(); if (e.key === " ") { input.on = true; firstTouch(); } });
 window.addEventListener("keyup", (e) => { if (e.key === " ") input.on = false; });
 window.addEventListener("resize", () => { view.resize(); sizeField(field, view.W, view.H); if (!$("levels").classList.contains("hidden")) renderLevels(); });
 
@@ -94,7 +94,7 @@ function handleEvents() {
       const isNew = !rush && !save.index[c.def.id];
       if (!rush) { const en = (save.index[c.def.id] ??= { count: 0, muts: [] }); en.count++; if (c.mut && !en.muts.includes(c.mut)) en.muts.push(c.mut); }
       // quick catches in a row build a chain: each link adds a quarter more coins
-      combo = t - lastCatch < 1.7 + 0.5 * perkN("combo") ? combo + 1 : 1;
+      combo = t - lastCatch < 2.1 + 0.5 * perkN("combo") ? combo + 1 : 1;
       lastCatch = t;
       const airborne = (c.launch ?? 0) > 0;
       let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up) * (1 + 0.25 * perkN("coins"))) * (airborne ? 2 : 1) * (field.frenzy > 0 ? 2 : 1) * (c.kind === "treasure" ? 12 : 1) * (field.twist === "big" ? 2 : 1) * (rush ? 1 : (1 + 1.5 * lapNow()) * (1 + 0.12 * homeStage())));
@@ -388,7 +388,6 @@ async function nextPlace() {
   const fromI = BIOMES.findIndex((b) => b.id === field.biome);
   void ng; syncRoad();
   busy = true;
-  await commercialBreak();
   const toI = BIOMES.findIndex((b) => b.id === save.biome);
   if (lapNow() > 0 && !save.tips.includes(`night${lapNow()}`)) { save.tips.push(`night${lapNow()}`); writeSave(save); toast(`🌙 ➜ 🌃 ★${lapNow() + 1}`, 3200); }
   if (toI !== fromI) {
@@ -525,7 +524,10 @@ function showLaunch() {
     box.classList.remove("hidden"); input.on = false;
     sfx.rumble(); view.shake = 14;
     setTimeout(() => { box.querySelector(".r")!.setAttribute("src", "./art/rocket_fly.webp"); box.classList.add("go"); sfx.reveal("legendary"); }, 1400);
-    setTimeout(() => { box.classList.add("hidden"); box.classList.remove("go"); done(); }, 4200);
+    let over = false;
+    const end = () => { if (over) return; over = true; box.classList.add("hidden"); box.classList.remove("go"); box.onclick = null; done(); };
+    setTimeout(() => { box.onclick = end; }, 600);
+    setTimeout(end, 4200);
   });
 }
 /** the dream: a night in the kid's room, the Moon in the window, and a thought: the Moon, in my vacuum */
@@ -535,7 +537,10 @@ function showDream() {
     box.innerHTML = `<img class="art" src="./art/intro_dream.webp" alt=""><div class="bubble"><i></i><i></i><div class="b"><img class="m" src="./art/bigmoon.webp" alt=""><img class="v" src="./art/kid_vac_suck.webp" alt=""></div></div><div class="tap">👆</div>`;
     box.classList.remove("hidden");
     setTimeout(() => sfx.reveal("epic"), 900);
-    setTimeout(() => { box.onclick = () => { box.classList.add("hidden"); box.onclick = null; done(); }; }, 1600);
+    let over = false;
+    const end = () => { if (over) return; over = true; box.classList.add("hidden"); box.onclick = null; done(); };
+    setTimeout(() => { box.onclick = end; }, 700);
+    setTimeout(end, 2400); // straight on into play, even without a tap
   });
 }
 
@@ -1089,7 +1094,7 @@ function makeLevel(b: BiomeId, idx: number): Level {
   const task: Task = idx === 7 ? "giant" : idx === 5 ? "bonus" : hard ? (["any", "species", "golden"] as Task[])[k % 3] : idx === 2 ? own : idx === 3 ? (own === "combo" ? "golden" : k % 2 ? "combo" : "golden") : LEVEL_TASKS[Math.min(4, idx)];
   const commons = critterOf(b).filter((d) => d.rarity === "common");
   const target = task === "species" ? commons[(k + idx) % commons.length].id : null;
-  const goal0 = task === "bonus" ? 8 + k * 2 : task === "bush" ? 8 + k : task === "slide" ? 10 + k : task === "sticky" ? 6 + k : task === "lava" ? 10 + k : task === "float" ? 10 + k : task === "any" ? (k ? 11 + k * 3 : 8) : task === "species" ? 7 + k : task === "combo" ? 6 + (k >= 2 ? 1 : 0) : task === "golden" ? 7 + k : task === "rival" ? 18 + k * 3 : 1;
+  const goal0 = task === "bonus" ? 8 + k * 2 : task === "bush" ? 8 + k : task === "slide" ? 10 + k : task === "sticky" ? 6 + k : task === "lava" ? 10 + k : task === "float" ? 10 + k : task === "any" ? (k ? 11 + k * 3 : 8) : task === "species" ? 7 + k : task === "combo" ? (k === 0 ? 4 : 6 + (k >= 2 ? 1 : 0)) : task === "golden" ? 7 + k : task === "rival" ? 18 + k * 3 : 1;
   const total = task === "giant" ? 0 : task === "bonus" ? 30 : task === "golden" ? 35 : task === "rival" ? 55 : MISS_TASKS.includes(task) || task === "bush" || task === "sticky" ? 55 : idx === 0 ? 60 : 45;
   const goal = Math.round((hard ? goal0 * 1.6 : goal0) * (1 + 0.12 * Math.min(4, lapNow())));
   const more = task === "giant" ? 0 : 8 * perkN("time");
@@ -1111,6 +1116,8 @@ async function startLevel(b: BiomeId, idx: number) {
     if (g.biome !== b || barPower() < g.need) { sfx.nope(); const fh = $("levels").querySelector(".node.giant"); fh?.classList.remove("nope"); void (fh as HTMLElement | null)?.offsetWidth; fh?.classList.add("nope"); return; }
   }
   $("levels").classList.add("hidden");
+  // Poki's natural break: from the map back into play (Poki decides whether an ad actually shows; never before the first catches)
+  if (save.catches > 20) { busy = true; input.on = false; await commercialBreak(); busy = false; }
   lvl = makeLevel(b, idx);
   field = newField(view.W, view.H, save.up, b); field.script = 2;
   field.favor = lvl.target; field.rivalFast = lvl.task === "rival"; applyPerks(field);
@@ -1173,7 +1180,6 @@ async function meetRival() {
 }
 async function toMap() {
   lvl = null; mode = "field";
-  busy = true; await commercialBreak(); busy = false;
   if (save.catches >= 10) await queued(meetRival);
   syncRoad();
   if (field.biome !== save.biome || field.critters.length === 0) { field = newField(view.W, view.H, save.up, save.biome); field.script = 2; for (let i = 0; i < 5; i++) spawn(field, rng); }
@@ -1409,6 +1415,7 @@ function frame(now: number) {
     field.eventsOn = !!lvl && !lvl.done && lvl.task !== "giant" && (save.catches >= 8 || lvl.task === "bonus");
     field.rivalOn = !!lvl && !lvl.done && (save.catches >= 10 || lvl.task === "rival") && lvl.task !== "giant" && lvl.task !== "golden";
     const playing = !!lvl && !lvl.done && !overlayOpen();
+    if (started && !busy) { if (playing) gameplayStart(); else gameplayStop(); }
     if (playing && !document.hidden && started) save.playTime = (save.playTime ?? 0) + dt;
     if (playing && lvl!.total) { lvl!.left -= dt; if (lvl!.left <= 0) { lvl!.left = 0; endLevel(lvl!.task === "bonus" || (lvl!.task === "rival" && lvl!.stolen < 3 && lvl!.count >= lvl!.goal)); } }
     if (!playing) input.on = false;
@@ -1455,7 +1462,7 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
   }
   if (!save.tips.includes("road")) {
     save.tips.push("road"); writeSave(save);
-    void (async () => { await showDream(); await showWorld({ walkFrom: 0 }); })();
+    void (async () => { await showDream(); const w = showWorld({ walkFrom: 0 }); setTimeout(() => (document.querySelector("#world .pin.here") as HTMLElement | null)?.click(), 1500); await w; })();
   }
   setTimeout(() => void queued(dailyGift), 1200);
   if (!save.tips.includes("intro") && save.catches === 0) { lvl = makeLevel("meadow", 0); lvl.left = lvl.total = 60; } else renderLevels();
@@ -1467,7 +1474,7 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
   requestAnimationFrame((n) => { last = n; requestAnimationFrame(frame); });
 });
 // test handle for automated checks (harmless in production)
-(window as unknown as { __cv: unknown }).__cv = {
+if (import.meta.env.MODE === "qa") (window as unknown as { __cv: unknown }).__cv = {
   field: () => field, save,
   spawn: (id: string, opt: { mut?: "gold" | "rainbow" | "giant" | null; boss?: boolean; x?: number } = {}) => {
     const c = spawn(field, rng, { def: CRITTER_BY_ID[id], mut: opt.mut ?? null, x: opt.x });

@@ -115,4 +115,5 @@ def compose(W, H, layout):
 os.makedirs(OUT, exist_ok=True)
 compose(1280, 720, {"bgY": 0.47, "kidH": 0.62, "kidX": 0.03, "kidB": 0.04, "giantH": 0.9, "gap": 0.035, "giantUp": 0.06}).save(os.path.join(OUT, "thumb_1280x720.jpg"), quality=90)
 compose(628, 628, {"bgY": 0.55, "kidH": 0.44, "kidX": 0.0, "kidB": 0.03, "giantH": 0.52, "gap": -0.02, "giantUp": 0.1}).save(os.path.join(OUT, "thumb_628.jpg"), quality=90)
+compose(1080, 1080, {"bgY": 0.64, "kidH": 0.56, "kidX": -0.03, "kidB": 0.02, "giantH": 0.66, "gap": -0.06, "giantUp": 0.06}).save(os.path.join(OUT, "thumb_1080.jpg"), quality=92)
 print("ok")
