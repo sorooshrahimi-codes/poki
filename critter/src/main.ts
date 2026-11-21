@@ -868,8 +868,8 @@ function makeLevel(b: BiomeId, idx: number): Level {
   const k = placeIndex(b), task = idx >= 5 ? "giant" : LEVEL_TASKS[idx];
   const commons = critterOf(b).filter((d) => d.rarity === "common");
   const target = task === "species" ? commons[(k + idx) % commons.length].id : null;
-  const goal = task === "any" ? 8 + k * 2 : task === "species" ? 5 + k : task === "combo" ? 5 + Math.min(4, k) : task === "golden" ? 4 + k : task === "rival" ? 10 + k * 2 : 1;
-  const total = task === "giant" ? 0 : task === "golden" ? 35 : task === "rival" ? 55 : 45;
+  const goal = task === "any" ? (k ? 11 + k * 3 : 8) : task === "species" ? 7 + k : task === "combo" ? 6 + (k >= 2 ? 1 : 0) : task === "golden" ? 7 + k : task === "rival" ? 18 + k * 3 : 1;
+  const total = task === "giant" ? 0 : task === "golden" ? 35 : task === "rival" ? 55 : idx === 0 ? 60 : 45;
   return { biome: b, idx, task, goal, count: 0, left: total, total, stolen: 0, target, done: false };
 }
 /** what the level asks for, as a picture: the icon (or the critter), the count and the goal */
