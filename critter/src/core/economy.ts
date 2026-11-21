@@ -5,7 +5,7 @@ export type Upgrades = Record<UpgradeId, number>;
 export const UPGRADES: Record<UpgradeId, { max: number; cost: (l: number) => number; icon: string }> = {
   power: { max: 70, cost: (l) => Math.round(40 * Math.pow(1.5, l)), icon: "💨" },
   range: { max: 50, cost: (l) => Math.round(60 * Math.pow(1.55, l)), icon: "📏" },
-  tank: { max: 50, cost: (l) => Math.round(90 * Math.pow(1.62, l)), icon: "🫙" },
+  tank: { max: 50, cost: (l) => Math.round(90 * Math.pow(1.62, l)), icon: "💰" },
 };
 export const UPGRADE_ORDER: UpgradeId[] = ["power", "range", "tank"];
 export const upgradeCost = (u: Upgrades, id: UpgradeId) => (u[id] >= UPGRADES[id].max ? null : UPGRADES[id].cost(u[id]));
@@ -16,7 +16,10 @@ export const power = (u: Upgrades) => 170 + 22 * u.power;
 export const range = (u: Upgrades) => 125 + 11 * u.range;
 /** half-angle of the cone (radians) */
 export const CONE = 0.42;
-export const tankSize = (u: Upgrades) => 8 + u.tank;
+/** no jar any more: catches pay at once (kept so old callers still work) */
+export const tankSize = (_u: Upgrades) => 1e9;
+/** the third upgrade: every catch is worth more */
+export const valueMult = (u: Upgrades) => 1 + 0.15 * u.tank;
 /** coins for each critter caught, on top of park income */
 export const catchCoins = (income: number, mult: number) => Math.max(1, Math.round(income * 2 * mult));
 /** offline park income stops after this long */

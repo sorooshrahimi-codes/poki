@@ -2,7 +2,7 @@
 // buys the cheapest upgrade, unlocks the forest when it can. Prints the numbers that decide whether the loop feels good.
 //   node tools/sim.ts [sessions=60] [minutes=15]
 import { newField, resetBossClock, stepField } from "../src/core/field.ts";
-import { UPGRADE_ORDER, upgradeCost, vacLevel, type Upgrades } from "../src/core/economy.ts";
+import { UPGRADE_ORDER, upgradeCost, vacLevel, valueMult, type Upgrades } from "../src/core/economy.ts";
 import { makeRng } from "../src/core/rng.ts";
 import { BIOMES, CRITTERS, MUTATIONS, STAR_MULT, catchCoinsOf, giantStep, starOf } from "../src/data/critters.ts";
 import type { BiomeId } from "../src/core/types.ts";
@@ -29,11 +29,12 @@ for (let n = 0; n < SESSIONS; n++) {
   let firstGiant = -1, wins = 0;
   const coinsAt: number[] = [];
   const income = () => CRITTERS.reduce((a, d) => a + d.income * STAR_MULT[starOf(index[d.id] ?? 0)], 0);
+  let fld: ReturnType<typeof newField> | null = null;
   while (t < MINUTES * 60) {
     { const g0 = giantStep(wins); if (g0.biome !== biome && owned.includes(g0.biome) && vacLevel(up) >= g0.need) biome = g0.biome; }
-    const f = newField(360, 640, up, biome);
-    if (t > 0) f.script = 2;
-    f.nozzle = { x: 110, y: 640 * 0.8 };
+    // one continuous field per place (the game no longer leaves it for a park)
+    if (!fld || fld.biome !== biome) { fld = newField(360, 640, up, biome); if (t > 0) fld.script = 2; fld.nozzle = { x: 110, y: 640 * 0.8 }; }
+    const f = fld;
     const g = giantStep(wins);
     if (g.biome !== biome && owned.includes(g.biome) && vacLevel(up) >= g.need) biome = g.biome;
     if (g.biome === biome) f.giant = { id: g.id, ready: vacLevel(up) >= g.need, resist: g.resist, scale: g.scale };
@@ -42,7 +43,8 @@ for (let n = 0; n < SESSIONS; n++) {
     // one visit: catch until the jar is full (or 90 s pass)
     let v = 0;
     let nextBiome: BiomeId | null = null;
-    while ((f.jar < f.cap || f.critters.some((c) => c.boss > 0 && c.state !== "caught")) && v < 120) {
+    // one stretch of play between looks at the upgrade buttons
+    while (v < 8 || f.critters.some((c) => c.boss > 0 && c.state !== "caught")) {
       // a person re-aims a few times a second, at the nearest critter, with some wobble
       holdT -= DT;
       if (holdT <= 0) {
@@ -55,7 +57,7 @@ for (let n = 0; n < SESSIONS; n++) {
       const on = f.critters.some((c) => !c.hidden && c.state !== "caught");
       stepField(f, DT, { on, x: aimX, y: aimY }, up, rng);
       for (const e of f.ev) {
-        if (e.kind === "caught") { jar.push(e.c.def.id); coins += catchCoinsOf(e.c.def, MUTATIONS.find((m) => m.id === e.c.mut)?.mult ?? 1); if (e.c.resist > 1.5) tugWon++; }
+        if (e.kind === "caught") { index[e.c.def.id] = (index[e.c.def.id] ?? 0) + 1; coins += catchCoinsOf(e.c.def, MUTATIONS.find((m) => m.id === e.c.mut)?.mult ?? 1) * valueMult(up); if (e.c.resist > 1.5) tugWon++; if (firstJar < 0 && Object.values(index).reduce((a, b) => a + b, 0) >= 8) firstJar = t; }
         if (e.kind === "tug") tugs++;
         if (e.kind === "caught" && e.c.boss > 0) {
           bosses++; wins++; winT.push(t);
@@ -71,9 +73,7 @@ for (let n = 0; n < SESSIONS; n++) {
       v += DT; t += DT;
       coins += income() * DT;
     }
-    if (firstJar < 0) firstJar = t;
-    for (const id of jar) index[id] = (index[id] ?? 0) + 1;
-    t += 6; coins += income() * 6; // walk to the park, look around, buy
+    t += 0.5; coins += income() * 0.5; // a tap on an upgrade
     if (nextBiome) biome = nextBiome;
     for (;;) {
       const o = UPGRADE_ORDER.map((id) => ({ id, c: upgradeCost(up, id) })).filter((x) => x.c !== null).sort((a, b) => a.c! - b.c!)[0];
@@ -88,7 +88,7 @@ for (let n = 0; n < SESSIONS; n++) {
   res.push({ frost, firstJar, forest, coins: coinsAt, buys, income: Math.round(income()), species: Object.keys(index).length, tugs, tugWon });
 }
 console.log(`Critter Vac sim: ${SESSIONS} sessions x ${MINUTES} min`);
-console.log(`first full jar    median ${fmt(median(res.map((r) => r.firstJar)))}  (target 0:15-1:00: the first reward comes fast)`);
+console.log(`8 catches         median ${fmt(median(res.map((r) => r.firstJar)))}  (target 0:15-1:00: the first reward comes fast)`);
 console.log(`first giant       median ${fmt(median(giants))}  (target 2:00-4:00: the goal is proven early)`);
 console.log(`forest unlocked   median ${fmt(median(res.map((r) => r.forest)))}, ${Math.round((res.filter((r) => r.forest >= 0).length / SESSIONS) * 100)}% of sessions (= first giant)`);
 console.log(`frost unlocked    median ${fmt(median(res.map((r) => r.frost)))}, ${Math.round((res.filter((r) => r.frost >= 0).length / SESSIONS) * 100)}% of sessions (= second giant, target 7:00-10:00)`);

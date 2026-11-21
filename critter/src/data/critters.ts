@@ -123,8 +123,8 @@ export const catchCoinsOf = (d: CritterDef, mult: number) => Math.max(1, Math.ro
 export interface GiantDef { biome: BiomeId; id: string; need: number; resist: number }
 export const GIANTS: GiantDef[] = [
   { biome: "meadow", id: "honeyblob", need: 12, resist: 2.4 },
-  { biome: "forest", id: "barkbear", need: 42, resist: 3.4 },
-  { biome: "frost", id: "glacier", need: 62, resist: 4.4 },
+  { biome: "forest", id: "barkbear", need: 46, resist: 3.4 },
+  { biome: "frost", id: "glacier", need: 66, resist: 4.4 },
 ];
 export const giantOf = (b: BiomeId) => GIANTS.find((g) => g.biome === b) ?? null;
 

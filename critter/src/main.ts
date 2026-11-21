@@ -7,7 +7,7 @@ import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tank
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
 import { GIANTS, giantOf, giantStep } from "./data/critters.ts";
-import { vacLevel } from "./core/economy.ts";
+import { vacLevel, valueMult } from "./core/economy.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
 import type { BiomeId } from "./core/types.ts";
@@ -26,7 +26,7 @@ let field: Field = newField(view.W, view.H, save.up, save.biome);
 let parkBiome: BiomeId = save.biome;
 let mode: "field" | "park" | "rush" = "field";
 /** the 60-second race: a seeded field, a fixed vacuum, a score to beat */
-const RUSH_UP = { power: 6, range: 5, tank: 999 };
+const RUSH_UP = { power: 6, range: 5, tank: 0 };
 let rush: { seed: number; left: number; score: number; goal: number | null } | null = null;
 let rushRng = makeRng(1);
 /** what is in the jar right now (species and mutation of each critter) */
@@ -80,11 +80,13 @@ function handleEvents() {
   for (const e of field.ev) {
     if (e.kind === "caught") {
       const c = e.c, mult = MUTATIONS.find((m) => m.id === c.mut)?.mult ?? 1;
-      jar.push({ id: c.def.id, mut: c.mut });
+      // every catch goes straight into the book: a new species is celebrated, a repeat makes it stronger
+      const isNew = !rush && !save.index[c.def.id];
+      if (!rush) { const en = (save.index[c.def.id] ??= { count: 0, muts: [] }); en.count++; if (c.mut && !en.muts.includes(c.mut)) en.muts.push(c.mut); }
       // quick catches in a row build a chain: each link adds a quarter more coins
       combo = t - lastCatch < 1.7 ? combo + 1 : 1;
       lastCatch = t;
-      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25));
+      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up)));
       if (c.boss > 0) coins += Math.round(c.def.income * 60);
       if (rush) rush.score += coins; else { save.coins += coins; save.catches++; }
       if (combo >= 3) { view.text(field.nozzle.x + 70 * field.kid.face, field.nozzle.y - 70, `🔥×${combo}`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo)); sfx.coin(combo); }
@@ -101,15 +103,19 @@ function handleEvents() {
         view.gloomFlee = 0.01; colourTarget = 1;
         setTimeout(() => { toast(`☁️💨 ${BIOMES.find((b) => b.id === field.biome)!.icon} 🌈`, 3600); sfx.reveal("legendary"); view.shake = 10; }, 700);
       }
-      if (c.boss > 0) { toast(`👑${ic(c.def.id)} ✔ ${COIN}+${short(coins)}`, 3200); view.shake = 14; sfx.reveal("legendary"); }
+      if (c.boss > 0) {
+        toast(`👑${ic(c.def.id)} ✔ ${COIN}+${short(coins)}`, 3200); view.shake = 14; sfx.reveal("legendary");
+        // after the celebration: on to where the next giant waits (a natural moment for a break)
+        setTimeout(() => void nextPlace(), 4200);
+      }
       if (c.boss > 0 || c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") view.cheer = 1.2;
-      const isNew = !rush && !save.index[c.def.id] && !jar.slice(0, -1).some((j) => j.id === c.def.id);
       sfx.hook(c.def.rarity === "legendary" ? "legendary" : c.def.rarity);
       view.burst(field.nozzle.x, field.nozzle.y, c.mut === "gold" ? "#ffd84a" : RARITY_COLOR[c.def.rarity], c.def.rarity === "common" && !c.mut ? 10 : 24);
-      view.text(field.nozzle.x + 40 * field.kid.face, field.nozzle.y - 34 - (field.jar % 2) * 22, isNew ? "🆕✨" : `+🪙${coins}`, isNew ? "#ff9ad1" : "#ffe066", isNew ? 20 : 17);
+      view.text(field.nozzle.x + 40 * field.kid.face, field.nozzle.y - 34 - (save.catches % 2) * 22, `+🪙${short(coins)}`, "#ffe066", 17);
+      if (!rush) flyCoins(field.nozzle.x, field.nozzle.y, Math.min(4, 1 + Math.floor(Math.log10(coins + 1))));
+      if (isNew) { celebrating.add(c.def.id); void celebrate([c.def.id]); }
       if (c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") { view.shake = 8; sfx.reveal(c.def.rarity === "legendary" ? "legendary" : "epic"); }
       if (isNew) sfx.newFish();
-      if (!rush && field.jar >= field.cap) { toast(`<img src="./art/jar.webp" alt=""> ✔ ➜ 🏡`, 2400); sfx.event(); }
     } else if (e.kind === "tug") {
       if (!fresh(e.c.uid, "tug")) continue;
       sfx.turn();
@@ -265,7 +271,9 @@ function endRush() {
   $("resBody").innerHTML = bar("🙂", r.score, "me") + bar(r.goal !== null ? "🤝" : "🏆", other, "them") + `<div class="prize">${COIN} +${short(prize)}</div>`;
   $("result").classList.remove("hidden");
   sfx.reveal(won || r.goal === null ? "epic" : "rare");
-  mode = "park";
+  mode = "field";
+  field = newField(view.W, view.H, save.up, save.biome); field.script = 2;
+  for (let i = 0; i < 5; i++) spawn(field, rng);
   updateUi();
 }
 async function shareRush() {
@@ -285,6 +293,79 @@ function offerRush() {
   $("resShare").onclick = () => { shareIsPlay = false; applyLang(); $("resShare").onclick = () => void shareRush(); void startRush(seed, score); };
   $("result").classList.remove("hidden");
 }
+
+/** after a giant: the field moves to where the next giant waits */
+async function nextPlace() {
+  if (mode !== "field") return;
+  const ng = nextGiant();
+  if (save.biomes.includes(ng.biome)) save.biome = ng.biome;
+  busy = true;
+  await commercialBreak();
+  busy = false;
+  field = newField(view.W, view.H, save.up, save.biome); field.script = 2;
+  for (let i = 0; i < 5; i++) spawn(field, rng);
+  colourTarget = (save.restored ?? []).includes(save.biome) ? 1 : 0; view.colour = colourTarget;
+  writeSave(save); updateUi();
+}
+/** coins fly from the nozzle up to the coin counter: you see where the money goes */
+function flyCoins(wx: number, wy: number, n: number) {
+  const target = $("coinIco").getBoundingClientRect();
+  for (let i = 0; i < n; i++) {
+    const c = document.createElement("img");
+    c.src = "./art/coin.webp"; c.className = "flycoin";
+    const x0 = wx * view.scale + (Math.random() - 0.5) * 30, y0 = wy * view.scale + (Math.random() - 0.5) * 20;
+    c.style.left = `${x0}px`; c.style.top = `${y0}px`;
+    document.body.appendChild(c);
+    setTimeout(() => requestAnimationFrame(() => { c.style.transform = `translate(${target.left - x0}px, ${target.top - y0}px) scale(.7)`; c.style.opacity = "0.5"; }), i * 70);
+    setTimeout(() => { c.remove(); const k = $("coinIco"); k.classList.remove("bump"); void k.offsetWidth; k.classList.add("bump"); }, 900 + i * 70);
+  }
+}
+/** the three upgrades, always at the bottom of the screen: what it is, how far it is, what the next step costs */
+let upBarKey = "";
+function renderUpBar() {
+  const key = UPGRADE_ORDER.map((id) => `${save.up[id]}${(upgradeCost(save.up, id) ?? 1e99) <= save.coins}`).join() + mode;
+  if (key === upBarKey) return;
+  upBarKey = key;
+  const box = $("upBar");
+  box.innerHTML = "";
+  for (const id of UPGRADE_ORDER) {
+    const c = upgradeCost(save.up, id), ok = c !== null && c <= save.coins;
+    const b = document.createElement("button");
+    b.className = "upb" + (ok ? " ok" : "");
+    b.dataset.up = id;
+    b.innerHTML = `<span class="ui">${UPGRADES[id].icon}</span><span class="uv">${UP_LABEL[id](save.up[id])}</span><span class="uc">${c === null ? "MAX" : `${COIN}${short(c)}`}</span>`;
+    b.onpointerdown = (ev) => { ev.stopPropagation(); };
+    b.onclick = () => { buy(id); b.classList.add("bought"); flyUp(b); };
+    box.appendChild(b);
+  }
+}
+/** a bought upgrade sends a spark up to the giant gauge: the bar is what the coins are for */
+function flyUp(from: HTMLElement) {
+  const g = document.querySelector("#fieldHead .gbar");
+  if (!g) return;
+  const a = from.getBoundingClientRect(), b = g.getBoundingClientRect();
+  const s = document.createElement("div");
+  s.className = "spark"; s.textContent = "🌀";
+  s.style.left = `${a.left + a.width / 2}px`; s.style.top = `${a.top}px`;
+  document.body.appendChild(s);
+  requestAnimationFrame(() => requestAnimationFrame(() => { s.style.transform = `translate(${b.left + b.width * 0.8 - a.left - a.width / 2}px, ${b.top - a.top}px) scale(.6)`; }));
+  setTimeout(() => s.remove(), 700);
+}
+/** the book: your collection by place, just to look at */
+function openBook(b: BiomeId = save.biome) {
+  sheet = b as Plot; parkBiome = b; gridKey = "";
+  const tabs = save.biomes.map((id) => { const bi = BIOMES.find((x) => x.id === id)!; const got = CRITTERS.filter((d) => d.biome === id && save.index[d.id]).length, all = CRITTERS.filter((d) => d.biome === id).length; return `<button class="btn tab${id === b ? " on" : ""}" data-b="${id}">${bi.icon} ${got}/${all}</button>`; }).join("");
+  $("shTitle").innerHTML = tabs;
+  for (const el of $("shTitle").querySelectorAll<HTMLElement>("[data-b]")) el.onclick = () => openBook(el.dataset.b as BiomeId);
+  $("shHunt").classList.add("hidden");
+  $("parkGrid").classList.remove("hidden"); $("nest").classList.add("hidden"); $("ups").classList.add("hidden");
+  $("sheet").classList.remove("hidden");
+  input.on = false;
+  renderParkGrid();
+}
+$("bookBtn").onclick = () => openBook();
+$("lureBtn2").onclick = () => void lure();
+$("rushBtn2").onclick = () => void startRush(1 + Math.floor(Math.random() * 999_983), null);
 
 // ------------------------------------------------------------------ the park
 async function goPark() {
@@ -342,7 +423,6 @@ async function lure() {
   field.lure += 3;
   toast("✨🪙 ×3", 2600);
   sfx.reveal("epic");
-  await goField();
 }
 
 function buy(id: UpgradeId) {
@@ -544,7 +624,8 @@ function tutorialHand(dt: number) {
 function guideTarget(): HTMLElement | null {
   if (!started && mode === "field") return null;
   if (mode === "field") {
-    if (field.jar >= field.cap) return $("parkBtn");
+    const ngG = nextGiant();
+    if (vacLevel(save.up) < ngG.need && save.catches >= 4 && vacLevel(save.up) < 4) { const ok = document.querySelector<HTMLElement>("#upBar .upb.ok"); if (ok) return ok; }
     // a tool you just got and have not tried yet
     for (const tl of toolsOwned()) if (tl !== "vac" && !save.tips.includes("used_" + tl)) return document.querySelector<HTMLElement>(`#tools [data-tool="${tl}"]`);
     return null;
@@ -582,8 +663,8 @@ async function celebrate(ids: string[]) {
     box.innerHTML = `<div class="rays"></div><img src="./art/${d.art}.webp" alt=""><b>🆕</b>`;
     document.body.appendChild(box);
     sfx.reveal(d.rarity === "legendary" ? "legendary" : d.rarity === "epic" ? "epic" : "rare");
-    await wait(1100);
-    const spot = document.querySelector<HTMLElement>(`.spot[data-id="${id}"]`);
+    await wait(mode === "field" ? 800 : 1100);
+    const spot = mode === "field" ? $("bookBtn") : document.querySelector<HTMLElement>(`.spot[data-id="${id}"]`);
     const im = box.querySelector("img")!;
     if (spot) {
       const a = im.getBoundingClientRect(), b = spot.getBoundingClientRect();
@@ -591,7 +672,7 @@ async function celebrate(ids: string[]) {
       im.style.transform = `translate(${b.left + b.width / 2 - (a.left + a.width / 2)}px, ${b.top + b.height / 2 - (a.top + a.height / 2)}px) scale(${Math.max(0.15, b.height / a.height)})`;
       await wait(650);
       celebrating.delete(id);
-      spot.classList.remove("wait"); spot.classList.add("got");
+      spot.classList.remove("wait", "got"); void spot.offsetWidth; spot.classList.add("got");
       sfx.coin(3);
     } else celebrating.delete(id);
     box.remove();
@@ -656,9 +737,9 @@ const ic = (id: string) => `<img src="./art/${CRITTER_BY_ID[id].art}.webp" alt="
 const COIN = `<img src="./art/coin.webp" alt="">`;
 const short = (n: number) => (n < 10_000 ? Math.floor(n).toLocaleString() : n < 1e6 ? `${(n / 1000).toFixed(1)}K` : `${(n / 1e6).toFixed(2)}M`);
 const UP_LABEL: Record<UpgradeId, (l: number) => string> = {
-  power: (l) => `${Math.round(power({ power: l, range: 0, tank: 0 }))}`,
-  range: (l) => `${Math.round(range({ power: 0, range: l, tank: 0 }) / 10)}m`,
-  tank: (l) => `${tankSize({ power: 0, range: 0, tank: l })}`,
+  power: (l) => `Lv${l + 1}`,
+  range: (l) => `Lv${l + 1}`,
+  tank: (l) => `×${valueMult({ power: 0, range: 0, tank: l }).toFixed(2).replace(/0$/, "")}`,
 };
 
 function updateUi() {
@@ -684,7 +765,7 @@ function updateUi() {
     return [`<span class="step${own ? " own" : ""}${b.id === save.biome ? " here" : ""}">${b.icon}${b.id === save.biome ? '<img class="you" src="./art/kid_vac.webp" alt="">' : ""}</span>`, g ? `<span class="step g${done ? " done" : own ? " own" : ""}">${giantImg(g.id, done ? "" : "sil")}${done ? "<i>✔</i>" : ""}</span>` : ""];
   }).filter(Boolean).join("<em>━</em>");
   $("rushBtn").textContent = "🏁⏱" + (save.rushBest ? ` 🏆${short(save.rushBest)}` : "");
-  if (mode === "park") renderMap(); else if (sheet) closeSheet();
+  if (mode === "park") renderMap();
   if (sheet) renderParkGrid();
   renderNest();
   // the field header: where you are, how much of it you have found, and the goal while Gloom is here
@@ -695,6 +776,8 @@ function updateUi() {
   $("fhPlace").innerHTML = mode === "rush" ? "" : gHere ? gauge(gHere) : `<span class="where">${BIOMES.find((b) => b.id === ngF.biome)!.icon}</span>${gauge(ngF)}`;
   $("fhGoal").textContent = "";
   renderTools();
+  renderUpBar();
+  $("rateN").textContent = incomePerSec() > 0 ? ` +${short(incomePerSec())}/s` : "";
   placeGuide();
   // the first legend you own: tell the player it can come along
 

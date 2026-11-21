@@ -363,3 +363,45 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 .spot { flex-direction: column; }
 .spot img { height: auto; min-height: 0; flex: 0 1 auto; max-width: 100%; }
 .spot .stars { position: static; translate: none; line-height: 1; margin-top: -2px; }
+/* ---------------------------------------------------------------- one screen: upgrades at the bottom of the field */
+#upBar { position: absolute; left: 50%; translate: -50% 0; bottom: 10px; width: min(calc(100% - 16px), 520px); display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; pointer-events: auto; }
+.upb { font-family: inherit; color: #fff; border: 0; border-radius: 18px; padding: 6px 4px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer;
+  background: linear-gradient(#3a5f9a, #24406e); box-shadow: 0 4px 0 #142a4d, 0 6px 14px rgba(0,0,0,.25); text-shadow: 0 2px 0 rgba(0,0,0,.35); }
+.upb:active { transform: translateY(3px); box-shadow: 0 1px 0 #142a4d; }
+.upb .ui { font-size: 30px; line-height: 1; }
+.upb .uv { font-size: 14px; font-weight: 700; opacity: .9; }
+.upb .uc { display: flex; align-items: center; gap: 3px; font-size: 17px; font-weight: 700; background: rgba(0,0,0,.25); border-radius: 999px; padding: 1px 10px 1px 3px; }
+.upb .uc img { width: 22px; height: 22px; }
+.upb.ok { background: linear-gradient(#ffd45e, #ff9a1f); box-shadow: 0 4px 0 #b25e00, 0 0 18px rgba(255,210,90,.75); }
+.upb.ok .uc { background: rgba(120,60,0,.3); }
+.upb:not(.ok) { filter: saturate(.7); }
+.upb:not(.ok) .uc { color: #ffb0b0; }
+.upb.bought { animation: gotPop .35s; }
+#sideBtns { position: absolute; right: 8px; bottom: 110px; display: flex; flex-direction: column; gap: 8px; pointer-events: auto; }
+.btn.side { width: 54px; height: 54px; border-radius: 50%; padding: 0; font-size: 20px; border: 0; box-shadow: 0 4px 0 rgba(0,0,0,.35); }
+#rateN { color: #b6f5c4; font-size: 13px; font-weight: 600; margin-left: 2px; }
+#bookBtn { font-family: inherit; color: #fff; font-weight: 700; }
+#bookBtn.got { animation: gotPop .6s ease-out 2; }
+/* the gauge is the hero of the screen */
+#fieldHead { top: 58px; }
+#fieldHead .gauge { font-size: 20px; gap: 8px; }
+#fieldHead .gauge .gbar { width: min(52vw, 260px); height: 22px; border-radius: 11px; }
+#fieldHead .gauge img.gi { width: 46px; height: 46px; }
+#fieldHead .where { font-size: 20px; margin-right: 4px; }
+.gauge sup { font-size: 12px; color: #ffe066; margin-left: -6px; }
+.spark { position: fixed; z-index: 7; font-size: 26px; pointer-events: none; transition: transform .6s cubic-bezier(.4,0,.6,1); translate: -50% -50%; }
+/* the book: tabs per place */
+#shTitle { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn.tab { border: 0; font-size: 16px; padding: 4px 12px; background: rgba(255,255,255,.12); box-shadow: none; }
+.btn.tab.on { background: linear-gradient(#7be495, #2fb35a); }
+#toast { top: 120px; }
+@media (orientation: landscape) and (max-height: 600px) {
+  #fieldHead { top: 6px; }
+  #fieldHead .gauge img.gi { width: 36px; height: 36px; }
+  #upBar { width: min(60%, 460px); bottom: 6px; }
+  .upb { flex-direction: row; justify-content: center; gap: 6px; padding: 4px 6px; }
+  .upb .ui { font-size: 22px; }
+  #sideBtns { bottom: 8px; flex-direction: row; }
+}
+@media (max-width: 400px) { #rateN { display: none; } }
+@media (orientation: landscape) and (max-height: 600px) { #ui #fieldUi ~ * {} }

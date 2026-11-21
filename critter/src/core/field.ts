@@ -95,12 +95,12 @@ export const depthK = (f: Field, y: number) => 0.62 + 0.38 * Math.max(0, Math.mi
 
 export const PLAY_W = 620;
 export function sizeField(f: Field, W: number, H: number) {
-  f.W = W; f.H = H; f.farY = H * 0.6; f.nearY = H * 0.88;
+  f.W = W; f.H = H; f.farY = H * 0.56; f.nearY = H * 0.8;
   f.left = Math.max(6, (W - PLAY_W) / 2); f.right = Math.min(W, f.left + PLAY_W);
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.6, nearY: H * 0.88, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
