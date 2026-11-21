@@ -101,7 +101,7 @@ function handleEvents() {
       if (c.boss > 0) coins += Math.round(c.def.income * 60);
       if (rush) rush.score += coins; else { save.coins += coins; save.catches++; }
       if (combo >= 3) view.text(field.nozzle.x + 70 * field.kid.face, field.nozzle.y - 70, `🔥×${combo}`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo));
-      if (c.boss > 0 && nextGiant().biome === field.biome) save.giantWins = (save.giantWins ?? 0) + 1;
+      if (c.boss > 0 && nextGiant().biome === field.biome) { save.giantWins = (save.giantWins ?? 0) + 1; save.charge = 0; }
       if (c.boss > 0 && !(save.restored ??= []).includes(field.biome)) {
         // the giant was Gloom's: the colour floods back into this place, for good
         save.restored.push(field.biome);
@@ -134,6 +134,13 @@ function handleEvents() {
       view.burst(field.nozzle.x, field.nozzle.y, c.mut === "gold" ? "#ffd84a" : RARITY_COLOR[c.def.rarity], c.def.rarity === "common" && !c.mut ? 10 : 24);
       view.text(field.nozzle.x + 40 * field.kid.face, field.nozzle.y - 34 - (save.catches % 2) * 22, `+🪙${short(coins)}`, "#ffe066", 17);
       if (!rush) flyCoins(field.nozzle.x, field.nozzle.y, Math.min(4, 1 + Math.floor(Math.log10(coins + 1))));
+      // every catch also pushes the giant bar a little, right away
+      if (!rush && c.boss === 0) {
+        const add = ({ common: 0.06, rare: 0.12, epic: 0.25, legendary: 0.5, secret: 0.5 } as const)[c.def.rarity] * (c.mut ? 2 : 1);
+        const before = Math.floor(save.charge ?? 0);
+        save.charge = (save.charge ?? 0) + add;
+        sparkToBar(field.nozzle.x, field.nozzle.y, Math.floor(save.charge) > before);
+      }
       // a new species gets its big moment, unless a giant fight is on (then it slips into the book quietly)
       if (isNew && !field.critters.some((k) => k.boss > 0 && k.state !== "caught") && c.boss === 0) { celebrating.add(c.def.id); void celebrate([c.def.id]); }
       else if (isNew) { const bb = $("bookBtn"); bb.classList.remove("got"); void bb.offsetWidth; bb.classList.add("got"); }
@@ -414,6 +421,21 @@ function renderUpBar() {
     box.appendChild(b);
   }
 }
+/** a catch sends a small spark to the giant bar; when it adds a whole point the number pops */
+function sparkToBar(wx: number, wy: number, point: boolean) {
+  const g = document.querySelector("#fieldHead .gbar");
+  if (!g) return;
+  const b = g.getBoundingClientRect(), x0 = wx * view.scale, y0 = wy * view.scale;
+  const s = document.createElement("div");
+  s.className = "spark small"; s.textContent = "✦";
+  s.style.left = `${x0}px`; s.style.top = `${y0}px`;
+  document.body.appendChild(s);
+  requestAnimationFrame(() => requestAnimationFrame(() => { s.style.transform = `translate(${b.left + b.width * 0.85 - x0}px, ${b.top + b.height / 2 - y0}px) scale(.7)`; }));
+  setTimeout(() => {
+    s.remove(); updateUi();
+    if (point) { const m = document.querySelector("#fieldHead .me"); m?.classList.remove("plus"); void (m as HTMLElement | null)?.offsetWidth; m?.classList.add("plus"); }
+  }, 600);
+}
 /** a bought upgrade sends a spark up to the giant gauge: the bar is what the coins are for */
 function flyUp(from: HTMLElement) {
   const g = document.querySelector("#fieldHead .gbar");
@@ -509,6 +531,7 @@ function buy(id: UpgradeId) {
   if (cost > save.coins) { sfx.nope(); return; }
   save.coins -= cost; save.up[id]++;
   sfx.buy(); writeSave(save); updateUi();
+  { const m = document.querySelector("#fieldHead .me"); m?.classList.remove("plus"); void (m as HTMLElement | null)?.offsetWidth; m?.classList.add("plus"); }
 }
 
 /** the nest in the park: eggs count down in real time; a ready one hatches on tap, a waiting one can be hurried with a video */
@@ -571,7 +594,7 @@ function renderMap() {
   const canBuy = UPGRADE_ORDER.some((id) => { const c = upgradeCost(save.up, id); return c !== null && c <= save.coins; });
   const upKey = UPGRADE_ORDER.map((id) => save.up[id] + "" + ((upgradeCost(save.up, id) ?? 1e99) <= save.coins)).join();
   const key = [getLang(), save.biomes.join(), save.biome, save.companion, Object.entries(save.index).map(([k, v]) => k + v.count).join(),
-    save.nest.map((e) => e.tier + Math.ceil((e.readyAt - now) / 60_000)).join(), upKey, labOpen(), vacLevel(save.up), (save.restored ?? []).join(), [...newIn].join()].join("|");
+    save.nest.map((e) => e.tier + Math.ceil((e.readyAt - now) / 60_000)).join(), upKey, labOpen(), barPower(), (save.restored ?? []).join(), [...newIn].join()].join("|");
   if (key === mapKey) return;
   mapKey = key;
   const box = $("parkMap");
@@ -703,14 +726,14 @@ function guideTarget(): HTMLElement | null {
   if (!started && mode === "field") return null;
   if (mode === "field") {
     const ngG = nextGiant();
-    if (vacLevel(save.up) < ngG.need && save.catches >= 4 && vacLevel(save.up) < 4) { const ok = document.querySelector<HTMLElement>("#upBar .upb.ok"); if (ok) return ok; }
+    if (barPower() < ngG.need && save.catches >= 4 && barPower() < 4) { const ok = document.querySelector<HTMLElement>("#upBar .upb.ok"); if (ok) return ok; }
     // a tool you just got and have not tried yet
     for (const tl of toolsOwned()) if (tl !== "vac" && !save.tips.includes("used_" + tl)) return document.querySelector<HTMLElement>(`#tools [data-tool="${tl}"]`);
     return null;
   }
   if (mode !== "park" || sheet || !$("result").classList.contains("hidden")) return null;
   const ng = nextGiant();
-  if (ng && vacLevel(save.up) >= ng.need) return $("goBtn");
+  if (ng && barPower() >= ng.need) return $("goBtn");
   if (save.nest.some((e) => Date.now() >= e.readyAt)) return plotEls.nest?.querySelector<HTMLElement>(".eslot.ready") ?? null;
   const up = plotEls.shop?.querySelector<HTMLElement>(".uprow.ok");
   if (up) return up;
@@ -803,12 +826,14 @@ function toast(html: string, ms = 1800) {
   clearTimeout(toastT); toastT = window.setTimeout(() => el.classList.add("hidden"), ms);
 }
 /** the giant still standing in a place (null once caught) and the next giant on the road */
+/** the giant bar: your vacuum level plus what your catches have added since the last giant */
+const barPower = () => vacLevel(save.up) + Math.floor(save.charge ?? 0);
 const nextGiant = () => giantStep(save.giantWins ?? 0);
 const giantLeft = (b: BiomeId) => { const g = nextGiant(); return g.biome === b ? g : null; };
 const giantImg = (id: string, cls = "") => `<img class="gi ${cls}" src="./art/${CRITTER_BY_ID[id].art}.webp" alt="">`;
 /** the gauge: your vacuum against a giant. Full = it will come down and fight */
 function gauge(g: { id: string; need: number; tier?: number }) {
-  const L = vacLevel(save.up), k = Math.min(1, L / g.need);
+  const L = barPower(), k = Math.min(1, L / g.need);
   return `<div class="gauge${k >= 1 ? " full" : ""}"><span class="me">🌀<b>${L}</b></span><span class="gbar"><i style="width:${Math.round(k * 100)}%"></i></span><span class="them">${giantImg(g.id)}${(g.tier ?? 1) > 1 ? `<sup>★${g.tier}</sup>` : ""}<b>${g.need}</b></span></div>`;
 }
 const ic = (id: string) => `<img src="./art/${CRITTER_BY_ID[id].art}.webp" alt="">`;
@@ -852,7 +877,9 @@ function updateUi() {
   const found = CRITTERS.filter((d) => d.biome === field.biome && save.index[d.id]).length, total = CRITTERS.filter((d) => d.biome === field.biome).length;
   const gHere = giantLeft(field.biome);
   const ngF = nextGiant();
-  $("fhPlace").innerHTML = mode === "rush" ? "" : gHere ? gauge(gHere) : `<span class="where">${BIOMES.find((b) => b.id === ngF.biome)!.icon}</span>${gauge(ngF)}`;
+  const fhHtml = mode === "rush" ? "" : gHere ? gauge(gHere) : `<span class="where">${BIOMES.find((b) => b.id === ngF.biome)!.icon}</span>${gauge(ngF)}`;
+  // only rebuilt when it changes, so the bar can animate and a number pop is not wiped
+  if ($("fhPlace").dataset.h !== fhHtml) { $("fhPlace").dataset.h = fhHtml; $("fhPlace").innerHTML = fhHtml; }
   $("fhGoal").textContent = "";
   renderTools();
   renderUpBar();
@@ -920,7 +947,7 @@ function frame(now: number) {
   view.colour += (colourTarget - view.colour) * Math.min(1, dt * 1.2);
   field.companion = null; // companions were cut
   if (mode === "field" && !busy && field.biome !== nextGiant().biome && !field.critters.some((c) => c.boss > 0 && c.state !== "caught")) void nextPlace();
-  const gH = mode === "rush" ? null : giantLeft(field.biome), L = vacLevel(save.up);
+  const gH = mode === "rush" ? null : giantLeft(field.biome), L = barPower();
   field.giant = gH ? { id: gH.id, ready: L >= gH.need, resist: gH.resist, scale: gH.scale } : null;
   const teasing = field.critters.some((c) => c.tease && c.state !== "caught");
   view.giant = gH && !teasing ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need, k: Math.min(1, L / gH.need) } : null;
@@ -936,7 +963,7 @@ function frame(now: number) {
   } else if (mode === "field") {
     stepField(field, dt, input, save.up, rng);
     handleEvents();
-    setVacuum(field.beam, Math.min(1, vacLevel(save.up) / 60), field.critters.some((c) => c.state === "tug"));
+    setVacuum(field.beam, Math.min(1, barPower() / 60), field.critters.some((c) => c.state === "tug"));
     // the music picks up while a giant is on the field
     setIntensity(field.critters.some((c) => c.boss > 0 && c.state !== "caught") ? 1 : 0);
     view.drawField(field, save.up, t, dt);

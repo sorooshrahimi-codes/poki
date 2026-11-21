@@ -20,6 +20,8 @@ export interface SaveData {
   nest: Egg[];
   /** giants beaten so far: the step on the giant ladder */
   giantWins?: number;
+  /** what catches have added to the giant bar since the last giant (on top of the vacuum level) */
+  charge?: number;
   /** the suction style in use */
   skin?: string;
   /** places whose colour is back (their giant boss was caught) */
@@ -35,7 +37,7 @@ export interface SaveData {
 export const newSave = (): SaveData => ({ v: 1, coins: 0, up: { power: 0, range: 0, tank: 0 }, index: {}, catches: 0, lastSeen: Date.now(), muted: false, tips: [], biome: "meadow", biomes: ["meadow"], nest: [] });
 
 // v2: the giant version starts everyone fresh (old saves had bought places and maxed vacuums)
-const KEY = "crittervac.save.v2";
+const KEY = "crittervac.save.v3";
 export function loadSave(): SaveData {
   try {
     const raw = window.localStorage.getItem(KEY);

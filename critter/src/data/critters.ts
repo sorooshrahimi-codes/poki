@@ -168,9 +168,9 @@ export const GIANTS: GiantDef[] = [
   { biome: "meadow", id: "honeyblob", need: 12, resist: 2.4 },
   { biome: "forest", id: "barkbear", need: 50, resist: 3.4 },
   { biome: "frost", id: "glacier", need: 76, resist: 4.4 },
-  { biome: "candy", id: "cakeroar", need: 92, resist: 5.2 },
-  { biome: "volcano", id: "magmaw", need: 112, resist: 6 },
-  { biome: "moon", id: "bigmoon", need: 128, resist: 7 },
+  { biome: "candy", id: "cakeroar", need: 98, resist: 5.2 },
+  { biome: "volcano", id: "magmaw", need: 122, resist: 6 },
+  { biome: "moon", id: "bigmoon", need: 142, resist: 7 },
 ];
 export const giantOf = (b: BiomeId) => GIANTS.find((g) => g.biome === b) ?? null;
 

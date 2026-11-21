@@ -478,3 +478,8 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 .skin { width: 40px; height: 40px; border: 0; border-radius: 50%; font-size: 20px; cursor: pointer; background: radial-gradient(circle, var(--sk), rgba(0,0,0,.2)); box-shadow: 0 2px 6px rgba(0,0,0,.3); }
 .skin.on { box-shadow: 0 0 0 3px #fff, 0 0 14px var(--sk); }
 .skin.locked { background: rgba(255,255,255,.1); font-size: 14px; }
+.spark.small { font-size: 16px; color: #9ff0ff; text-shadow: 0 0 8px #5bc8ff; transition: transform .55s cubic-bezier(.5,0,.7,1); }
+#fieldHead .me.plus { animation: plus .45s; }
+@keyframes plus { 40% { transform: scale(1.5); color: #7be495; } }
+#fieldHead.nope .gbar { box-shadow: none; animation: nopeRing .25s 5; }
+@keyframes nopeRing { 0%, 100% { box-shadow: 0 0 0 3px #ff4d6d, 0 0 16px #ff4d6d; transform: translateX(0); } 50% { box-shadow: 0 0 0 3px #ff4d6d, 0 0 16px #ff4d6d; transform: translateX(-5px); } }
