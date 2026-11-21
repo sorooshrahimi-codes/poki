@@ -21,3 +21,6 @@ export const tankSize = (u: Upgrades) => 8 + u.tank;
 export const catchCoins = (income: number, mult: number) => Math.max(1, Math.round(income * 2 * mult));
 /** offline park income stops after this long */
 export const OFFLINE_CAP_MS = 2 * 3600_000;
+
+/** the vacuum's level: every upgrade counts, it is what the giants are measured against */
+export const vacLevel = (up: Upgrades) => up.power + up.range + up.tank;

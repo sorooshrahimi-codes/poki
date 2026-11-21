@@ -7,6 +7,8 @@ import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tank
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
 import { COMPANIONS } from "./core/field.ts";
+import { GIANTS, giantOf } from "./data/critters.ts";
+import { vacLevel } from "./core/economy.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
 import type { BiomeId } from "./core/types.ts";
@@ -89,7 +91,13 @@ function handleEvents() {
       if (combo >= 3) { view.text(field.nozzle.x + 70 * field.kid.face, field.nozzle.y - 70, `🔥×${combo}`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo)); sfx.coin(combo); }
       if (c.boss > 0 && !(save.restored ??= []).includes(field.biome)) {
         // the giant was Gloom's: the colour floods back into this place, for good
-        save.restored.push(field.biome); writeSave(save);
+        save.restored.push(field.biome);
+        const nb = BIOMES[BIOMES.findIndex((b) => b.id === field.biome) + 1];
+        if (nb && nb.id !== "lab" && !save.biomes.includes(nb.id)) {
+          save.biomes.push(nb.id); save.biome = nb.id;
+          setTimeout(() => { toast(`🔓 ${nb.icon} 🎉`, 3200); sfx.reveal("epic"); }, 3400);
+        }
+        writeSave(save); mapKey = "";
         view.gloomFlee = 0.01; colourTarget = 1;
         setTimeout(() => { toast(`☁️💨 ${BIOMES.find((b) => b.id === field.biome)!.icon} 🌈`, 3600); sfx.reveal("legendary"); view.shake = 10; }, 700);
       }
@@ -332,6 +340,9 @@ async function goField() {
   // the natural break between rounds: Poki decides whether an ad plays
   await commercialBreak();
   mode = "field";
+  // a giant that is ready to fight: that is where we go
+  const ng = nextGiant();
+  if (ng && vacLevel(save.up) >= ng.need && save.biomes.includes(ng.biome)) save.biome = ng.biome;
   field = newField(view.W, view.H, save.up, save.biome);
   field.script = 2; // the tutorial moments only happen once per visit... first visit keeps them
   for (let i = 0; i < 5; i++) spawn(field, rng);
@@ -419,7 +430,7 @@ function renderMap() {
   const canBuy = UPGRADE_ORDER.some((id) => { const c = upgradeCost(save.up, id); return c !== null && c <= save.coins; });
   const upKey = UPGRADE_ORDER.map((id) => save.up[id] + "" + ((upgradeCost(save.up, id) ?? 1e99) <= save.coins)).join();
   const key = [getLang(), save.biomes.join(), save.biome, save.companion, Object.entries(save.index).map(([k, v]) => k + v.count).join(),
-    save.nest.map((e) => e.tier + Math.ceil((e.readyAt - now) / 60_000)).join(), upKey, labOpen(), BIOMES.map((b) => Math.floor(Math.min(1, save.coins / Math.max(1, b.price)) * 20)).join(), [...newIn].join()].join("|");
+    save.nest.map((e) => e.tier + Math.ceil((e.readyAt - now) / 60_000)).join(), upKey, labOpen(), vacLevel(save.up), (save.restored ?? []).join(), [...newIn].join()].join("|");
   if (key === mapKey) return;
   mapKey = key;
   const box = $("parkMap");
@@ -435,10 +446,10 @@ function renderMap() {
       const got = list.filter((d) => save.index[d.id]).length;
       if (!owned) {
         // a fenced empty plot waiting to be built: what it costs and how close you are
-        const k = Math.min(1, save.coins / bi.price);
+        // the giant of the place before guards the way in
+        const prev = GIANTS[BIOMES.findIndex((b) => b.id === bi.id) - 1];
         el.classList.add("locked");
-        if (k >= 1) el.classList.add("ready");
-        el.innerHTML = `<div class="sign">${bi.icon}</div><div class="lockMid">${k >= 1 ? "🔨" : "🔒"}</div><div class="price"><img src="./art/coin.webp" alt="">${short(bi.price)}</div><div class="prog"><i style="width:${Math.round(k * 100)}%"></i></div>`;
+        el.innerHTML = `<div class="sign">🔒 ${bi.icon}</div><div class="lockMid">${prev ? giantImg(prev.id, "big") : "🔒"}</div>${prev ? gauge(prev) : ""}`;
       } else {
         // the pen: every species has its own spot, caught ones live there, empty spots wait with a "?"
         const spots = list.map((d, i) => {
@@ -448,7 +459,8 @@ function renderMap() {
           return `<span class="spot${newIn.has(d.id) ? " got" : ""}${celebrating.has(d.id) ? " wait" : ""}" data-id="${d.id}" style="--d:${(i * 0.37) % 1.6}s;--rc:${RARITY_COLOR[d.rarity]}"><img src="./art/${d.art}.webp" alt="">${st ? `<i class="stars">${"★".repeat(st)}</i>` : ""}</span>`;
         }).join("");
         const inc = plotIncome(bi.id);
-        el.innerHTML = `<div class="sign">${bi.icon} <small>${got}/${list.length}</small></div><div class="pen">${spots}</div><div class="earn">${coinStack(inc)}<b>${short(inc)}/s</b></div>${save.biome === bi.id ? '<div class="here">🫙</div>' : ""}`;
+        const gl = giantLeft(bi.id), gd = giantOf(bi.id);
+        el.innerHTML = `${gd ? `<div class="trophy${gl ? " todo" : ""}">${giantImg(gd.id)}${gl ? "" : "<i>👑</i>"}</div>` : ""}<div class="sign">${bi.icon} <small>${got}/${list.length}</small></div><div class="pen">${spots}</div><div class="earn">${coinStack(inc)}<b>${short(inc)}/s</b></div>${save.biome === bi.id ? '<div class="here">🫙</div>' : ""}`;
       }
     } else if (p === "lab") {
       const made = CRITTERS.filter((d) => d.biome === "lab" && save.index[d.id]);
@@ -477,7 +489,8 @@ function renderMap() {
         const c = upgradeCost(save.up, id), ok = c !== null && c <= save.coins;
         return `<button class="uprow${ok ? " ok" : ""}" data-up="${id}"><span class="ui">${UPGRADES[id].icon}</span><span class="lv"><i style="width:${Math.min(100, 8 + save.up[id] * 6)}%"></i><em>${UP_LABEL[id](save.up[id])}</em></span><span class="uc">${c === null ? "MAX" : COIN + short(c)}</span></button>`;
       }).join("");
-      el.innerHTML = `<div class="sign">🔧</div><div class="shop">${rows}</div>`;
+      const ng = nextGiant();
+      el.innerHTML = `<div class="sign">🔧</div>${ng ? gauge(ng) : ""}<div class="shop">${rows}</div>`;
     }
     el.onclick = (ev) => {
       const tgt = (ev.target as HTMLElement).closest("button");
@@ -492,10 +505,9 @@ function renderMap() {
 function tapPlot(p: Plot) {
   const bi = BIOMES.find((b) => b.id === p);
   if (bi && !save.biomes.includes(bi.id)) {
-    if (save.coins < bi.price) { toast(`🔒 🪙${short(bi.price - save.coins)}`, 1600); sfx.tap(); return; }
-    save.coins -= bi.price; save.biomes.push(bi.id); save.biome = bi.id;
-    sfx.reveal("legendary"); toast(`🔓 ${bi.icon} 🎉`, 2400);
-    writeSave(save); mapKey = ""; updateUi(); return;
+    const g = nextGiant();
+    if (g) toast(`${giantImg(g.id)} ➜ 🔓 ${bi.icon}`, 2000);
+    sfx.tap(); return;
   }
   if (p === "lab" && !labOpen()) { toast("🧪 📖 6", 1400); sfx.tap(); return; }
   sfx.tap();
@@ -527,8 +539,9 @@ let idleT = 0;
 function tutorialHand(dt: number) {
   const h = $("tutHand");
   idleT = input.on ? 0 : idleT + dt;
-  const show = mode === "field" && save.catches < 3 && idleT > (started ? 2.5 : 0.6) && $("result").classList.contains("hidden") && $("story").classList.contains("hidden");
-  const c = show ? field.critters.filter((k) => k.state === "roam" && !k.hidden && k.x > field.left + 20 && k.x < field.right - 20).sort((a, b) => Math.abs(a.x - field.nozzle.x - 160) - Math.abs(b.x - field.nozzle.x - 160))[0] : null;
+  const boss = mode === "field" ? field.critters.find((k) => k.boss > 0 && k.state === "roam") : undefined;
+  const show = mode === "field" && (save.catches < 3 || !!boss) && idleT > (started ? 2.5 : 0.6) && $("result").classList.contains("hidden") && $("story").classList.contains("hidden");
+  const c = show && boss ? boss : show ? field.critters.filter((k) => k.state === "roam" && !k.hidden && k.x > field.left + 20 && k.x < field.right - 20).sort((a, b) => Math.abs(a.x - field.nozzle.x - 160) - Math.abs(b.x - field.nozzle.x - 160))[0] : null;
   if (!c) { h.classList.add("hidden"); return; }
   const p = (t % 2.4) / 2.4;
   const tx = c.x, ty = c.y - c.lift - c.def.size * 0.35;
@@ -552,10 +565,11 @@ function guideTarget(): HTMLElement | null {
     return null;
   }
   if (mode !== "park" || sheet || !$("result").classList.contains("hidden")) return null;
-  for (const b of BIOMES) if (!save.biomes.includes(b.id) && save.coins >= b.price) return plotEls[b.id as Plot] ?? null;
+  const ng = nextGiant();
+  if (ng && vacLevel(save.up) >= ng.need) return $("goBtn");
   if (save.nest.some((e) => Date.now() >= e.readyAt)) return plotEls.nest?.querySelector<HTMLElement>(".eslot.ready") ?? null;
   const up = plotEls.shop?.querySelector<HTMLElement>(".uprow.ok");
-  if (up && save.up.power + save.up.range + save.up.tank < 12) return up;
+  if (up) return up;
   if (save.catches < 80) return $("goBtn");
   return null;
 }
@@ -644,6 +658,15 @@ function toast(html: string, ms = 1800) {
   const el = $("toast"); el.innerHTML = html; el.classList.remove("hidden");
   clearTimeout(toastT); toastT = window.setTimeout(() => el.classList.add("hidden"), ms);
 }
+/** the giant still standing in a place (null once caught) and the next giant on the road */
+const giantLeft = (b: BiomeId) => { const g = giantOf(b); return g && !(save.restored ?? []).includes(b) ? g : null; };
+const nextGiant = () => GIANTS.find((g) => !(save.restored ?? []).includes(g.biome)) ?? null;
+const giantImg = (id: string, cls = "") => `<img class="gi ${cls}" src="./art/${CRITTER_BY_ID[id].art}.webp" alt="">`;
+/** the gauge: your vacuum against a giant. Full = it will come down and fight */
+function gauge(g: { id: string; need: number }) {
+  const L = vacLevel(save.up), k = Math.min(1, L / g.need);
+  return `<div class="gauge${k >= 1 ? " full" : ""}"><span class="me">🌀<b>${L}</b></span><span class="gbar"><i style="width:${Math.round(k * 100)}%"></i></span><span class="them">${giantImg(g.id)}<b>${g.need}</b></span></div>`;
+}
 const ic = (id: string) => `<img src="./art/${CRITTER_BY_ID[id].art}.webp" alt="">`;
 const COIN = `<img src="./art/coin.webp" alt="">`;
 const short = (n: number) => (n < 10_000 ? Math.floor(n).toLocaleString() : n < 1e6 ? `${(n / 1000).toFixed(1)}K` : `${(n / 1e6).toFixed(2)}M`);
@@ -666,10 +689,10 @@ function updateUi() {
   $("parkUi").classList.toggle("hidden", mode !== "park");
   $("incomeN").innerHTML = `${COIN} ${short(incomePerSec())}/s`;
   // the road ahead: every place, done or still locked, so the goal is clear from the first minute
-  $("parkTitle").innerHTML = [...BIOMES.map((b) => {
-    const own = save.biomes.includes(b.id), done = (save.restored ?? []).includes(b.id);
-    return `<span class="step${own ? " own" : ""}">${b.icon}${done ? "🌈" : own ? "" : "🔒"}</span>`;
-  }), `<span class="step${labOpen() ? " own" : ""}">🧪${labOpen() ? "" : "🔒"}</span>`].join("<i>━</i>");
+  $("parkTitle").innerHTML = BIOMES.flatMap((b) => {
+    const own = save.biomes.includes(b.id), g = giantOf(b.id), done = (save.restored ?? []).includes(b.id);
+    return [`<span class="step${own ? " own" : ""}">${b.icon}</span>`, g ? `<span class="step g${done ? " done" : own ? " own" : ""}">${giantImg(g.id, done ? "" : "sil")}${done ? "<i>✔</i>" : ""}</span>` : ""];
+  }).filter(Boolean).join("<em>━</em>");
   $("rushBtn").textContent = "🏁⏱" + (save.rushBest ? ` 🏆${short(save.rushBest)}` : "");
   if (mode === "park") renderMap(); else if (sheet) closeSheet();
   if (sheet) renderParkGrid();
@@ -677,8 +700,9 @@ function updateUi() {
   // the field header: where you are, how much of it you have found, and the goal while Gloom is here
   const here = BIOMES.find((b) => b.id === field.biome)!;
   const found = CRITTERS.filter((d) => d.biome === field.biome && save.index[d.id]).length, total = CRITTERS.filter((d) => d.biome === field.biome).length;
-  $("fhPlace").textContent = `${here.icon} 📖 ${found}/${total}`;
-  $("fhGoal").textContent = (save.restored ?? []).includes(field.biome) ? "🌈" : "☁️ ➜ 👑🌀 ➜ 🌈";
+  const gHere = giantLeft(field.biome);
+  $("fhPlace").innerHTML = mode === "rush" ? "" : gHere ? gauge(gHere) : `${here.icon} 📖 ${found}/${total} 🌈`;
+  $("fhGoal").textContent = "";
   renderTools();
   placeGuide();
   // the first legend you own: tell the player it can come along
@@ -734,6 +758,10 @@ function frame(now: number) {
   if (!(save.restored ?? []).includes(field.biome) && view.gloomFlee === 0) colourTarget = 0;
   view.colour += (colourTarget - view.colour) * Math.min(1, dt * 1.2);
   field.companion = (save.companion as Field["companion"]) ?? null;
+  const gH = mode === "rush" ? null : giantLeft(field.biome), L = vacLevel(save.up);
+  field.giant = gH ? { id: gH.id, ready: L >= gH.need, resist: gH.resist } : null;
+  view.giant = gH ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need } : null;
+  view.vac = L;
   if (mode === "rush" && rush) {
     rush.left -= dt;
     stepField(field, dt, input, RUSH_UP, rushRng);

@@ -105,7 +105,8 @@ export class View {
     c.translate(zx, zy); c.scale(this.zoom, this.zoom); c.translate(-zx, -zy);
     this.cover(BIOMES.find((b) => b.id === f.biome)!.bg, -f.kid.x * 0.14);
     c.filter = "none";
-    if (this.colour < 1 || this.gloomFlee > 0) this.gloom(t, dt);
+    this.lastField = f;
+    if (!f.critters.some((k) => k.boss > 0)) this.gloom(t, dt);
     // the fisher... the catcher: a kid with a vacuum, on the left, standing on the near ground
     this.cheer = Math.max(0, this.cheer - dt);
     const kid = img(this.cheer > 0 && img("kid_cheer") ? "kid_cheer" : f.beam ? "kid_vac_suck" : "kid_vac");
@@ -116,7 +117,8 @@ export class View {
     if (moving && Math.random() < dt * 8) this.dust(f.left + f.kid.x + 40 * kk, gy + 2);
     this.lastWalk = f.kid.walk;
     const step = moving ? Math.abs(Math.sin(f.kid.walk * 0.09)) * 5 : 0;
-    const kw = 118 * kk, kh = kid ? (kw * kid.height) / kid.width : 130 * kk;
+    const grow = 1 + Math.min(0.3, this.vac * 0.01);
+    const kw = 118 * kk * grow, kh = kid ? (kw * kid.height) / kid.width : 130 * kk;
     const kx = f.left + f.kid.x, ky = gy + 6 * kk - kh - step + Math.sin(t * 2.4) * 1.5;
     const face = f.kid.face;
     f.nozzle.x = face > 0 ? kx + kw * (f.beam ? 0.97 : 0.95) : kx + kw * (f.beam ? 0.03 : 0.05); f.nozzle.y = ky + kh * (f.beam ? 0.5 : 0.52);
@@ -164,6 +166,9 @@ export class View {
     this.foreground(f, t);
   }
   zoom = 1;
+  private lastField: Field | null = null;
+  /** the vacuum level: the kid and the vacuum grow a little with it */
+  vac = 0;
   private lastWalk = 0;
   private stride = 0;
   private dust(x: number, y: number) {
@@ -275,28 +280,46 @@ export class View {
     }
   }
 
-  /** Gloom: a grumpy grey storm cloud drifting over the sky of a place it has drained */
-  private gloom(t: number, dt: number) {
+  /** the place's giant, far away on the horizon: asleep (breathing, Zzz) while the vacuum is too weak,
+   *  awake and bouncing with a "!" once it is strong enough. Set by the controller; null when there is none to show. */
+  giant: { art: string; ready: boolean } | null = null;
+  private gloom(t: number, _dt: number) {
+    const g = this.giant, f = this.lastField;
+    if (!g || !f) return;
+    const im = img(g.art);
+    if (!im) return;
     const c = this.c;
-    if (this.gloomFlee > 0) this.gloomFlee += dt;
-    const flee = this.gloomFlee > 0 ? Math.pow(this.gloomFlee, 2) * 500 : 0;
-    const x = this.W * 0.62 + Math.sin(t * 0.3) * this.W * 0.18 + flee, y = this.H * 0.16 + Math.sin(t * 0.8) * 8 - flee * 0.3;
-    if (x > this.W + 200) { this.gloomFlee = 0; return; }
-    c.save(); c.globalAlpha = Math.max(0, 1 - this.gloomFlee * 0.5);
-    c.fillStyle = "#6b7080"; c.strokeStyle = "#2a2f3c"; c.lineWidth = 4;
-    const puffs: [number, number, number][] = [[-50, 6, 34], [-15, -14, 42], [28, -6, 38], [58, 10, 28], [0, 14, 40]];
-    c.beginPath(); for (const [dx, dy, r] of puffs) { c.moveTo(x + dx + r, y + dy); c.arc(x + dx, y + dy, r, 0, Math.PI * 2); } c.fill(); c.stroke();
-    c.fillStyle = "#6b7080"; for (const [dx, dy, r] of puffs) { c.beginPath(); c.arc(x + dx, y + dy, r - 3, 0, Math.PI * 2); c.fill(); }
-    // a grumpy face: slanted brows, a frown
-    c.strokeStyle = "#1b1e28"; c.lineWidth = 4; c.lineCap = "round";
-    c.beginPath(); c.moveTo(x - 26, y - 10); c.lineTo(x - 10, y - 4); c.moveTo(x + 26, y - 10); c.lineTo(x + 10, y - 4); c.stroke();
-    c.fillStyle = "#1b1e28"; c.beginPath(); c.arc(x - 17, y + 4, 4.5, 0, Math.PI * 2); c.arc(x + 17, y + 4, 4.5, 0, Math.PI * 2); c.fill();
-    c.beginPath(); c.arc(x, y + 26, 11, Math.PI * 1.15, Math.PI * 1.85); c.stroke();
-    // grey drizzle under it
-    c.strokeStyle = "rgba(90,96,110,0.5)"; c.lineWidth = 2;
-    for (let i = 0; i < 7; i++) { const dx = -50 + i * 17, p = (t * 1.5 + i * 0.37) % 1; c.beginPath(); c.moveTo(x + dx, y + 36 + p * 70); c.lineTo(x + dx - 3, y + 46 + p * 70); c.stroke(); }
+    const h = Math.min(this.H * 0.27, 230), w = (h * im.width) / im.height;
+    const x = Math.min(f.right, this.W) - w * 0.6, base = f.farY - 18;
+    const breathe = g.ready ? 1 + Math.abs(Math.sin(t * 5)) * 0.06 : 1 + Math.sin(t * 1.3) * 0.025;
+    const hop = g.ready ? Math.abs(Math.sin(t * 5)) * 14 : 0;
+    c.save();
+    // far away: a little hazy and blue, sitting behind the hills
+    c.globalAlpha = g.ready ? 0.95 : 0.78;
+    c.filter = g.ready ? "none" : "saturate(.5) brightness(1.05) blur(.6px)";
+    c.translate(x, base - hop);
+    c.scale(1 / breathe * (g.ready ? 1 : 1), breathe);
+    c.drawImage(im, -w / 2, -h, w, h);
+    c.restore();
+    c.filter = "none";
+    c.save();
+    c.textAlign = "center"; c.font = "bold 26px Fredoka, system-ui";
+    if (g.ready) {
+      c.fillStyle = "#ff4d6d"; c.strokeStyle = "#fff"; c.lineWidth = 5;
+      const y = base - h - 18 - hop + Math.sin(t * 8) * 4;
+      c.strokeText("❗", x, y); c.fillText("❗", x, y);
+    } else {
+      // sleeping: Z's drifting up
+      for (let i = 0; i < 3; i++) {
+        const p = (t * 0.35 + i / 3) % 1;
+        c.globalAlpha = Math.sin(p * Math.PI);
+        c.fillStyle = "#ffffff"; c.font = `bold ${16 + p * 14}px Fredoka, system-ui`;
+        c.fillText("Z", x + w * 0.22 + p * 30, base - h * 0.8 - p * 60);
+      }
+    }
     c.restore();
   }
+
 
   /** a soap bubble: rainbow sheen and a highlight */
   private bubble(x: number, y: number, r: number, t: number) {

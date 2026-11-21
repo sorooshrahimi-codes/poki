@@ -117,3 +117,13 @@ export const starOf = (count: number) => (count >= 20 ? 3 : count >= 5 ? 2 : cou
 export const STAR_MULT = [0, 1, 2, 4];
 /** coins for catching one (park income does the rest) */
 export const catchCoinsOf = (d: CritterDef, mult: number) => Math.max(1, Math.round(d.income * 2 * mult));
+
+/** each place has a giant: it sleeps on the horizon until your vacuum is strong enough (its "need", in vacuum levels),
+ *  then it comes down to fight. Sucking it up brings the place's colour back and opens the next place. */
+export interface GiantDef { biome: BiomeId; id: string; need: number; resist: number }
+export const GIANTS: GiantDef[] = [
+  { biome: "meadow", id: "honeyblob", need: 12, resist: 2.4 },
+  { biome: "forest", id: "barkbear", need: 42, resist: 3.4 },
+  { biome: "frost", id: "glacier", need: 62, resist: 4.4 },
+];
+export const giantOf = (b: BiomeId) => GIANTS.find((g) => g.biome === b) ?? null;

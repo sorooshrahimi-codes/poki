@@ -1,6 +1,6 @@
 import { CONE, power, range, tankSize, type Upgrades } from "./economy.ts";
 import type { BiomeId, MutationId } from "./types.ts";
-import { MUTATIONS, RARITY_WEIGHT, critterOf, type CritterDef } from "../data/critters.ts";
+import { MUTATIONS, RARITY_WEIGHT, critterOf, type CritterDef, CRITTER_BY_ID } from "../data/critters.ts";
 import type { Rng } from "./rng.ts";
 
 // The catching field, as pure rules (the renderer only draws this state).
@@ -64,6 +64,9 @@ export interface Field {
   nozzle: { x: number; y: number };
   /** the kid walks: x = steps from the left edge, d = depth on the ground (1 = nearest), walk = distance walked (for the stride) */
   kid: { x: number; d: number; walk: number; face: 1 | -1 };
+  /** this place's giant, when it is still to be caught; ready = the vacuum is strong enough, so it comes down */
+  giant: { id: string; ready: boolean; resist: number } | null;
+  giantT: number;
   critters: Critter[];
   beam: boolean; aim: { x: number; y: number };
   jar: number; cap: number;
@@ -97,7 +100,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.6, nearY: H * 0.88, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.6, nearY: H * 0.88, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -197,19 +200,23 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
   }
 
   bossClock -= dt;
+  // the giant: once the vacuum is strong enough it climbs down from the horizon and fights, three rounds
+  if (f.giant?.ready && f.script >= 2 && !f.critters.some((c) => c.boss > 0)) {
+    f.giantT -= dt;
+    if (f.giantT <= 0) {
+      const def = CRITTER_BY_ID[f.giant.id];
+      const c = spawn(f, rng, { def, mut: null, x: f.right - 80, y: f.farY + (f.nearY - f.farY) * 0.5 });
+      c.boss = 3; c.scale = 3.3; c.resist = f.giant.resist; c.dir = -1;
+      f.giantT = 8;
+      f.ev.push({ kind: "surprise", s: "boss", c });
+    }
+  }
   // surprises keep every visit different: a rare visitor, a shower of golden critters, a stampede
   f.nextSurprise -= dt;
   if (f.nextSurprise <= 0 && f.script >= 2) {
     f.nextSurprise = 26 + rng() * 18;
     const roll = rng();
-    if (bossClock <= 0 && !f.critters.some((c) => c.boss > 0)) {
-      // the region boss: its biggest legend, giant, fights back three times
-      const def = pool.filter((d) => d.rarity === "legendary").sort((a, b) => b.income - a.income)[0];
-      const c = spawn(f, rng, { def, mut: null, x: f.right - 70, y: f.farY + (f.nearY - f.farY) * 0.55 });
-      c.boss = 3; c.scale = 2.1; c.resist = def.resist; c.dir = -1;
-      bossClock = 150 + rng() * 60;
-      f.ev.push({ kind: "surprise", s: "boss", c });
-    } else if (roll < 0.45) {
+    if (roll < 0.45) {
       const rares = pool.filter((d) => d.rarity !== "common");
       const w = (d: CritterDef) => (d.rarity === "rare" ? 6 : d.rarity === "epic" ? 3 : 1);
       let tot = rares.reduce((a, d) => a + w(d), 0), r = rng() * tot, def = rares[0];
