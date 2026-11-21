@@ -21,6 +21,15 @@ const save = loadSave();
 setLang(save.lang ?? detectLang());
 const view = new View($<HTMLCanvasElement>("game"));
 const rng = makeRng((Date.now() & 0xffff) + 1);
+/** the field is always where the next giant waits: every place on the way there is open (this also repairs
+ *  saves from before new places were added, where the road stopped short) */
+function syncRoad() {
+  const g = giantStep(save.giantWins ?? 0);
+  const upTo = BIOMES.findIndex((b) => b.id === g.biome);
+  for (let i = 0; i <= upTo; i++) if (!save.biomes.includes(BIOMES[i].id)) save.biomes.push(BIOMES[i].id);
+  save.biome = g.biome;
+}
+syncRoad();
 let field: Field = newField(view.W, view.H, save.up, save.biome);
 /** which place's page of the park is showing */
 let parkBiome: BiomeId = save.biome;
@@ -309,8 +318,8 @@ function offerRush() {
 async function nextPlace() {
   if (mode !== "field") return;
   const ng = nextGiant();
-  const fromI = BIOMES.findIndex((b) => b.id === save.biome);
-  if (save.biomes.includes(ng.biome)) save.biome = ng.biome;
+  const fromI = BIOMES.findIndex((b) => b.id === field.biome);
+  void ng; syncRoad();
   busy = true;
   await commercialBreak();
   const toI = BIOMES.findIndex((b) => b.id === save.biome);
@@ -458,8 +467,7 @@ async function goField() {
   await commercialBreak();
   mode = "field";
   // a giant that is ready to fight: that is where we go
-  const ng = nextGiant();
-  if (ng && vacLevel(save.up) >= ng.need && save.biomes.includes(ng.biome)) save.biome = ng.biome;
+  syncRoad();
   field = newField(view.W, view.H, save.up, save.biome);
   field.script = 2; // the tutorial moments only happen once per visit... first visit keeps them
   for (let i = 0; i < 5; i++) spawn(field, rng);
@@ -895,6 +903,7 @@ function frame(now: number) {
   if (!(save.restored ?? []).includes(field.biome) && view.gloomFlee === 0) colourTarget = 0;
   view.colour += (colourTarget - view.colour) * Math.min(1, dt * 1.2);
   field.companion = null; // companions were cut
+  if (mode === "field" && !busy && field.biome !== nextGiant().biome && !field.critters.some((c) => c.boss > 0 && c.state !== "caught")) void nextPlace();
   const gH = mode === "rush" ? null : giantLeft(field.biome), L = vacLevel(save.up);
   field.giant = gH ? { id: gH.id, ready: L >= gH.need, resist: gH.resist, scale: gH.scale } : null;
   view.giant = gH ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need, k: Math.min(1, L / gH.need) } : null;
