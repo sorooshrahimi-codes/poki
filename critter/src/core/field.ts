@@ -173,6 +173,22 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
   }
   if (inp.on && f.jar >= f.cap && Math.floor(f.t * 2) !== Math.floor((f.t - dt) * 2)) f.ev.push({ kind: "full" });
   f.aim.x = inp.x; f.aim.y = inp.y;
+  // a gentle aim helper: the cone leans onto the critter nearest the finger (and holds on to one that is fighting back),
+  // so a rough aim still works on a small phone screen
+  if (inp.on) {
+    let best: Critter | null = null, bd = 1e9;
+    for (const c of f.critters) {
+      if (c.state === "caught" || c.hidden) continue;
+      const bx = c.x, by = c.y - c.lift - c.def.size * c.scale * 0.4 * depthK(f, c.y);
+      const d = Math.hypot(bx - inp.x, by - inp.y) * (c.state === "tug" ? 0.4 : c.state === "pulled" ? 0.6 : 1);
+      if (d < bd) { bd = d; best = c; }
+    }
+    if (best && bd < 90) {
+      const bx = best.x, by = best.y - best.lift - best.def.size * best.scale * 0.4 * depthK(f, best.y);
+      const k = best.state === "tug" ? 0.8 : 0.55;
+      f.aim.x = inp.x + (bx - inp.x) * k; f.aim.y = inp.y + (by - inp.y) * k;
+    }
+  }
   // while aiming, the kid strides toward the action: along the ground and into the depth of the field
   if (inp.on) {
     // turn to face the aim (with a little dead zone so it does not flicker)

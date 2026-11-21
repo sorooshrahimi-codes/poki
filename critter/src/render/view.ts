@@ -128,10 +128,7 @@ export class View {
     if (f.beam) this.cone(f, up, t);
     const drawKid = () => {
       c.fillStyle = "rgba(0,40,30,0.18)"; c.beginPath(); c.ellipse(kx + kw * 0.45, gy + 4, kw * 0.32, 6 * kk, 0, 0, Math.PI * 2); c.fill();
-      if (kid) {
-        // a little lean into the stride
-        c.save(); c.translate(kx + kw / 2, gy); c.scale(face, 1); c.rotate(moving ? Math.sin(f.kid.walk * 0.09) * 0.04 : 0); c.drawImage(kid, -kw / 2, ky - gy, kw, kh); c.restore();
-      }
+      if (kid) this.drawKidBody(kid, kx + kw / 2, gy, kw, kh, ky - gy, face, f.kid.walk, moving, dt, f.beam);
     };
     let kidDone = false;
     for (const cr of list) {
@@ -166,6 +163,43 @@ export class View {
     this.foreground(f, t);
   }
   zoom = 1;
+  private faceAnim = 1;
+  private swing = 0;
+  /** the kid as a little puppet: the picture is cut at the hips, the legs swing in turn, the body bobs and leans,
+   *  and turning around squeezes through a thin side view like a real turn. */
+  private drawKidBody(im: HTMLImageElement, cx: number, gy: number, kw: number, kh: number, top: number, face: number, walk: number, moving: boolean, dt: number, sucking: boolean) {
+    const c = this.c;
+    this.faceAnim += (face - this.faceAnim) * Math.min(1, dt * 9);
+    const sx = Math.sign(this.faceAnim || 1) * Math.max(0.12, Math.abs(this.faceAnim));
+    const ph = walk * 0.075;
+    this.swing += ((moving ? Math.sin(ph) : 0) - this.swing) * Math.min(1, dt * 12);
+    const sw = this.swing;
+    const HIP = 0.74, SPLIT = 0.42, iw = im.width, ih = im.height;
+    const bob = moving ? -Math.abs(Math.cos(ph)) * kh * 0.03 : 0;
+    // squash a touch on each footfall, stretch between; leaning back while the vacuum pulls
+    const squash = moving ? 1 + (Math.abs(Math.sin(ph)) - 0.5) * 0.04 : 1;
+    const lean = moving ? 0.07 : sucking ? -0.05 : 0;
+    c.save();
+    c.translate(cx, gy);
+    c.scale(sx, 1);
+    const hy = top + kh * HIP; // hip line, relative to the ground
+    // legs: back leg first, each turning around its own hip point
+    const leg = (x0: number, x1: number, ang: number) => {
+      const px = -kw / 2 + kw * ((x0 + x1) / 2);
+      c.save();
+      c.translate(px, hy); c.rotate(ang);
+      c.drawImage(im, iw * x0, ih * (HIP - 0.02), iw * (x1 - x0), ih * (1.02 - HIP), -kw * ((x1 - x0) / 2), -kh * 0.02, kw * (x1 - x0), kh * (1.02 - HIP));
+      c.restore();
+    };
+    leg(0, SPLIT, -sw * 0.38);
+    leg(SPLIT, 1, sw * 0.38);
+    // body: everything above the hips, bobbing, leaning into the walk
+    c.save();
+    c.translate(0, hy + bob); c.rotate(lean); c.scale(1 / squash, squash);
+    c.drawImage(im, 0, 0, iw, ih * HIP, -kw / 2, -kh * HIP, kw, kh * HIP);
+    c.restore();
+    c.restore();
+  }
   private lastField: Field | null = null;
   /** the vacuum level: the kid and the vacuum grow a little with it */
   vac = 0;
