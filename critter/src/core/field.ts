@@ -57,7 +57,7 @@ export type CompanionId = "sunpup" | "prismane" | "elderoak" | "moonfawn" | "fro
 export const COMPANIONS: CompanionId[] = ["sunpup", "prismane", "elderoak", "moonfawn", "frostking", "wyrmling"];
 
 export type Surprise = "visitor" | "golden_rain" | "stampede" | "boss";
-export type FieldEv = { kind: "event"; e: EventId } | { kind: "boom"; c: Critter } | { kind: "rivalIn" } | { kind: "stolen"; c: Critter } | { kind: "rivalBlown" } | { kind: "rivalMiss" } | { kind: "tease"; c: Critter } | { kind: "erupt" } | { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter } | { kind: "split"; c: Critter } | { kind: "hide"; c: Critter } | { kind: "flee"; c: Critter } | { kind: "bossPhase"; c: Critter } | { kind: "bubbled"; c: Critter } | { kind: "ability"; id: CompanionId };
+export type FieldEv = { kind: "attack"; a: "stomp" | "spit" | "roar"; c: Critter } | { kind: "event"; e: EventId } | { kind: "boom"; c: Critter } | { kind: "rivalIn" } | { kind: "stolen"; c: Critter } | { kind: "rivalBlown" } | { kind: "rivalMiss" } | { kind: "tease"; c: Critter } | { kind: "erupt" } | { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter } | { kind: "split"; c: Critter } | { kind: "hide"; c: Critter } | { kind: "flee"; c: Critter } | { kind: "bossPhase"; c: Critter } | { kind: "bubbled"; c: Critter } | { kind: "ability"; id: CompanionId };
 
 export interface Field {
   biome: BiomeId;
@@ -96,6 +96,9 @@ export interface Field {
   stun: number;
   /** frenzy: seconds of double coins left */
   frenzy: number;
+  /** the giant's next attack in this many seconds; how angry the giants are (0..) */
+  attackT: number;
+  fury: number;
   /** level tweaks: a species that shows up often, a rival who raids nonstop */
   favor: string | null;
   rivalFast: boolean;
@@ -132,7 +135,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, special: 0, specialFx: 0, eventT: 12, eventsOn: false, stun: 0, frenzy: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, special: 0, specialFx: 0, eventT: 12, eventsOn: false, stun: 0, frenzy: 0, attackT: 3.5, fury: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -253,6 +256,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
 
   bossClock -= dt;
   stepEvents(f, dt, rng);
+  stepAttacks(f, dt, rng);
   f.specialFx = Math.max(0, f.specialFx - dt);
   stepRival(f, dt, inp, up, rng);
   if (f.biome === "volcano" && f.script >= 2) {
@@ -359,7 +363,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
         if (c.resist <= 1.5 || c.bubbled > 0) c.state = "pulled";
         else {
           if (c.state !== "tug") { c.state = "tug"; f.ev.push({ kind: "tug", c }); }
-          c.grip += dt * (P / 230) / c.resist * 0.95 * (c.boss > 0 ? 1.6 : 1) * (f.companion === "elderoak" ? 1.6 : 1) * (c.frozen > 0 ? 2 : 1);
+          c.grip += dt * (P / 230) / c.resist * 0.95 * (c.boss > 0 ? 0.7 : 1) * (f.companion === "elderoak" ? 1.6 : 1) * (c.frozen > 0 ? 2 : 1);
           if (c.tease) {
             // too strong for you yet: it holds, then laughs and stomps off
             c.grip = Math.min(c.grip, 0.4); c.cycleT += dt;
@@ -521,4 +525,30 @@ function stepEvents(f: Field, dt: number, rng: Rng) {
     for (let i = 0; i < 7; i++) { const c = spawn(f, rng, { def: d, mut: i === 3 ? "gold" : null, x: f.right + 20 + i * 38, y: yy }); c.dir = -1; c.fleeT = 3; }
   } else f.frenzy = 10;
   f.ev.push({ kind: "event", e });
+}
+
+/** a giant fights back: every few seconds it stomps (knocks the kid back and loosens your grip),
+ *  spits bombs toward you, or roars (your vacuum cuts out for a moment). Angrier further along the road. */
+function stepAttacks(f: Field, dt: number, rng: Rng) {
+  const g = f.critters.find((c) => c.boss > 0 && c.state !== "caught" && !c.tease && !c.leaving);
+  if (!g || g.state === "pulled") return;
+  f.attackT -= dt;
+  if (f.attackT > 0) return;
+  f.attackT = Math.max(2, 4.2 - f.fury * 0.35) + rng() * 1.2;
+  const moves: ("stomp" | "spit" | "roar")[] = f.fury >= 2 ? ["stomp", "spit", "roar"] : f.fury >= 1 ? ["stomp", "spit"] : ["stomp"];
+  const a = moves[Math.floor(rng() * moves.length)];
+  if (a === "stomp") {
+    f.kid.x = Math.max(0, f.kid.x - 70);
+    g.grip = Math.max(0, g.grip - 0.15);
+    g.lift = 50;
+  } else if (a === "spit") {
+    const pool = critterOf(f.biome).filter((d) => d.rarity === "common");
+    for (let i = 0; i < 2; i++) {
+      const c = spawn(f, rng, { def: pool[Math.floor(rng() * pool.length)], mut: null, x: g.x - 60 - i * 50, y: Math.min(f.nearY, g.y + 10 + i * 20) });
+      c.kind = "bomb"; c.resist = 1; c.dir = -1; c.fleeT = 0.8;
+    }
+  } else {
+    f.stun = 1; g.grip = Math.max(0, g.grip - 0.1);
+  }
+  f.ev.push({ kind: "attack", a, c: g });
 }

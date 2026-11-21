@@ -182,6 +182,12 @@ function handleEvents() {
       // (no tip messages: the critter's behaviour shows on the field)
     } else if (e.kind === "flee") {
       // (no tip message)
+    } else if (e.kind === "attack") {
+      // the giant fights back: a big icon over it, a hit of the camera, a sound
+      const icon = { stomp: "🦶💥", spit: "💣💣", roar: "😱" }[e.a];
+      view.text(e.c.x, e.c.y - e.c.def.size * e.c.scale - 20, icon, "#ffffff", 40);
+      view.shake = e.a === "stomp" ? 18 : 10;
+      if (e.a === "roar") { sfx.rumble(); view.text(field.nozzle.x, field.nozzle.y - 70, "💫", "#ffffff", 30); } else sfx.boing();
     } else if (e.kind === "event") {
       // the event announces itself with a big icon and a sound, no words
       const icon = { box: "🎁", bombs: "💣", treasure: "💰", gust: "🌬️", parade: "🏃", frenzy: "🔥×2" }[e.e];
@@ -987,7 +993,7 @@ async function startLevel(b: BiomeId, idx: number) {
   field.favor = lvl.target; field.rivalFast = lvl.task === "rival"; applyPerks(field);
   if (lvl.task === "golden") field.lure = 999;
   for (let i = 0; i < 6; i++) spawn(field, rng);
-  if (lvl.task === "giant") field.giantT = 1.5;
+  if (lvl.task === "giant") { field.giantT = 1.5; field.fury = Math.min(4, Math.floor((save.giantWins ?? 0) / 1.5)); field.attackT = 2.5; }
   mode = "field"; gameplayStart(); updateUi();
 }
 /** the level is over: stars by time left, coins, then back to the map */
