@@ -22,9 +22,18 @@ SHEETS = {
     "eggs": ["egg_speckled", "egg_sky", "egg_star", "egg_golden"],
     "hyb1": ["buzzbun", "shroomslime", "leafowl", "luckshell"],
     "hyb2": ["glowflake", "fernfrost", "pineseal", "aurospore"],
+    "crit_candy1": ["gumdrop", "lollipup", "marshmeow", "truffle"],
+    "crit_candy2": ["sprinkle", "cottonfluff", "jellybean", "pudding"],
+    "crit_candy3": ["cupcakey", "swirlicorn", "candyking", "cakeroar"],
+    "crit_volcano1": ["emberpup", "magmite", "ashbat", "cinderchick"],
+    "crit_volcano2": ["lavaslug", "rockhorn", "sizzle", "obby"],
+    "crit_volcano3": ["flarefox", "phoenixie", "pyrodrake", "magmaw"],
+    "crit_moon1": ["moonbun", "starling", "cometto", "cratero"],
+    "crit_moon2": ["astrocat", "nebulee", "saturnie", "ufolo"],
+    "crit_moon3": ["lunaria", "galaxeel", "celestail", "bigmoon"],
 }
 SINGLES = {"kid_vac": "kid_vac", "kid_vac_suck": "kid_vac_suck", "kid_cheer": "kid_cheer", "lab_egg": "lab_egg"}
-BGS = {"bg_meadow": "bg_meadow", "bg_park": "bg_park", "bg_forest": "bg_forest", "bg_frost": "bg_frost"}
+BGS = {"bg_meadow": "bg_meadow", "bg_park": "bg_park", "bg_forest": "bg_forest", "bg_frost": "bg_frost", "bg_candy": "bg_candy", "bg_volcano": "bg_volcano", "bg_moon": "bg_moon"}
 MAX = {"egg_": 120, "lab_egg": 120, "kid_": 360, "pedestal": 220, "jar": 200, "coin": 96, "nozzle": 128}
 
 def save(im, name):

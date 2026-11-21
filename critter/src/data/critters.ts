@@ -81,12 +81,55 @@ export const CRITTERS: CritterDef[] = [
   c("fernfrost", "Fernfrost", "epic", 58, 26, 3.4, 480, "#e8f4ff", "shy"),
   c("pineseal", "Pineseal", "epic", 60, 10, 3.6, 520, "#a8b4c4", "shell"),
   c("aurospore", "Aurospore", "epic", 58, 18, 3.8, 900, "#c9a7ff", "split"),
+  // the road to the Moon. The last one of each place is its giant: never wanders in, it is won by beating the giant.
+  ...biome("candy"),
+  c("gumdrop", "Gumdrop", "common", 52, 24, 1.2, 200, "#5fd35f", "hop"),
+  c("lollipup", "Lollipup", "common", 56, 26, 1.3, 220, "#ff8ac8", "shy"),
+  c("marshmeow", "Marshmeow", "common", 56, 20, 1.3, 230, "#fff4fa", "hop"),
+  c("truffle", "Truffle", "common", 50, 10, 1.4, 250, "#7a4a2a", "burrow"),
+  c("sprinkle", "Sprinkle", "common", 56, 18, 1.4, 260, "#ffb3d9", "split"),
+  c("cottonfluff", "Cottonfluff", "rare", 56, 30, 2, 800, "#ffd6f0", "fly"),
+  c("jellybean", "Jellybean", "rare", 50, 34, 2.1, 880, "#a070ff", "hop"),
+  c("pudding", "Pudding", "rare", 58, 10, 2.4, 950, "#e8a040", "shell"),
+  c("cupcakey", "Cupcakey", "rare", 56, 20, 2.4, 1000, "#ff9ab8", "shy"),
+  c("swirlicorn", "Swirlicorn", "epic", 60, 28, 3.8, 3400, "#ffe0f0", "fly"),
+  c("candyking", "Candyking", "legendary", 70, 20, 6.5, 13000, "#ff5a7a", "shy"),
+  c("cakeroar", "Cakeroar", "secret", 76, 10, 8, 20000, "#ff9ab8", "hop"),
+  ...biome("volcano"),
+  c("emberpup", "Emberpup", "common", 54, 24, 1.3, 1000, "#ff6a3a", "hop"),
+  c("magmite", "Magmite", "common", 50, 12, 1.4, 1100, "#ff8a2a", "burrow"),
+  c("ashbat", "Ashbat", "common", 52, 34, 1.3, 1150, "#8a8a9a", "fly"),
+  c("cinderchick", "Cinderchick", "common", 50, 26, 1.3, 1200, "#ffa03a", "shy"),
+  c("lavaslug", "Lavaslug", "common", 54, 6, 1.5, 1300, "#ff7a2a", "shell"),
+  c("rockhorn", "Rockhorn", "rare", 62, 10, 2.4, 4000, "#8a7a6a", "hop"),
+  c("sizzle", "Sizzle", "rare", 52, 32, 2.1, 4400, "#ffb03a", "split"),
+  c("obby", "Obby", "rare", 56, 8, 2.6, 4800, "#2a2440", "burrow"),
+  c("flarefox", "Flarefox", "rare", 56, 26, 2.3, 5000, "#ff5a2a", "shy"),
+  c("phoenixie", "Phoenixie", "epic", 58, 30, 4, 17000, "#ffcf3a", "fly"),
+  c("pyrodrake", "Pyrodrake", "legendary", 72, 22, 7, 65000, "#ff4a2a", "hop"),
+  c("magmaw", "Magmaw", "secret", 78, 8, 8.5, 100000, "#ff6a2a", "hop"),
+  ...biome("moon"),
+  c("moonbun", "Moonbun", "common", 56, 30, 1.3, 5000, "#d8c8ff", "hop"),
+  c("starling", "Starling", "common", 50, 36, 1.4, 5500, "#ffe066", "fly"),
+  c("cometto", "Cometto", "common", 52, 34, 1.4, 5800, "#7ac8ff", "shy"),
+  c("cratero", "Cratero", "common", 54, 8, 1.5, 6000, "#a0a0b0", "burrow"),
+  c("astrocat", "Astrocat", "common", 54, 26, 1.5, 6500, "#ffd0a0", "hop"),
+  c("nebulee", "Nebulee", "rare", 56, 30, 2.2, 20000, "#d07aff", "split"),
+  c("saturnie", "Saturnie", "rare", 58, 16, 2.5, 22000, "#ffc07a", "shell"),
+  c("ufolo", "Ufolo", "rare", 52, 34, 2.3, 24000, "#9ae0a0", "fly"),
+  c("lunaria", "Lunaria", "rare", 52, 30, 2.4, 25000, "#e0e8ff", "fly"),
+  c("galaxeel", "Galaxeel", "epic", 60, 26, 4.2, 85000, "#5a4aff", "shy"),
+  c("celestail", "Celestail", "legendary", 72, 24, 7.5, 320000, "#a07aff", "shy"),
+  c("bigmoon", "Big Moon", "secret", 80, 6, 9, 500000, "#f0f0ff", "hop"),
 ];
 export interface BiomeDef { id: BiomeId; name: string; names?: Partial<Record<Lang, string>>; icon: string; bg: string; price: number }
 export const BIOMES: BiomeDef[] = [
   { id: "meadow", name: "Sunny Meadow", names: { fr: "Pré Ensoleillé", de: "Sonnenwiese", es: "Prado Soleado", it: "Prato Soleggiato", pt: "Prado Ensolarado", tr: "Güneşli Çayır", hi: "धूप वाला मैदान", ja: "ひだまり草原" }, icon: "🌼", bg: "bg_meadow", price: 0 },
   { id: "forest", name: "Mushroom Forest", names: { fr: "Forêt des Champis", de: "Pilzwald", es: "Bosque de Setas", it: "Bosco dei Funghi", pt: "Mata dos Cogumelos", tr: "Mantar Ormanı", hi: "कुकुरमुत्ता वन", ja: "キノコの森" }, icon: "🍄", bg: "bg_forest", price: 9000 },
   { id: "frost", name: "Frosty Peaks", names: { fr: "Pics Givrés", de: "Frostgipfel", es: "Picos Helados", it: "Picchi Gelati", pt: "Picos Gelados", tr: "Buzlu Zirveler", hi: "बर्फ़ीली चोटियाँ", ja: "こおりの山" }, icon: "❄️", bg: "bg_frost", price: 260000 },
+  { id: "candy", name: "Candy Hills", icon: "🍭", bg: "bg_candy", price: 0 },
+  { id: "volcano", name: "Lava Mountain", icon: "🌋", bg: "bg_volcano", price: 0 },
+  { id: "moon", name: "The Moon", icon: "🌙", bg: "bg_moon", price: 0 },
 ];
 /** the name to show, in the player's language */
 export const critterName = (d: CritterDef) => d.names?.[getLang()] ?? d.name;
@@ -123,8 +166,11 @@ export const catchCoinsOf = (d: CritterDef, mult: number) => Math.max(1, Math.ro
 export interface GiantDef { biome: BiomeId; id: string; need: number; resist: number }
 export const GIANTS: GiantDef[] = [
   { biome: "meadow", id: "honeyblob", need: 12, resist: 2.4 },
-  { biome: "forest", id: "barkbear", need: 46, resist: 3.4 },
-  { biome: "frost", id: "glacier", need: 66, resist: 4.4 },
+  { biome: "forest", id: "barkbear", need: 50, resist: 3.4 },
+  { biome: "frost", id: "glacier", need: 76, resist: 4.4 },
+  { biome: "candy", id: "cakeroar", need: 92, resist: 5.2 },
+  { biome: "volcano", id: "magmaw", need: 112, resist: 6 },
+  { biome: "moon", id: "bigmoon", need: 128, resist: 7 },
 ];
 export const giantOf = (b: BiomeId) => GIANTS.find((g) => g.biome === b) ?? null;
 
@@ -133,6 +179,6 @@ export const giantOf = (b: BiomeId) => GIANTS.find((g) => g.biome === b) ?? null
 export interface GiantStep extends GiantDef { tier: number; scale: number }
 export function giantStep(i: number): GiantStep {
   const g = GIANTS[i % GIANTS.length], tier = Math.floor(i / GIANTS.length) + 1;
-  const need = i < GIANTS.length ? g.need : GIANTS[GIANTS.length - 1].need + (i - GIANTS.length + 1) * 12;
+  const need = i < GIANTS.length ? g.need : GIANTS[GIANTS.length - 1].need + (i - GIANTS.length + 1) * 8;
   return { ...g, tier, need, resist: g.resist + (tier - 1) * 1.2, scale: 3.3 + (tier - 1) * 0.35 };
 }

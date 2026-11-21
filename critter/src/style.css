@@ -431,3 +431,31 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 }
 @media (orientation: portrait) { .corner { bottom: 62px; } }
 @media (max-width: 380px) { .upb { padding: 4px 9px 6px 6px; } .upb .uc { font-size: 13px; } .upb .ui { font-size: 19px; } #upBar { gap: 5px; } }
+/* the journey to the Moon */
+#journey { position: absolute; inset: 0; z-index: 9; pointer-events: auto; display: flex; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(13,30,69,.78), rgba(13,30,69,.92)); animation: fadeIn .3s; }
+#journey .road { display: flex; align-items: center; gap: 2px; padding: 0 10px; }
+#journey .stop { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; opacity: .45; }
+#journey .stop.on { opacity: 1; }
+#journey .pi { font-size: 30px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+#journey .gg { width: 40px; height: 40px; object-fit: contain; filter: brightness(0) opacity(.55); }
+#journey .gg.done { filter: none; }
+#journey .stop i { position: absolute; bottom: -4px; right: -4px; font-style: normal; font-size: 14px; color: #7be495; }
+#journey .stop.goal .pi { font-size: 42px; animation: pulse 1.2s infinite; filter: drop-shadow(0 0 12px #ffe9a0); }
+#journey .stop.goal .gg { width: 54px; height: 54px; }
+#journey .dots { flex: 1; min-width: 10px; width: 22px; height: 4px; border-radius: 2px; background: repeating-linear-gradient(90deg, rgba(255,255,255,.6) 0 5px, transparent 5px 9px); margin-bottom: 40px; }
+#journey .walker { position: fixed; width: 46px; translate: -50% -110%; filter: drop-shadow(0 3px 2px rgba(0,0,0,.4)); animation: hop 0.35s infinite; }
+@media (max-width: 400px) { #journey .pi { font-size: 24px; } #journey .gg { width: 30px; height: 30px; } #journey .stop.goal .pi { font-size: 34px; } #journey .dots { width: 12px; } }
+#journey { background: rgba(13,30,69,.94); }
+#journey .road { max-width: 100vw; }
+@media (max-width: 520px) {
+  #journey .pi { font-size: 22px; } #journey .gg { width: 26px; height: 26px; }
+  #journey .stop.goal .pi { font-size: 30px; } #journey .stop.goal .gg { width: 36px; height: 36px; }
+  #journey .dots { width: 8px; min-width: 6px; } #journey .walker { width: 36px; }
+}
+@media (max-width: 520px) {
+  #journey .pi { font-size: 27px; } #journey .gg { width: 34px; height: 34px; filter: brightness(0) invert(1) opacity(.35); }
+  #journey .gg.done { filter: none; }
+  #journey .stop.goal .pi { font-size: 36px; } #journey .stop.goal .gg { width: 44px; height: 44px; }
+  #journey .dots { width: 12px; }
+}
+#journey .gg { filter: brightness(0) invert(1) opacity(.35); }

@@ -19,7 +19,7 @@ Scale is the wow: a little kid, a little nozzle, and a giant cute monster stretc
 | 7. Coming back | "My coins grew" | Offline income from the collection; the giant ladder (★2, ★3...) always has a next target | done |
 | 8. Bringing friends | "Beat me!" | 60-second Rush with a friend link: same field for both, two bars side by side | done |
 | 9. Competing | "I'm better" | Rush best on the button; after a giant, show the giant ladder rank | later |
-| 10. Long term | "There's always more" | Giant ladder without end; more places and giants are data (one line per giant) | open |
+| 10. Long term | "There's always more" | Six places on the road to the Moon (a giant every 3-4 min, the Moon at ~18 min), then the giant ladder (★2, ★3...) | done |
 
 ## Fixed principles (for the whole game)
 - **Almost no words.** None on the playing field; the bare minimum in menus. Everything is understood from pictures, icons, colour and motion.

@@ -306,15 +306,40 @@ function offerRush() {
 async function nextPlace() {
   if (mode !== "field") return;
   const ng = nextGiant();
+  const fromI = BIOMES.findIndex((b) => b.id === save.biome);
   if (save.biomes.includes(ng.biome)) save.biome = ng.biome;
   busy = true;
   await commercialBreak();
+  const toI = BIOMES.findIndex((b) => b.id === save.biome);
+  if (toI !== fromI) await showJourney(fromI, toI);
   busy = false;
   field = newField(view.W, view.H, save.up, save.biome); field.script = 2;
   for (let i = 0; i < 5; i++) spawn(field, rng);
   colourTarget = (save.restored ?? []).includes(save.biome) ? 1 : 0; view.colour = colourTarget;
   writeSave(save); updateUi();
 }
+/** the journey: a road of every place with its giant, the kid walking from the last place to the new one,
+ *  and the Moon waiting at the end. Shown at the very start and whenever a new place opens. No words. */
+async function showJourney(from: number, to: number) {
+  const box = $("journey");
+  const places = BIOMES;
+  box.innerHTML = `<div class="road">${places.map((b, i) => {
+    const g = GIANTS.find((x) => x.biome === b.id), done = (save.restored ?? []).includes(b.id);
+    return `<div class="stop${i <= to ? " on" : ""}${i === places.length - 1 ? " goal" : ""}"><span class="pi">${b.icon}</span>${g ? `<img class="gg${done ? " done" : ""}" src="./art/${CRITTER_BY_ID[g.id].art}.webp" alt="">` : ""}${done ? "<i>✔</i>" : ""}</div>`;
+  }).join('<b class="dots"></b>')}</div><img class="walker" src="./art/kid_vac.webp" alt="">`;
+  box.classList.remove("hidden");
+  const stops = box.querySelectorAll<HTMLElement>(".stop"), walker = box.querySelector<HTMLElement>(".walker")!;
+  const at = (i: number) => { const r = stops[Math.max(0, Math.min(stops.length - 1, i))].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top }; };
+  const a = at(from), b = at(to);
+  walker.style.left = `${a.x}px`; walker.style.top = `${a.y}px`;
+  await new Promise((r) => setTimeout(r, 450));
+  walker.style.transition = "left 1.1s ease-in-out, top 1.1s ease-in-out";
+  walker.style.left = `${b.x}px`; walker.style.top = `${b.y}px`;
+  sfx.event();
+  await new Promise((r) => setTimeout(r, 1900));
+  box.classList.add("hidden");
+}
+
 /** coins fly from the nozzle up to the coin counter: you see where the money goes */
 function flyCoins(wx: number, wy: number, n: number) {
   const target = $("coinIco").getBoundingClientRect();
@@ -487,7 +512,7 @@ function jarSounds(n: number) { for (let i = 0; i < Math.min(n, 12); i++) setTim
 
 /** the park as a little place: one fenced pen per region with its critters living inside, a lab, a nest and a workshop.
  *  Locked pens show what they cost and how close you are. Tapping a building opens its page. */
-type Plot = "meadow" | "forest" | "frost" | "lab" | "nest" | "shop";
+type Plot = BiomeId | "nest" | "shop";
 /** what the park shows: the places, the workshop, and the lab once the first giant is caught */
 const plotsNow = (): Plot[] => labOpen() ? ["meadow", "forest", "frost", "lab", "shop"] : ["meadow", "forest", "frost", "shop"];
 let mapKey = "", sheet: Plot | null = null;
@@ -894,6 +919,7 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
   // the story, once: one short card, then straight into play
 
   setTimeout(offerRush, 700);
+  if (!save.tips.includes("road")) { save.tips.push("road"); writeSave(save); setTimeout(() => void showJourney(0, 0), 400); }
   if (save.catches > 0) $("hint").classList.add("hidden");
   const coin = img("coin"), jarImg = img("jar");
   if (coin) $("coinIco").innerHTML = `<img src="./art/coin.webp" alt="">`;

@@ -57,6 +57,34 @@ JOBS = {
   "lab_egg": ("A single game sprite on a fully transparent background: a magical lab egg, glass-like and glowing with bubbling green and purple potion swirls inside, with a little brass cap. No text. " + STYLE, "1:1", True),
 }
 
+# --- the road to the Moon: three more places, each with its giant (the 4th critter of its third sheet)
+def _bg(desc):
+    return ("Vertical game background, portrait composition, side view: " + desc + " Top 45% sky and distant scenery, middle a wide open area that stays uncluttered for gameplay, "
+            "bottom 20% a flat ground band with a path, decorations only at the far left and right edges. No characters, no creatures, no text. " + STYLE, "2:3", False)
+JOBS.update({
+  "crit_candy1": (SHEET + CRIT + "Top-left: 'Gumdrop', a glossy green gumdrop critter with sugar crystals. Top-right: 'Lollipup', a pink puppy ball with a swirly lollipop tail. "
+     "Bottom-left: 'Marshmeow', a soft white marshmallow kitten. Bottom-right: 'Truffle', a round chocolate truffle critter with a cocoa-dust top. " + STYLE, "1:1", True),
+  "crit_candy2": (SHEET + CRIT + "Top-left: 'Sprinkle', a donut critter with pink icing and rainbow sprinkles. Top-right: 'Cottonfluff', a pastel cotton-candy cloud critter. "
+     "Bottom-left: 'Jellybean', a shiny purple jellybean critter. Bottom-right: 'Pudding', a wobbly caramel pudding critter with a cherry on top. " + STYLE, "1:1", True),
+  "crit_candy3": (SHEET + CRIT + "Top-left: 'Cupcakey', a rare cupcake critter with a swirl of frosting. Top-right: 'Swirlicorn', an epic ice-cream-cone unicorn critter. "
+     "Bottom-left: 'Candyking', a legendary critter wearing a candy-cane crown. Bottom-right: 'Cakeroar', a HUGE chubby three-layer strawberry cake monster with frosting drips, a big happy mouth and tiny arms, the giant boss. " + STYLE, "1:1", True),
+  "bg_candy": _bg("a sweet candy land with chocolate rivers, lollipop trees, gumdrop hills and pink cotton-candy clouds."),
+  "crit_volcano1": (SHEET + CRIT + "Top-left: 'Emberpup', a red puppy ball with a tiny flame on its head. Top-right: 'Magmite', a small glowing magma rock critter. "
+     "Bottom-left: 'Ashbat', a fluffy grey bat ball. Bottom-right: 'Cinderchick', an orange chick with smoldering feathers. " + STYLE, "1:1", True),
+  "crit_volcano2": (SHEET + CRIT + "Top-left: 'Lavaslug', a glowing orange lava slug. Top-right: 'Rockhorn', a stony rhino calf ball. "
+     "Bottom-left: 'Sizzle', a bouncy fire spirit with a happy face. Bottom-right: 'Obby', a shiny black obsidian crystal critter. " + STYLE, "1:1", True),
+  "crit_volcano3": (SHEET + CRIT + "Top-left: 'Flarefox', a rare fox kit with a fiery tail. Top-right: 'Phoenixie', an epic baby phoenix ball with golden flames. "
+     "Bottom-left: 'Pyrodrake', a legendary baby fire dragon. Bottom-right: 'Magmaw', a HUGE chubby lava golem blob with glowing cracks, a wide grin and stubby legs, the giant boss. " + STYLE, "1:1", True),
+  "bg_volcano": _bg("a cute volcano land at dusk, a friendly smoking volcano in the distance, warm orange sky, dark rocks with glowing lava cracks."),
+  "crit_moon1": (SHEET + CRIT + "Top-left: 'Moonbun', a pale lilac bunny ball with a crescent mark. Top-right: 'Starling', a glowing yellow star-shaped critter. "
+     "Bottom-left: 'Cometto', a blue comet critter with a sparkly tail. Bottom-right: 'Cratero', a grey moon-rock critter with little craters. " + STYLE, "1:1", True),
+  "crit_moon2": (SHEET + CRIT + "Top-left: 'Astrocat', a kitten floating in a tiny round space helmet. Top-right: 'Nebulee', a swirly pink-and-purple nebula cloud critter. "
+     "Bottom-left: 'Saturnie', a round planet critter with a ring. Bottom-right: 'Ufolo', a tiny flying-saucer critter with a happy face. " + STYLE, "1:1", True),
+  "crit_moon3": (SHEET + CRIT + "Top-left: 'Lunaria', a rare moth with glowing moon wings. Top-right: 'Galaxeel', an epic starry space eel. "
+     "Bottom-left: 'Celestail', a legendary cosmic fox with a galaxy tail. Bottom-right: 'Big Moon', the MOON ITSELF as a HUGE round cute creature with craters, sleepy eyes, rosy cheeks and tiny legs, the final giant boss. " + STYLE, "1:1", True),
+  "bg_moon": _bg("the surface of the moon under a starry purple space sky, the Earth small in the distance, soft grey craters and glowing crystals."),
+})
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]

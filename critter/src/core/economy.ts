@@ -3,9 +3,9 @@ export type UpgradeId = "power" | "range" | "tank";
 export type Upgrades = Record<UpgradeId, number>;
 
 export const UPGRADES: Record<UpgradeId, { max: number; cost: (l: number) => number; icon: string }> = {
-  power: { max: 70, cost: (l) => Math.round(40 * Math.pow(1.5, l)), icon: "💨" },
-  range: { max: 50, cost: (l) => Math.round(60 * Math.pow(1.55, l)), icon: "📏" },
-  tank: { max: 50, cost: (l) => Math.round(90 * Math.pow(1.62, l)), icon: "💰" },
+  power: { max: 100, cost: (l) => Math.round(40 * Math.pow(1.32, l)), icon: "💨" },
+  range: { max: 80, cost: (l) => Math.round(60 * Math.pow(1.33, l)), icon: "📏" },
+  tank: { max: 80, cost: (l) => Math.round(90 * Math.pow(1.35, l)), icon: "💰" },
 };
 export const UPGRADE_ORDER: UpgradeId[] = ["power", "range", "tank"];
 export const upgradeCost = (u: Upgrades, id: UpgradeId) => (u[id] >= UPGRADES[id].max ? null : UPGRADES[id].cost(u[id]));

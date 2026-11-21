@@ -14,6 +14,7 @@ const fmt = (s: number) => (isNaN(s) ? "never" : `${Math.floor(s / 60)}:${String
 let bossTotal = 0;
 const giants: number[] = [];
 const winT: number[] = [];
+const winAt: number[][] = [];
 const lvlAt: Record<number, number[]> = {}, lvlT: Record<number, number[]> = {};
 const res: { frost: number; firstJar: number; forest: number; coins: number[]; buys: number; income: number; species: number; tugs: number; tugWon: number }[] = [];
 for (let n = 0; n < SESSIONS; n++) {
@@ -37,7 +38,7 @@ for (let n = 0; n < SESSIONS; n++) {
     const f = fld;
     const g = giantStep(wins);
     if (g.biome !== biome && owned.includes(g.biome) && vacLevel(up) >= g.need) biome = g.biome;
-    if (g.biome === biome) f.giant = { id: g.id, ready: vacLevel(up) >= g.need, resist: g.resist, scale: g.scale };
+    f.giant = g.biome === biome ? { id: g.id, ready: vacLevel(up) >= g.need, resist: g.resist, scale: g.scale } : null;
     const jar: string[] = [];
     let aimX = 250, aimY = 560, holdT = 0;
     // one visit: catch until the jar is full (or 90 s pass)
@@ -60,7 +61,7 @@ for (let n = 0; n < SESSIONS; n++) {
         if (e.kind === "caught") { index[e.c.def.id] = (index[e.c.def.id] ?? 0) + 1; coins += catchCoinsOf(e.c.def, MUTATIONS.find((m) => m.id === e.c.mut)?.mult ?? 1) * valueMult(up); if (e.c.resist > 1.5) tugWon++; if (firstJar < 0 && Object.values(index).reduce((a, b) => a + b, 0) >= 8) firstJar = t; }
         if (e.kind === "tug") tugs++;
         if (e.kind === "caught" && e.c.boss > 0) {
-          bosses++; wins++; winT.push(t);
+          bosses++; (winAt[wins] ??= []).push(t); wins++; winT.push(t);
           if (!restored.includes(biome)) {
             restored.push(biome);
             if (firstGiant < 0) firstGiant = t;
@@ -97,3 +98,4 @@ console.log(`tug fights        ${(res.reduce((a, r) => a + r.tugs, 0) / SESSIONS
 console.log(`bosses caught     ${(bossTotal / SESSIONS).toFixed(1)} per session`);
 console.log("vacuum level reached at (median): " + Object.keys(lvlT).map((k) => `L${k} ${fmt(median(lvlT[+k]))}`).join(", "));
 console.log(`giants beaten     ${(winT.length / SESSIONS).toFixed(1)} per session`);
+console.log("giant n beaten at (median): " + winAt.map((a, i) => `#${i + 1} ${fmt(median(a))} (${a.length})`).join(", "));

@@ -7,17 +7,23 @@ import { EYES } from "../data/eyes.ts";
 import type { SaveData } from "../core/save.ts";
 
 type Ctx = CanvasRenderingContext2D;
-const NAMES = [...CRITTERS.map((c) => c.art), "lab_egg", "kid_vac", "kid_vac_suck", "kid_cheer", "egg_speckled", "egg_sky", "egg_star", "egg_golden", "bg_frost", "bg_meadow", "bg_forest", "bg_park", "pedestal", "jar", "coin", "nozzle"];
+// the first place loads before play starts; everything else streams in right after, so the first screen is quick
+const FIRST = [...CRITTERS.filter((c) => c.biome === "meadow").map((c) => c.art), "kid_vac", "kid_vac_suck", "kid_cheer", "bg_meadow", "jar", "coin", "nozzle"];
+const LATER = [...CRITTERS.filter((c) => c.biome !== "meadow" && c.biome !== "lab").map((c) => c.art), "bg_forest", "bg_frost", "bg_candy", "bg_volcano", "bg_moon"];
 const imgs = new Map<string, HTMLImageElement>();
 export const img = (n: string) => imgs.get(n) ?? null;
+const fetchImg = (n: string) => new Promise<void>((res) => {
+  const im = new Image();
+  im.onload = () => { imgs.set(n, im); res(); };
+  im.onerror = () => res();
+  im.src = `./art/${n}.webp`;
+});
 export function loadArt(onProgress: (k: number) => void) {
   let done = 0;
-  return Promise.all(NAMES.map((n) => new Promise<void>((res) => {
-    const im = new Image();
-    im.onload = () => { imgs.set(n, im); onProgress(++done / NAMES.length); res(); };
-    im.onerror = () => { onProgress(++done / NAMES.length); res(); };
-    im.src = `./art/${n}.webp`;
-  })));
+  return Promise.all(FIRST.map((n) => fetchImg(n).then(() => onProgress(++done / FIRST.length)))).then(() => {
+    // the rest quietly in the background
+    void LATER.reduce((p, n) => p.then(() => fetchImg(n)), Promise.resolve());
+  });
 }
 
 /** gold / rainbow copies of a sprite, keeping its shading (cached) */
@@ -421,7 +427,7 @@ export class View {
   drawPark(_save: SaveData, _biome: BiomeId, _t: number, dt: number) {
     // the park is a calm backdrop; the collection itself is a tidy card grid in the page
     this.begin();
-    this.cover("bg_park");
+    this.cover("bg_meadow");
     const c = this.c;
     c.fillStyle = "rgba(13,30,69,0.35)"; c.fillRect(0, 0, this.W, this.H);
     this.particles(dt);
