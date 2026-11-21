@@ -153,7 +153,7 @@ function handleEvents() {
         sparkToBar(field.nozzle.x, field.nozzle.y, Math.floor(save.charge) > before);
       }
       // a new species gets its big moment, unless a giant fight is on (then it slips into the book quietly)
-      if (isNew && !field.critters.some((k) => k.boss > 0 && k.state !== "caught") && c.boss === 0) { celebrating.add(c.def.id); void celebrate([c.def.id]).then(() => checkChests(c.def.biome)); }
+      if (isNew && !field.critters.some((k) => k.boss > 0 && k.state !== "caught") && c.boss === 0) { celebrating.add(c.def.id); void celebrate([c.def.id]).then(() => queued(() => checkChests(c.def.biome))); }
       else if (isNew) { const bb = $("bookBtn"); bb.classList.remove("got"); void bb.offsetWidth; bb.classList.add("got"); }
       if (c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") { view.shake = 8; sfx.reveal(c.def.rarity === "legendary" ? "legendary" : "epic"); }
       if (isNew) sfx.newFish();
@@ -614,7 +614,7 @@ function buy(id: UpgradeId) {
   if (cost > save.coins) { sfx.nope(); return; }
   const tierBefore = tierOf(vacLevel(save.up));
   save.coins -= cost; save.up[id]++;
-  if (tierOf(vacLevel(save.up)) > tierBefore) setTimeout(() => void evolve(tierOf(vacLevel(save.up))), 300);
+  if (tierOf(vacLevel(save.up)) > tierBefore) setTimeout(() => void queued(() => evolve(tierOf(vacLevel(save.up)))), 300);
   sfx.buy(); writeSave(save); updateUi();
   { const m = document.querySelector("#fieldHead .me"); m?.classList.remove("plus"); void (m as HTMLElement | null)?.offsetWidth; m?.classList.add("plus"); }
 }
@@ -1038,13 +1038,32 @@ function endLevel(win: boolean) {
   const r = document.getElementById("lvlRetry"); if (r) r.onclick = () => { box.classList.add("hidden"); lvl = null; void startLevel(l.biome, l.idx); };
 }
 /** between levels: the map of this place (a natural pause for an ad) */
+/** big screens (chests, gift, rival, evolution) come one after another, never on top of each other */
+let overlayQ: Promise<unknown> = Promise.resolve();
+const queued = <T>(f: () => Promise<T>) => { const r = overlayQ.then(f, f); overlayQ = r.catch(() => undefined); return r; };
+const OVERLAYS = ["gift", "vs", "perks", "evolve", "wheel", "finale", "journey"];
+const overlayOpen = () => OVERLAYS.some((id) => !$(id).classList.contains("hidden"));
+/** meeting the rival: you, the Moon, him. Once, before the race track starts to matter. */
+async function meetRival() {
+  if (save.tips.includes("rival")) return;
+  save.tips.push("rival"); writeSave(save);
+  const box = $("vs");
+  box.innerHTML = `<img class="me" src="./art/kid_vac.webp" alt=""><div class="mid"><span class="moon">🌙</span><b>VS</b></div><img class="him" src="./art/kid_rival.webp" alt=""><div class="row2"><span>🌼</span><i></i><span>🌙</span></div><button class="btn big go" id="vsGo">▶</button>`;
+  box.classList.remove("hidden"); sfx.reveal("epic");
+  await new Promise<void>((r) => { $("vsGo").onclick = () => r(); });
+  box.classList.add("hidden");
+  // point at the race track for a moment
+  const rc = $("race"); rc.classList.add("flash"); setTimeout(() => rc.classList.remove("flash"), 3000);
+}
 async function toMap() {
   lvl = null; mode = "field";
   busy = true; await commercialBreak(); busy = false;
+  if (save.catches >= 10) await queued(meetRival);
   syncRoad();
   if (field.biome !== save.biome || field.critters.length === 0) { field = newField(view.W, view.H, save.up, save.biome); field.script = 2; for (let i = 0; i < 5; i++) spawn(field, rng); }
   renderLevels(); updateUi();
 }
+let mapKidAt: number | null = null, mapKidPlace: BiomeId | null = null;
 /** the place's map: two levels, a fork (the normal way or the risky way), one more level, the giant */
 const NODE_POS: Record<number, [number, number]> = { 0: [24, 88], 1: [50, 74], 2: [22, 57], 3: [22, 38], 5: [78, 57], 6: [78, 38], 4: [50, 24], 7: [50, 6] };
 const LINKS: [number, number][] = [[0, 1], [1, 2], [2, 3], [3, 4], [1, 5], [5, 6], [6, 4], [4, 7]];
@@ -1061,18 +1080,31 @@ function renderLevels() {
       const ready = levelsDone(b) && g.biome === b;
       return `<button class="node giant${ready && barPower() >= g.need ? " go" : ""}${ready ? "" : " locked"}" data-i="7" style="left:${x}%;top:${y}%">${giantImg(g.id)}${ready ? "" : "<i>🔒</i>"}</button>`;
     }
-    const open = nodeOpen(b, i);
-    let icon: string, cls = "";
+    // one way forward: only the next level can be played (at the fork, both ways are offered)
+    const fork = st[1] > 0 && !br && (i === 2 || i === 5);
+    const open = nodeOpen(b, i) && (i === next || fork) ;
+    const done = st[i] > 0;
+    let icon: string, cls = done ? " done" : "";
     if (i === 5) { icon = "🎰"; cls = " wheel"; }
     else {
       const L = makeLevel(b, i);
       icon = L.task === "species" && L.target ? ic(L.target) : L.task === "rival" ? `<img src="./art/kid_rival.webp" alt="">` : TASK_ICON[L.task];
       if (i === 6) { icon = `💀`; cls = " hard"; }
     }
-    return `<button class="node${cls}${open ? "" : " locked"}${i === next ? " next" : ""}" data-i="${i}" style="left:${x}%;top:${y}%"><span class="ni">${open ? icon : "🔒"}</span><span class="ns">${[0, 1, 2].map((k) => `<i class="${k < st[i] ? "on" : ""}">★</i>`).join("")}</span></button>`;
+    return `<button class="node${cls}${open || done ? "" : " locked"}${open ? " next" : ""}" data-i="${i}" style="left:${x}%;top:${y}%"><span class="ni">${open || done ? icon : "🔒"}</span><span class="ns">${[0, 1, 2].map((k) => `<i class="${k < st[i] ? "on" : ""}">★</i>`).join("")}</span></button>`;
   }).join("");
   box.classList.remove("hidden");
-  for (const el of box.querySelectorAll<HTMLElement>(".node")) el.onclick = () => { if (el.classList.contains("locked")) { sfx.nope(); return; } sfx.tap(); void startLevel(b, +el.dataset.i!); };
+  for (const el of box.querySelectorAll<HTMLElement>(".node")) el.onclick = () => { if (!el.classList.contains("next") && !el.classList.contains("go")) { sfx.nope(); return; } sfx.tap(); void startLevel(b, +el.dataset.i!); };
+  // where you are: the place's sign at the top, and the kid standing on the next level (walking there from the last one)
+  const here = BIOMES.find((x) => x.id === b)!;
+  const at = next ?? (levelsDone(b) ? 7 : 0);
+  box.insertAdjacentHTML("beforeend", `<div class="placeTag">${here.icon}<small>${placeIndex(b) + 1}/${BIOMES.length}</small></div><img class="mapKid" src="./art/kid_vac.webp" alt="">`);
+  const kid = box.querySelector<HTMLElement>(".mapKid")!;
+  const from = mapKidAt !== null && mapKidAt !== at && mapKidPlace === b ? mapKidAt : at;
+  const put = (n: number) => { const [x, y] = NODE_POS[n]; kid.style.left = `${x}%`; kid.style.top = `${y}%`; };
+  put(from);
+  if (from !== at) requestAnimationFrame(() => requestAnimationFrame(() => { kid.classList.add("walk"); put(at); }));
+  mapKidAt = at; mapKidPlace = b;
 }
 /** the lucky wheel: six prizes, tap to spin */
 async function spinWheel(b: BiomeId) {
@@ -1118,7 +1150,8 @@ function renderRace() {
   const box = $("race");
   if (mode !== "field") { box.innerHTML = ""; raceKey = ""; return; }
   const wins = save.giantWins ?? 0, lap = Math.floor(wins / GIANTS.length), base = lap * GIANTS.length;
-  const g = nextGiant(), mine = wins + Math.min(0.95, barPower() / g.need) - base;
+  const doneHere = starsOf(nextGiant().biome).filter((x, i) => x > 0 && i !== 5 || (i === 5 && x > 0)).length;
+  const mine = wins + Math.min(0.95, doneHere / 6) - base;
   const his = rivalPos(save.playTime ?? 0) - base;
   const pct = (v: number) => `${Math.max(0, Math.min(100, (v / GIANTS.length) * 100)).toFixed(1)}%`;
   const key = `${lap}|${pct(mine)}|${pct(his)}`;
@@ -1275,7 +1308,7 @@ function frame(now: number) {
   } else if (mode === "field") {
     field.eventsOn = !!lvl && !lvl.done && lvl.task !== "giant" && save.catches >= 8;
     field.rivalOn = !!lvl && !lvl.done && (save.catches >= 10 || lvl.task === "rival") && lvl.task !== "giant" && lvl.task !== "golden";
-    const playing = !!lvl && !lvl.done;
+    const playing = !!lvl && !lvl.done && !overlayOpen();
     if (playing && !document.hidden && started) save.playTime = (save.playTime ?? 0) + dt;
     if (playing && lvl!.total) { lvl!.left -= dt; if (lvl!.left <= 0) { lvl!.left = 0; endLevel(lvl!.task === "rival" && lvl!.stolen < 3 && lvl!.count >= lvl!.goal); } }
     if (!playing) input.on = false;
@@ -1321,7 +1354,7 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
     c.boss = 1; c.scale = 2.6; c.resist = 9; c.tease = true; c.dir = -1; c.hopPer = 1.4;
   }
   if (!save.tips.includes("road")) { save.tips.push("road"); writeSave(save); setTimeout(() => void showJourney(0, 0), 400); }
-  setTimeout(() => void dailyGift(), 1200);
+  setTimeout(() => void queued(dailyGift), 1200);
   if (!save.tips.includes("intro") && save.catches === 0) { lvl = makeLevel("meadow", 0); lvl.left = lvl.total = 60; } else renderLevels();
   if (save.catches > 0) $("hint").classList.add("hidden");
   const coin = img("coin"), jarImg = img("jar");
