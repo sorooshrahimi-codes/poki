@@ -16,9 +16,16 @@ npm run sim        # economy simulator: plays the real rules with a bot, PASS/FA
 - `src/platform/`: Poki SDK wrapper (no-op outside Poki), safe localStorage and synthesized sound.
 - `src/i18n.ts`: the five launch languages (en, es, pt, hi, ja).
 
+## The game in one line
+Catch fish -> coins -> upgrades -> your line reaches the Legend of the sea -> a three-round fight -> the next sea (lake, ocean, frozen north, reef, volcano), then the Legends return stronger. See `FUNNEL.md` for the design and `promo/POKI_SUBMISSION.md` for the Poki kit.
+
+```bash
+npm run build:qa   # a separate QA build (dist-qa) with the window.__deepLuck test handle; the Poki build has none
+```
+
 ## Poki rules this build follows
 - Nothing loads from another host except the Poki SDK script.
-- `gameplayStart` fires on the first cast. `commercialBreak` runs only before a new cast (a natural break) and never mid-dive.
-- Rewarded buttons are purple and carry 🎬. The normal choice button is the same size.
-- localStorage access is wrapped in try/catch, Esc pauses, and the game works in both portrait and landscape.
-- Current size: about 42 KB JS + 5 KB CSS.
+- `gameplayStart` fires on each cast and `gameplayStop` when the hook surfaces or the game pauses; they are never sent twice in a row.
+- `commercialBreak` runs only just before a cast (a natural break), never during a dive, and never in the first three casts.
+- Rewarded buttons are purple and carry 🎬: ×2 catch, retry a snapped line, try a hat. They are always optional.
+- localStorage access is wrapped in try/catch, Esc pauses, Space and the arrow keys never scroll the page, and the game works in portrait and landscape.

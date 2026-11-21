@@ -10,38 +10,32 @@
   </head>
   <body>
     <canvas id="game"></canvas>
-    <div id="loading"><div class="logo">Deep <span>Luck</span></div><div class="lb"><div id="loadBar"></div></div></div>
+    <div id="loading"><div class="logo">Deep<br><span>Luck</span></div><div class="lb"><div id="loadBar"></div></div></div>
     <div id="ui">
       <div id="top">
         <div class="pill" id="coins"><span class="ico" id="coinIco">🪙</span><b id="coinsN">0</b></div>
-        <button class="pill btn" id="lvlPill"><span class="lvring" id="lvlBar"><span>⭐</span></span><b id="lvlN">1</b><span id="voyN"></span></button>
         <button class="pill btn" id="albumBtn"><span class="ico">📖</span><b id="albumN">0/0</b></button>
+        <button class="pill btn hidden" id="lvlPill"><span class="lvring" id="lvlBar"><span>⭐</span></span><b id="lvlN">1</b><span id="voyN"></span></button>
         <div class="spacer"></div>
-        <button class="pill btn round" id="langBtn"></button>
-        <button class="pill btn round" id="muteBtn">🔊</button>
-        <button class="pill btn round" id="pauseBtn">⏸</button>
+        <div id="status"><div class="pill hidden" id="playPill"></div><button class="pill btn hidden" id="baitPill"></button><div class="pill hidden" id="eventPill"></div><div class="pill" id="weatherPill"></div></div>
+        <button class="pill btn round" id="gearBtn">⚙️</button>
       </div>
-      <div id="status"><div class="pill hidden" id="playPill"></div><button class="pill btn hidden" id="baitPill"></button><div class="pill" id="weatherPill"></div><div class="pill hidden" id="eventPill"></div></div>
+      <div id="tray" class="hidden"><button class="pill btn round" id="langBtn"></button><button class="pill btn round" id="muteBtn">🔊</button><button class="pill btn round" id="pauseBtn">⏸</button></div>
+      <div id="gauge"><div class="gline"><div id="gaugeFill"><i class="ghook">🪝</i></div></div><div id="gaugeFish"></div><b id="gaugeStar"></b></div>
       <div id="diveHud" class="hidden">
         <div class="pill" id="depthN">0m</div>
         <div class="pill" id="slots"></div>
       </div>
+      <div id="side"><div id="zones"></div><button class="btn zone shopb round2" id="wardBtn">🎩</button><button class="btn zone shopb round2 hidden" id="duelBtn">🤝</button></div>
+      <div id="haul" class="hidden"></div>
+      <div id="pop" class="hidden"></div>
+      <button class="btn ad hidden" id="doubleBtn">🎬<b>×2</b></button>
       <div id="dock">
         <div id="mission" class="hidden"></div>
-        <div id="dockRow"><div id="zones"></div><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb round2" id="aquaBtn">🐠<span id="aquaBadge" class="badge hidden"></span></button><button class="btn zone shopb round2" id="competeBtn">🏆</button><button class="btn zone shopb round2" id="ordersBtn">📋<span id="ordersBadge" class="hidden"></span></button><button class="btn zone shopb round2" id="wardBtn">🎩</button><button class="btn zone shopb round2" id="wheelBtn">🎁<span id="wheelBadge" class="badge hidden">!</span></button><button class="btn zone shopb round2" id="crewBtn">🧭<span id="crewBadge" class="badge hidden">!</span></button><button class="btn zone shopb" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
+        <div id="dockRow" class="hidden"><button class="btn zone shopb hidden" id="mapBtn"><img src="./art/g_map.webp" alt=""><b id="mapN">0/3</b></button><button class="btn zone shopb round2 hidden" id="aquaBtn">🐠<span id="aquaBadge" class="badge hidden"></span></button><button class="btn zone shopb round2 hidden" id="competeBtn">🏆</button><button class="btn zone shopb round2 hidden" id="ordersBtn">📋<span id="ordersBadge" class="hidden"></span></button><button class="btn zone shopb round2 hidden" id="wheelBtn">🎁<span id="wheelBadge" class="badge hidden">!</span></button><button class="btn zone shopb round2 hidden" id="crewBtn">🧭<span id="crewBadge" class="badge hidden">!</span></button><button class="btn zone shopb hidden" id="shopBtn"><img src="./art/g_shop.webp" alt=""></button></div>
         <div id="upgrades"></div>
       </div>
-      <div id="reveal" class="panel hidden">
-        <div id="cards"></div>
-        <div id="keepHint"></div>
-        <div id="bonusN"></div>
-        <div id="keepN"></div>
-        <div id="total"><span class="ico">🪙</span><b id="totalN">0</b></div>
-        <div class="row">
-          <button class="btn big ad" id="doubleBtn">🎬 <span id="doubleLbl">x2</span></button>
-          <button class="btn big ok" id="collectBtn"></button>
-        </div>
-      </div>
+      <div id="logbook" class="hidden"><div class="lbpage"><img id="lbCaptain" src="./art/npc_captain.webp" alt=""><div id="lbRoad"></div></div></div>
       <div id="snap" class="panel hidden">
         <div class="title" id="snapTitle"></div>
         <canvas id="snapFish" width="200" height="110"></canvas>

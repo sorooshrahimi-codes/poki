@@ -1,1 +1,2 @@
 declare module "*.css";
+interface ImportMeta { readonly env: { readonly MODE: string } }

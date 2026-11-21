@@ -496,3 +496,141 @@ body:has(#reveal:not(.hidden)) #guide { bottom: auto; top: 92px; }
 .card .cx { bottom: auto; top: 30px; right: 2px; }
 /* while a panel is open, messages show at the top so they never cover its buttons */
 body:has(.panel:not(.hidden):not(#legend)) #toast { top: 54px; bottom: auto; }
+
+/* ================================================================ SEA GLASS skin
+   Deep Luck's own look: frosted sea-glass bubbles, soft deep-teal glows, coral for "go",
+   no dark outlines and no boxes around things. Everything sits at the edges; the sea is the player's. */
+:root { --deep: #04324a; --glass: rgba(150, 235, 245, 0.16); --coral: #ff6f61; --coral2: #ff9e6b; --kelp: #39d6a8; --sun: #ffe27a; }
+body { font-family: "Baloo 2", system-ui, -apple-system, "Segoe UI", "Hiragino Maru Gothic ProN", sans-serif; font-weight: 800; }
+.pill b, .up, .btn, #total, .title, #toast, #reelHint, #pop, #haul { text-shadow: 0 2px 6px rgba(2, 40, 60, 0.85), 0 0 2px rgba(2, 40, 60, 0.9); }
+
+/* bubbles: round frosted glass with a highlight, never a hard frame */
+.pill, .zone, .round2, .shopb { background: radial-gradient(circle at 32% 26%, rgba(255,255,255,.5), rgba(255,255,255,0) 34%), radial-gradient(circle at 50% 60%, rgba(120,225,240,.28), rgba(6,70,100,.42));
+  border: 0 !important; box-shadow: inset 0 0 0 1.5px rgba(220,250,255,.28), 0 6px 16px rgba(2,35,55,.35) !important; backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+#top { top: max(8px, env(safe-area-inset-top)); left: 10px; right: 10px; gap: 8px; }
+#coins, #albumBtn { background: none; box-shadow: none !important; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0 6px 0 0; font-size: 24px; }
+#coins b { color: var(--sun); font-size: 26px; }
+#albumBtn b { font-size: 18px; color: #d9fbff; }
+.pill.round { width: 46px; height: 46px; border-radius: 50%; }
+#status { position: static; display: flex; gap: 6px; align-items: center; }
+#status .pill { background: none; box-shadow: none !important; backdrop-filter: none; -webkit-backdrop-filter: none; padding: 0 4px; font-size: 24px; }
+#eventPill { background: none !important; color: var(--sun); animation: pulse 1.2s infinite; }
+#tray { position: absolute; top: calc(max(8px, env(safe-area-inset-top)) + 54px); right: 10px; display: flex; flex-direction: column; gap: 8px; animation: fadeIn .2s both; }
+
+/* the Legend gauge: a fishing line going down the left edge toward the Legend */
+#gauge { position: absolute; left: max(10px, env(safe-area-inset-left)); top: 76px; height: min(40vh, 300px); width: 70px; display: flex; flex-direction: column; align-items: center; pointer-events: none; }
+#gauge .gline { position: relative; flex: 1; width: 6px; border-radius: 3px; background: repeating-linear-gradient(rgba(220,250,255,.5) 0 6px, transparent 6px 12px); }
+#gaugeFill { position: absolute; top: 0; left: 0; right: 0; height: 0; border-radius: 3px; background: linear-gradient(var(--sun), var(--coral2)); box-shadow: 0 0 10px rgba(255,214,110,.8); transition: height .6s cubic-bezier(.3,1.4,.5,1); }
+#gaugeFill .ghook { position: absolute; bottom: -18px; left: 50%; translate: -50% 0; font-style: normal; font-size: 22px; filter: drop-shadow(0 2px 3px rgba(2,35,55,.7)); }
+#gaugeFish { margin-top: 18px; width: 70px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 0 6px rgba(150,235,245,.6)); }
+#gaugeFish canvas { width: 64px; height: 40px; }
+#gaugeStar { font-size: 14px; color: var(--sun); min-height: 14px; }
+#gauge.ready #gaugeFish { animation: lure 0.9s ease-in-out infinite; filter: drop-shadow(0 0 14px #ffd84a) drop-shadow(0 0 4px #fff); }
+#gauge.ready .gline { background: linear-gradient(var(--sun), var(--coral)); box-shadow: 0 0 14px rgba(255,214,110,.9); }
+#gauge.bump #gaugeFill { animation: bump .5s; }
+@keyframes lure { 50% { transform: scale(1.22) rotate(-6deg); } }
+@keyframes bump { 40% { box-shadow: 0 0 22px #fff; } }
+body.diving #gauge { opacity: .35; }
+
+/* the right edge: where you are (map) and what you wear, as glass bubbles */
+#side { position: absolute; right: max(10px, env(safe-area-inset-right)); top: 44%; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+#side .btn { width: 54px; height: 54px; border-radius: 50%; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+#zones { display: flex; }
+#zones .zone .zi { font-size: 28px; }
+.zone.glow { animation: lure 1s ease-in-out infinite; box-shadow: 0 0 22px var(--sun), inset 0 0 0 1.5px rgba(255,255,255,.5) !important; }
+
+/* upgrades: three glass bubbles at the bottom; affordable ones turn coral and breathe */
+#dock { bottom: max(12px, env(safe-area-inset-bottom)); }
+#upgrades { gap: 12px; }
+.up { width: 92px; border: 0; border-radius: 26px; padding: 6px 4px 8px; background: radial-gradient(circle at 32% 22%, rgba(255,255,255,.45), rgba(255,255,255,0) 35%), radial-gradient(circle at 50% 60%, rgba(120,225,240,.25), rgba(6,70,100,.5));
+  box-shadow: inset 0 0 0 1.5px rgba(220,250,255,.25), 0 8px 18px rgba(2,35,55,.4); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); position: relative; }
+.up .ul2 { font-size: 14px; color: #d9fbff; }
+.up .ul2 .cur { font-style: normal; opacity: .6; }
+.up .uc { color: var(--sun); font-size: 17px; }
+.up.can { background: radial-gradient(circle at 32% 22%, rgba(255,255,255,.55), rgba(255,255,255,0) 35%), linear-gradient(var(--coral2), var(--coral)); animation: breathe 1.6s ease-in-out infinite; }
+.up.can .uc { color: #fff; }
+.up.point::after { content: "⬇"; position: absolute; top: -40px; left: 50%; translate: -50% 0; font-size: 30px; color: var(--sun); animation: point .7s ease-in-out infinite; text-shadow: 0 2px 6px rgba(2,40,60,.8); }
+@keyframes point { 50% { transform: translateY(-10px); } }
+@keyframes breathe { 50% { transform: scale(1.05); box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.4), 0 0 22px rgba(255,140,100,.7); } }
+.tease { border: 0 !important; background: rgba(4,50,74,.55) !important; }
+
+/* the catch: thumbnails pop over the boat, then swim up into the coin counter */
+#haul { position: absolute; top: 30%; left: 50%; translate: -50% 0; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 10px; width: min(92vw, 520px); pointer-events: none; }
+#haul .hf { position: relative; animation: hfIn .45s cubic-bezier(.2,1.6,.4,1) both; filter: drop-shadow(0 4px 6px rgba(2,35,55,.6)); }
+#haul .hf.rare { filter: drop-shadow(0 0 10px var(--rc)) drop-shadow(0 4px 6px rgba(2,35,55,.6)); }
+#haul .hf canvas { width: 62px; height: 38px; }
+#haul .hx { position: absolute; right: -6px; bottom: -6px; font-size: 15px; color: #fff; }
+#haul .hn { position: absolute; left: -8px; top: -10px; font-style: normal; font-size: 18px; }
+#haul .ht { width: 100%; text-align: center; font-size: 32px; color: var(--sun); animation: hfIn .45s cubic-bezier(.2,1.6,.4,1) both; }
+#haul.go .hf, #haul.go .ht { transition: transform .7s cubic-bezier(.6,-0.3,.7,.4), opacity .7s; transform: translate(-40vw, -32vh) scale(.3); opacity: 0; }
+@keyframes hfIn { from { transform: translateY(40px) scale(.3); opacity: 0; } }
+
+/* a big icon in the sky instead of a sentence */
+#pop { position: absolute; top: 20%; left: 50%; translate: -50% 0; font-size: 54px; pointer-events: none; animation: popIcon 1.5s ease-out both; white-space: nowrap; }
+@keyframes popIcon { 0% { transform: scale(.2); opacity: 0; } 15% { transform: scale(1.15); opacity: 1; } 25% { transform: scale(1); } 80% { opacity: 1; } 100% { transform: translateY(-30px); opacity: 0; } }
+
+/* rewarded ×2: purple glass (never green), with 🎬, at the side, optional */
+#doubleBtn { position: absolute; right: max(10px, env(safe-area-inset-right)); bottom: 150px; width: 70px; height: 70px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 24px; line-height: 1;
+  background: radial-gradient(circle at 32% 22%, rgba(255,255,255,.55), rgba(255,255,255,0) 36%), linear-gradient(#b884ff, #7a35e8); box-shadow: 0 0 18px rgba(170,110,255,.7), 0 8px 18px rgba(2,35,55,.4); animation: hfIn .4s both, breathe 1.4s .4s ease-in-out infinite; }
+#doubleBtn b { font-size: 18px; }
+
+/* panels: frosted deep-sea glass, no outline */
+.panel { background: linear-gradient(rgba(10,80,110,.72), rgba(4,40,62,.82)); border: 0; border-radius: 34px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: inset 0 0 0 1.5px rgba(200,245,255,.22), 0 24px 50px rgba(0,20,35,.5); }
+.btn.big { border: 0; border-radius: 999px; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.3), inset 0 6px 0 rgba(255,255,255,.25), 0 8px 18px rgba(2,35,55,.4); }
+.btn.ok { background: linear-gradient(#4fe0c0, #1aa18f); }
+.btn.gold { background: linear-gradient(var(--coral2), var(--coral)); }
+.btn.ad { background: linear-gradient(#b884ff, #7a35e8); }
+.btn.plain { background: linear-gradient(#7fa3b5, #4d6f82); }
+.acell, .offer, .card { border-width: 0 !important; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--rc, var(--tc, #9be7ff)) 70%, transparent), 0 6px 14px rgba(2,35,55,.35) !important; background: rgba(4,50,74,.55); }
+#mapCard { background: linear-gradient(rgba(10,80,110,.9), rgba(4,40,62,.95)); border-top: 0; }
+#map { background: var(--deep); }
+#reelHint { -webkit-text-stroke: 0; font-size: 46px; }
+.badge { border: 0; }
+.newbtn { box-shadow: 0 0 22px var(--sun) !important; }
+
+/* loading: the title rises out of the deep */
+#loading { background: radial-gradient(circle at 50% 30%, #3fd3e0, #0a6f94 55%, #03283f); }
+.logo { -webkit-text-stroke: 0; text-shadow: 0 6px 18px rgba(0,30,50,.6); text-align: center; line-height: .9; font-size: 64px; transform: none; animation: float 2.2s ease-in-out infinite; }
+.logo span { color: var(--coral2); }
+.lb { border: 0; background: rgba(255,255,255,.18); height: 10px; }
+#loadBar { background: linear-gradient(90deg, var(--sun), var(--coral)); }
+
+/* the logbook: Captain Bo's five pages, joined by a dotted sea road */
+#logbook { position: absolute; inset: 0; z-index: 40; pointer-events: auto; display: flex; align-items: center; justify-content: center; background: rgba(2,25,40,.62); animation: fadeIn .3s both; }
+#logbook .lbpage { position: relative; width: min(94vw, 760px); padding: 26px 18px 22px; border-radius: 26px; background: radial-gradient(circle at 30% 20%, #fff7e2, #f1dfb4 70%, #d9bf86);
+  box-shadow: 0 30px 60px rgba(0,0,0,.45), inset 0 0 40px rgba(150,100,40,.35); animation: book .55s cubic-bezier(.2,1.4,.4,1) both; transform-origin: 50% 80%; }
+@keyframes book { from { transform: rotateX(70deg) scale(.6); opacity: 0; } }
+#lbCaptain { position: absolute; left: -10px; bottom: -14px; height: 120px; filter: drop-shadow(0 6px 8px rgba(0,0,0,.35)); animation: hfIn .5s .3s both; }
+#lbRoad { display: flex; justify-content: space-between; align-items: center; gap: 4px; position: relative; padding: 0 10px; }
+#lbRoad::before { content: ""; position: absolute; left: 40px; right: 40px; top: 50%; border-top: 4px dashed rgba(120,80,30,.45); }
+.lbp { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; animation: hfIn .45s calc(.25s + var(--i) * .12s) both; }
+.lbp canvas { width: 84px; height: 52px; filter: drop-shadow(0 3px 2px rgba(80,50,10,.35)); }
+.lbp.far canvas { opacity: .45; }
+.lbp .lbz { font-size: 24px; }
+.lbp.got canvas { filter: drop-shadow(0 0 10px #ffc93c); }
+.lbp.fresh canvas { animation: lure .8s ease-in-out 4; }
+.lbp.here::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; box-shadow: 0 0 0 3px rgba(255,111,97,.8); animation: breathe 1.2s infinite; }
+.lbboat { position: absolute; top: -62px; height: 58px; animation: float 1.6s ease-in-out infinite; }
+#logbook.story .lbp:first-child .lbboat { animation: hfIn .5s .9s both, float 1.6s 1.4s ease-in-out infinite; }
+@media (max-width: 560px) { .lbp canvas { width: 58px; height: 36px; } .lbp .lbz { font-size: 18px; } .lbboat { height: 42px; top: -46px; } #lbCaptain { height: 84px; } }
+@media (max-height: 520px) { #gauge { height: 34vh; top: 62px; } #side { top: 34%; } #side .btn { width: 46px; height: 46px; font-size: 22px; } .up { width: 84px; } #doubleBtn { bottom: 110px; } }
+/* short landscape: upgrades stay a row of bubbles at the bottom centre, the sides hold the gauge and the side bubbles */
+@media (orientation: landscape) and (max-height: 600px) {
+  #dock { flex-direction: column; align-items: center; justify-content: flex-end; }
+  #upgrades { flex-direction: row; gap: 10px; }
+  #upgrades .up { width: 96px; display: flex; flex-direction: column; padding: 4px 4px 6px; text-align: center; }
+  #upgrades .up .ui { height: 28px; }
+  #upgrades .up .ul2 .cur { display: none; }
+}
+#lbCaptain { left: 50%; translate: -50% 0; bottom: auto; top: -104px; height: 96px; }
+.lbboat { left: 50%; translate: -50% 0; }
+#logbook .lbpage { margin-top: 60px; }
+@media (max-height: 420px) {
+  #upgrades .up { width: 78px; padding: 2px 2px 4px; border-radius: 20px; }
+  #upgrades .up .ui { height: 24px; } #upgrades .up .ui img { height: 22px; }
+  #upgrades .up .ul2 { font-size: 11px; } #upgrades .up .uc { font-size: 13px; }
+  #side { top: 26%; gap: 8px; } #side .btn { width: 42px; height: 42px; font-size: 20px; }
+  #gauge { top: 52px; height: 30vh; width: 56px; } #gaugeFish canvas { width: 50px; height: 31px; }
+  #top .pill.round { width: 38px; height: 38px; }
+}

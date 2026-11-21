@@ -29,6 +29,8 @@ export interface LiveFish {
   scale: number;
   bob: number;
   hooked: boolean;
+  /** the place's Legend: huge, slow, fights three rounds */
+  legend?: boolean;
 }
 
 /** three ways to land a big fish, so every fight is not the same */
@@ -59,6 +61,9 @@ export interface Fight {
   seed: number;
   /** one ad retry per fish: after that the only choice is to let it go */
   retried: boolean;
+  /** Legend fights: the current round (1-based) and how many there are; each round is another kind */
+  round?: number;
+  rounds?: number;
 }
 
 export interface Slab { x: number; y: number; w: number; h: number }
@@ -132,11 +137,13 @@ export interface Dive {
   /** coins found during the dive (chests) and map pieces (bottles) */
   bonusCoins: number;
   mapPieces: number;
+  /** a Legend dive: the Legend's tier (★), else undefined */
+  legendTier?: number;
 }
 
 export type DiveFx = { kind: "hook"; fish: LiveFish } | { kind: "turn" } | { kind: "fightWon"; fish: LiveFish } | { kind: "snap"; fish: LiveFish } | { kind: "surface" }
   | { kind: "surprise"; surprise: SurpriseKind } | { kind: "stolen"; fish: LiveFish } | { kind: "sharkGone" }
-  | { kind: "bottle" } | { kind: "chest"; coins: number } | { kind: "whirlpool"; extra: number } | { kind: "bonk" } | { kind: "boing" } | { kind: "crabOff" } | { kind: "snipped"; fish: LiveFish | null } | { kind: "gull"; fish: LiveFish; coins: number } | { kind: "vent"; fish: LiveFish | null; x: number; y: number };
+  | { kind: "bottle" } | { kind: "chest"; coins: number } | { kind: "whirlpool"; extra: number } | { kind: "bonk" } | { kind: "boing" } | { kind: "crabOff" } | { kind: "snipped"; fish: LiveFish | null } | { kind: "gull"; fish: LiveFish; coins: number } | { kind: "vent"; fish: LiveFish | null; x: number; y: number } | { kind: "round"; round: number };
 
 export interface DiveInput {
   /** absolute target x for pointer control (world units), or null */
@@ -215,7 +222,10 @@ function fillFish(zone: ZoneId, from: number, to: number, ctx: DiveContext, into
 /** scripted first-minute moments: a golden fish (mutations!), an epic fighter (fights!), a rare (dodge for it) */
 export type Intro = "gold" | "epic" | "rare" | null;
 
-export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind | null = null, treasure = false, intro: Intro = null): Dive {
+/** a Legend dive: the place's Legend waits at the bottom of your line */
+export interface LegendCall { id: string; tier: number }
+
+export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind | null = null, treasure = false, intro: Intro = null, legend: LegendCall | null = null): Dive {
   const z = ZONES[zone];
   const bottom = Math.min(maxDepth(ctx.upgrades), z.floor);
   const fish: LiveFish[] = [];
@@ -268,6 +278,17 @@ export function startDive(zone: ZoneId, ctx: DiveContext, surprise: SurpriseKind
       d.fish.push({ uid: uidCounter++, def, mut: intro === "gold" ? "gold" : null, x: COLUMN * (0.35 + ctx.rng() * 0.3), y, dir: ctx.rng() < 0.5 ? 1 : -1,
         speed: def.speed * 0.4, size: def.size * big, scale: big, bob: 0, hooked: false });
     }
+  }
+  if (legend) {
+    const def = FISH.find((f) => f.id === legend.id);
+    if (def) {
+      // fewer small fish on the way: the Legend is the point of this dive
+      d.fish = d.fish.filter((_, i) => i % 2 === 0).filter((f) => f.y < bottom - 140);
+      const big = 2.1 + 0.15 * Math.min(4, legend.tier);
+      d.fish.push({ uid: uidCounter++, def, mut: null, x: COLUMN / 2, y: bottom - 30, dir: 1, speed: 26, size: def.size * big, scale: 1 + 0.2 * legend.tier, bob: 0, hooked: false, legend: true });
+      d.legendTier = legend.tier;
+    }
+    surprise = null;
   }
   d.treasure = treasure;
   if (treasure) surprise = "chest";
@@ -459,14 +480,24 @@ export const diveCatches = (d: Dive): Catch[] => d.hooked.map((f) => ({ fish: f.
 function startFight(d: Dive, f: LiveFish, ctx: DiveContext) {
   d.resume = d.phase === "ascend" ? "ascend" : "descend";
   d.phase = "fight";
-  const cfg = FIGHT[f.def.rarity]!;
+  const cfg = FIGHT[f.def.rarity] ?? FIGHT.legendary!;
   // the fish's body decides how it fights: slippery eels and fast swimmers run, round ones snap
   const shape = f.def.look.shape;
-  const kind: FightKind = shape === "eel" || f.def.speed >= 95 ? "follow" : shape === "puffer" || shape === "jelly" || shape === "crab" ? "timing" : "hold";
-  const need = f.def.rarity === "epic" ? 3 : f.def.rarity === "legendary" ? 4 : 5;
+  let kind: FightKind = shape === "eel" || f.def.speed >= 95 ? "follow" : shape === "puffer" || shape === "jelly" || shape === "crab" ? "timing" : "hold";
+  let need = f.def.rarity === "epic" ? 3 : f.def.rarity === "legendary" ? 4 : 5;
+  if (f.legend) { kind = LEGEND_ROUNDS[0]; need = 3 + Math.min(2, d.legendTier ?? 0); }
   d.fight = { kind, hits: 0, need, ring: 1, fishPos: 0.5, flash: 0, fish: f, zone: 0.5, zoneHalf: cfg.half * (ctx.easyFight ? 1.35 : 1), speed: cfg.speed * (ctx.weather?.fight ?? 1) * (ctx.easyFight ? 0.8 : 1),
     marker: 0.5, vel: 0, progress: kind === "timing" ? 1 : 0.3, t: 0, seed: ctx.rng() * 100, retried: false };
+  if (f.legend) {
+    d.fight.round = 1; d.fight.rounds = LEGEND_ROUNDS.length;
+    // a Legend is heavier with every ★, but the first one is fair for a new player
+    const tier = d.legendTier ?? 0;
+    d.fight.zoneHalf = (tier === 0 ? 0.21 : 0.18) / (1 + 0.06 * tier);
+    d.fight.speed = (tier === 0 ? 0.78 : 0.9) * (1 + 0.08 * tier);
+  }
 }
+/** a Legend fights three rounds, each a different way: hold the line, strike on time, follow it */
+export const LEGEND_ROUNDS: FightKind[] = ["hold", "timing", "follow"];
 
 function stepFight(d: Dive, dt: number, input: DiveInput) {
   const fg = d.fight!;
@@ -485,7 +516,7 @@ function stepFight(d: Dive, dt: number, input: DiveInput) {
     fg.marker = Math.max(0, Math.min(1, fg.marker + fg.vel * dt));
     if (fg.marker === 0 || fg.marker === 1) fg.vel = 0;
     const inZone = Math.abs(fg.marker - fg.zone) <= fg.zoneHalf;
-    if (ready) fg.progress += (inZone ? 0.3 : -0.25) * dt;
+    if (ready) fg.progress += (inZone ? 0.3 * (fg.rounds ? 1.6 : 1) : -0.25) * dt;
   } else if (fg.kind === "follow") {
     // the fish swims left and right; keep your marker (steer like the hook) under it.
     // Gentle on purpose: smooth swings a finger can follow, a wide window, and a slow drain when you slip
@@ -496,7 +527,7 @@ function stepFight(d: Dive, dt: number, input: DiveInput) {
     fg.marker += Math.max(-2.6 * dt, Math.min(2.6 * dt, target - fg.marker));
     fg.marker = Math.max(0, Math.min(1, fg.marker));
     const off = Math.abs(fg.marker - fg.fishPos), win = fg.zoneHalf * FOLLOW_WIN;
-    if (ready) fg.progress += (off <= win ? 0.24 : off <= win * 1.8 ? -0.17 : -0.3) * dt;
+    if (ready) fg.progress += (off <= win ? 0.24 * (fg.rounds ? 1.6 : 1) : off <= win * 1.8 ? -0.17 : -0.3) * dt;
   } else {
     // timing: a ring closes on the fish; tap when it meets the gold circle
     const period = 1.0 / speed;
@@ -510,12 +541,23 @@ function stepFight(d: Dive, dt: number, input: DiveInput) {
   }
   // timing fights are won by hits (progress is the line's health there); the others by the bar
   const won = fg.kind === "timing" ? fg.hits >= fg.need : fg.progress >= 1;
+  if (won && fg.rounds && (fg.round ?? 1) < fg.rounds) {
+    // next round: the Legend changes how it fights
+    fg.round = (fg.round ?? 1) + 1;
+    fg.kind = LEGEND_ROUNDS[fg.round - 1];
+    fg.progress = fg.kind === "timing" ? 1 : 0.3;
+    fg.hits = 0; fg.ring = 1; fg.vel = 0; fg.marker = 0.5; fg.flash = 0;
+    fg.t = FIGHT_GRACE * 0.35;
+    d.fx.push({ kind: "round", round: fg.round });
+    return;
+  }
   if (won) {
     fg.fish.hooked = true;
     d.hooked.push(fg.fish);
     d.fx.push({ kind: "fightWon", fish: fg.fish });
     d.fight = null;
-    d.phase = d.hooked.length >= d.capacity ? "ascend" : d.resume;
+    d.phase = d.hooked.length >= d.capacity || fg.fish.legend ? "ascend" : d.resume;
+    if (fg.fish.legend && d.phase === "ascend" && d.resume === "descend") d.fx.push({ kind: "turn" });
   } else if (fg.progress <= 0) {
     d.phase = "snapped";
     d.fx.push({ kind: "snap", fish: fg.fish });
@@ -559,6 +601,15 @@ export function stepDive(d: Dive, dt: number, input: DiveInput, ctx: DiveContext
     }
   }
   if (d.phase === "fight") { stepFight(d, dt, input); return; }
+  // the Legend stays near the bottom, drifting slowly from side to side
+  for (const f of d.fish) if (f.legend && !f.hooked) {
+    f.y = d.bottom - 30;
+    if (f.x < 60) f.dir = 1;
+    if (f.x > COLUMN - 60) f.dir = -1;
+    // close to the hook it goes for the bait
+    if (Math.abs(d.hookY - f.y) < 260) { const dx = d.hookX - f.x; f.x += Math.sign(dx) * Math.min(Math.abs(dx), 150 * dt); f.dir = dx >= 0 ? 1 : -1; }
+  }
+  const legendWaiting = d.fish.some((f) => f.legend && !f.hooked);
 
   // steer
   let vx = 0;
@@ -606,19 +657,20 @@ export function stepDive(d: Dive, dt: number, input: DiveInput, ctx: DiveContext
     } else if (d.hookY <= 0) { d.hookY = 0; d.phase = "done"; d.fx.push({ kind: "surface" }); return; }
   }
 
-  if (d.hooked.length >= d.capacity) return;
+  if (d.hooked.length >= d.capacity && !legendWaiting) return;
   for (const f of d.fish) {
     if (f.hooked) continue;
-    const r = f.size * (f.def.look.shape === "eel" ? 0.3 : 0.42) + HOOK_R;
+    if (d.hooked.length >= d.capacity && !f.legend) continue;
+    const r = f.legend ? f.size * 0.32 + HOOK_R : f.size * (f.def.look.shape === "eel" ? 0.3 : 0.42) + HOOK_R;
     const dx = f.x - d.hookX, dy = (f.y + Math.sin(f.bob) * 4) - d.hookY;
     if (dx * dx + dy * dy > r * r) continue;
     // one fight per dive keeps dives flowing; legends always fight (they are the moment)
     const big = f.def.rarity === "legendary" || f.def.rarity === "secret";
-    if (FIGHT[f.def.rarity] && (d.fights === 0 || big)) { d.fights++; startFight(d, f, ctx); return; }
+    if (f.legend || (FIGHT[f.def.rarity] && (d.fights === 0 || big) && d.legendTier === undefined)) { d.fights++; startFight(d, f, ctx); return; }
     f.hooked = true;
     d.hooked.push(f);
     d.fx.push({ kind: "hook", fish: f });
-    if (d.hooked.length >= d.capacity) {
+    if (d.hooked.length >= d.capacity && !legendWaiting) {
       if (d.phase === "descend") d.fx.push({ kind: "turn" });
       d.phase = "ascend";
       return;

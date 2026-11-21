@@ -50,6 +50,8 @@ export interface SceneState {
   deco: string | null;
   /** seconds since the pose changed: drives the squash-and-stretch pop */
   poseT: number;
+  /** the Legend of this place: sprite id, how close your line is (0..1), its ★ */
+  legend?: { id: string; k: number; tier: number } | null;
 }
 
 interface Prop { name: string; x: number; y: number; h: number; flip: boolean; layer: 0 | 1 }
@@ -298,6 +300,7 @@ export class Renderer {
     if (s.dive) this.drawSlabs(c, s.dive, s.t, top, bottom);
     if (s.dive) this.drawCurrents(c, s.dive, s.t, top, bottom, left, right);
     if (s.dive) this.drawVents(c, s.dive, top, bottom);
+    if (s.mode !== "dive" && s.legend) this.drawLurker(c, s, bottom, left, right);
     if (s.dive) this.drawShadow(c, s.dive, s.t);
     if (s.dive) this.drawDiveFish(c, s.dive, s.t, top, bottom);
     if (s.dive) this.drawSurprise(c, s.dive, s.t);
@@ -588,8 +591,8 @@ export class Renderer {
     for (const f of this.floats) {
       const pop = f.life < 0.15 ? 0.6 + (f.life / 0.15) * 0.6 : 1.2 - Math.min(0.2, (f.life - 0.15) * 0.5);
       c.globalAlpha = Math.max(0, 1 - Math.max(0, f.life - 0.8) / 0.5);
-      c.font = `700 ${Math.round(15 * f.size * pop)}px Fredoka, system-ui, sans-serif`;
-      c.lineWidth = 4; c.strokeStyle = "#0d1e45"; c.lineJoin = "round";
+      c.font = `700 ${Math.round(15 * f.size * pop)}px 'Baloo 2', system-ui, sans-serif`;
+      c.lineWidth = 4; c.strokeStyle = "rgba(3,45,66,0.85)"; c.lineJoin = "round";
       c.strokeText(f.text, f.x, f.y); c.fillStyle = f.color; c.fillText(f.text, f.x, f.y);
     }
     c.restore();
@@ -665,7 +668,7 @@ export class Renderer {
     c.setLineDash([14, 10]); c.lineDashOffset = -t * 30; c.lineWidth = 3; c.strokeStyle = "rgba(255,230,120,0.9)";
     c.beginPath(); c.moveTo(left, y); c.lineTo(right, y); c.stroke();
     c.setLineDash([]);
-    c.font = "bold 15px Fredoka, system-ui"; c.textAlign = "center"; c.textBaseline = "middle";
+    c.font = "bold 15px 'Baloo 2', system-ui"; c.textAlign = "center"; c.textBaseline = "middle";
     const label = "⬇ NEW ⬇", w = c.measureText(label).width + 20, x = (left + right) / 2;
     c.fillStyle = "#ffe066"; c.strokeStyle = "#16345e"; c.lineWidth = 3;
     c.beginPath(); c.roundRect(x - w / 2, y - 13, w, 26, 13); c.fill(); c.stroke();
@@ -676,7 +679,7 @@ export class Renderer {
   private drawMarkers(c: Ctx, top: number, bottom: number) {
     c.save();
     c.fillStyle = "rgba(255,255,255,0.5)";
-    c.font = "600 10px Fredoka, system-ui, sans-serif";
+    c.font = "600 10px 'Baloo 2', system-ui, sans-serif";
     c.textAlign = "left";
     for (let y = Math.max(100, Math.ceil(top / 100) * 100); y < bottom; y += 100) {
       c.globalAlpha = 0.5;
@@ -848,6 +851,54 @@ export class Renderer {
   }
 
   /** the "something huge" teaser: a giant dark silhouette gliding far behind everything */
+  /**
+   * The Legend lurks deep under the boat: a huge dark shape drifting at the bottom of the view.
+   * The closer your line gets, the higher it rises and the brighter its eyes; when the line reaches
+   * it, it circles just below the boat, glowing: "come and get me".
+   */
+  private drawLurker(c: Ctx, s: SceneState, bottom: number, left: number, right: number) {
+    const L = s.legend!, sp = img(L.id);
+    if (!sp) return;
+    const t = s.t, k = Math.min(1, L.k), ready = k >= 1;
+    const w = Math.min(right - left, 300) * (1 + 0.1 * Math.min(3, L.tier));
+    const h = (w * sp.height) / sp.width;
+    // never up at the boat: it stays under water, below the hull
+    const y = Math.max(h * 0.55 + 70, bottom - h * (0.35 + 0.35 * k) + Math.sin(t * 0.8) * 8 - (ready ? 30 : 0));
+    const span = (right - left) * 0.5;
+    const x = COLUMN / 2 + Math.sin(t * (ready ? 0.45 : 0.18)) * span * 0.55;
+    const dir = Math.cos(t * (ready ? 0.45 : 0.18)) >= 0 ? 1 : -1;
+    c.save();
+    c.translate(x, y);
+    c.scale(-dir, 1);
+    c.globalAlpha = ready ? 0.9 : 0.22 + 0.35 * k;
+    // a dark silhouette until the line reaches it; then its real colours with a pulsing glow
+    const sil = ready ? sp : this.silhouette(L.id, sp);
+    if (ready) { c.shadowColor = "#ffd84a"; c.shadowBlur = 30 + Math.sin(t * 5) * 14; }
+    c.drawImage(sil, -w / 2, -h / 2, w, h);
+    c.restore();
+    if (!ready && k > 0.45) {
+      // two eyes open in the dark
+      const ex = x + dir * w * 0.3, ey = y - h * 0.08, blinkK = Math.sin(t * 1.3) > 0.97 ? 0.2 : 1;
+      c.fillStyle = `rgba(255,230,120,${0.5 + 0.5 * k})`;
+      c.beginPath(); c.ellipse(ex, ey, 5, 5 * blinkK, 0, 0, Math.PI * 2); c.fill();
+      c.beginPath(); c.ellipse(ex - dir * 16, ey + 2, 4, 4 * blinkK, 0, 0, Math.PI * 2); c.fill();
+    }
+  }
+  private silCache = new Map<string, HTMLCanvasElement>();
+  private silhouette(id: string, sp: CanvasImageSource & { width: number; height: number }) {
+    let cv = this.silCache.get(id);
+    if (cv) return cv;
+    cv = document.createElement("canvas");
+    cv.width = sp.width; cv.height = sp.height;
+    const x = cv.getContext("2d")!;
+    x.drawImage(sp, 0, 0);
+    x.globalCompositeOperation = "source-atop";
+    x.fillStyle = "#06223a";
+    x.fillRect(0, 0, cv.width, cv.height);
+    this.silCache.set(id, cv);
+    return cv;
+  }
+
   private drawShadow(c: Ctx, d: Dive, t: number) {
     const sp = d.surprise;
     if (!sp || sp.kind !== "shadow" || sp.state !== "active") return;
@@ -940,8 +991,8 @@ export class Renderer {
       c.strokeStyle = "rgba(13,30,69,0.6)"; c.beginPath(); c.arc(sp.x, sp.y - 46, 26, 0, Math.PI * 2); c.stroke();
       c.strokeStyle = left > 0.35 ? "#7cf29a" : "#ff6a6a";
       c.beginPath(); c.arc(sp.x, sp.y - 46, 26, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left); c.stroke();
-      c.font = "bold 20px Fredoka, system-ui"; c.textAlign = "center"; c.textBaseline = "middle";
-      c.fillStyle = "#fff"; c.strokeStyle = "#0d1e45"; c.lineWidth = 4;
+      c.font = "bold 20px 'Baloo 2', system-ui"; c.textAlign = "center"; c.textBaseline = "middle";
+      c.fillStyle = "#fff"; c.strokeStyle = "rgba(3,45,66,0.85)"; c.lineWidth = 4;
       const label = `👆${Math.max(0, CRAB_TAPS - (sp.n ?? 0))}`;
       c.save(); c.translate(sp.x, sp.y - 46); c.scale(1 + done * 0.2 + Math.abs(Math.sin(t * 10)) * 0.08, 1 + done * 0.2 + Math.abs(Math.sin(t * 10)) * 0.08);
       c.strokeText(label, 0, 1); c.fillText(label, 0, 1); c.restore();
@@ -1210,14 +1261,16 @@ export class Renderer {
     c.beginPath(); c.moveTo(tip.x, tip.y); c.quadraticCurveTo(tip.x + 10, 10, d.hookX, d.hookY - 16); c.stroke();
     // hooked fish dangle under the hook
     // the latest catches hang from the hook, fanned out a little; the rest are counted in the HUD dots
-    const shown = d.hooked.slice(-3);
+    const shown = d.hooked.some((f) => f.legend) ? d.hooked.filter((f) => f.legend) : d.hooked.slice(-3);
     shown.forEach((f: LiveFish, i: number) => {
       const fan = (i - (shown.length - 1) / 2) * 0.45;
       c.save();
       c.translate(d.hookX + Math.sin(t * 5 + i) * 3, d.hookY + 14);
       c.rotate(Math.PI / 2 + fan + Math.sin(t * 6 + i) * 0.12);
-      c.translate(Math.min(26, f.size * 0.35), 0);
-      this.drawFishSprite(c, f.def, f.mut, Math.min(f.size, 46) * 0.8, t + i, false, 2.2, 1.6); // hooked fish wriggle hard
+      // a landed Legend is reeled up at full giant size, mouth on the hook
+      const big = f.legend ? f.size * 0.75 : Math.min(f.size, 46) * 0.8;
+      c.translate(f.legend ? big * 0.45 : Math.min(26, f.size * 0.35), 0);
+      this.drawFishSprite(c, f.def, f.mut, big, t + i, f.legend === true, 2.2, 1.6); // hooked fish wriggle hard
       c.restore();
     });
     // cute lure: red-white bobber weight + silver hook
@@ -1340,7 +1393,7 @@ export class Renderer {
       const r = 11 * pulse, dir = below ? 1 : -1;
       c.moveTo(sx, sy + dir * r); c.lineTo(sx - r, sy - dir * r * 0.6); c.lineTo(sx + r, sy - dir * r * 0.6); c.closePath();
       c.stroke(); c.fill();
-      c.font = "700 11px Fredoka, sans-serif"; c.textAlign = "center"; c.fillStyle = "#fff";
+      c.font = "700 11px 'Baloo 2', sans-serif"; c.textAlign = "center"; c.fillStyle = "#fff";
       c.fillText(`${Math.round(Math.abs(dy) / 10)}m`, sx, sy - dir * 18);
     }
     c.restore();
@@ -1387,7 +1440,7 @@ export class Renderer {
 
   private drawFight(d: Dive, t: number) {
     const c = this.ctx, v = this.view, fg = d.fight!;
-    const cx = v.ox + COLUMN * v.scale * (fg.kind === "hold" ? 0.42 : 0.5), cy = v.h * 0.45, R = Math.min(96, v.w * 0.2);
+    const cx = v.ox + COLUMN * v.scale * (fg.kind === "hold" ? 0.42 : 0.5), cy = v.h * 0.45, R = fg.rounds ? Math.min(128, v.w * 0.27) : Math.min(96, v.w * 0.2);
     c.save();
     c.setTransform(v.dpr, 0, 0, v.dpr, 0, 0);
     const vg = c.createRadialGradient(v.w / 2, v.h / 2, Math.min(v.w, v.h) * 0.2, v.w / 2, v.h / 2, Math.max(v.w, v.h) * 0.7);
@@ -1398,39 +1451,42 @@ export class Renderer {
       const H = Math.min(v.h * 0.55, 380), W = 38;
       const x = v.ox + COLUMN * v.scale - W - 18, y = (v.h - H) / 2;
       good = Math.abs(fg.marker - fg.zone) <= fg.zoneHalf;
-      c.fillStyle = "#1b2b4a"; c.strokeStyle = "#0d1630"; c.lineWidth = 4;
-      roundRect(c, x - 5, y - 5, W + 10, H + 10, 18); c.fill(); c.stroke();
+      c.fillStyle = "rgba(4,50,74,0.55)"; c.shadowColor = "rgba(2,30,50,0.5)"; c.shadowBlur = 16;
+      roundRect(c, x - 5, y - 5, W + 10, H + 10, 24); c.fill(); c.shadowBlur = 0;
+      c.strokeStyle = "rgba(220,250,255,0.3)"; c.lineWidth = 1.5; c.stroke();
       const zy = y + (1 - fg.zone - fg.zoneHalf) * H, zh = fg.zoneHalf * 2 * H;
       const zg = c.createLinearGradient(x, 0, x + W, 0);
-      zg.addColorStop(0, good ? "#7dffa8" : "#4cd17a"); zg.addColorStop(1, good ? "#3fdc7c" : "#2fa45d");
+      zg.addColorStop(0, good ? "#8ffff0" : "#39d6a8"); zg.addColorStop(1, good ? "#39d6a8" : "#1aa18f");
       c.fillStyle = zg; roundRect(c, x, zy, W, zh, 12); c.fill();
       const my = y + (1 - fg.marker) * H;
-      c.fillStyle = "#ffffff"; c.strokeStyle = "#0d1630"; c.lineWidth = 3;
-      roundRect(c, x - 9, my - 6, W + 18, 12, 6); c.fill(); c.stroke();
+      c.fillStyle = "#ffffff"; c.shadowColor = "rgba(2,30,50,0.6)"; c.shadowBlur = 8;
+      roundRect(c, x - 9, my - 6, W + 18, 12, 6); c.fill(); c.shadowBlur = 0;
     } else if (fg.kind === "follow") {
       // a horizontal track under the fish: keep the net under the darting fish
       const W = Math.min(v.w * 0.8, 420), H = 34, x = (v.w - W) / 2, y = cy + R + 34;
       good = Math.abs(fg.marker - fg.fishPos) <= fg.zoneHalf * FOLLOW_WIN;
-      c.fillStyle = "#1b2b4a"; c.strokeStyle = "#0d1630"; c.lineWidth = 4;
-      roundRect(c, x - 5, y - 5, W + 10, H + 10, 18); c.fill(); c.stroke();
+      c.fillStyle = "rgba(4,50,74,0.55)"; c.shadowColor = "rgba(2,30,50,0.5)"; c.shadowBlur = 16;
+      roundRect(c, x - 5, y - 5, W + 10, H + 10, 24); c.fill(); c.shadowBlur = 0;
+      c.strokeStyle = "rgba(220,250,255,0.3)"; c.lineWidth = 1.5; c.stroke();
       const zx = x + (fg.fishPos - fg.zoneHalf * FOLLOW_WIN) * W, zw = fg.zoneHalf * 2 * FOLLOW_WIN * W;
-      c.fillStyle = good ? "#7dffa8" : "#4cd17a"; roundRect(c, zx, y, zw, H, 12); c.fill();
+      c.fillStyle = good ? "#8ffff0" : "#39d6a8"; roundRect(c, zx, y, zw, H, 14); c.fill();
       c.font = "22px system-ui"; c.textAlign = "center"; c.fillText("🐟", x + fg.fishPos * W, y + 25);
       const mx = x + fg.marker * W;
-      c.fillStyle = "#ffffff"; c.strokeStyle = "#0d1630"; c.lineWidth = 3;
-      roundRect(c, mx - 6, y - 10, 12, H + 20, 6); c.fill(); c.stroke();
+      c.fillStyle = "#ffffff"; c.shadowColor = "rgba(2,30,50,0.6)"; c.shadowBlur = 8;
+      roundRect(c, mx - 6, y - 10, 12, H + 20, 6); c.fill(); c.shadowBlur = 0;
     } else {
       // timing: gold target circle and a white ring closing in
       const target = R * 0.3 + 40, ringR = Math.max(4, fg.ring * R * 1.4 + 40);
       good = Math.abs(fg.ring - 0.3) <= 0.06 + fg.zoneHalf * 0.12;
-      c.lineWidth = 10; c.strokeStyle = good ? "#7dffa8" : "#ffd84a";
+      c.lineWidth = 10; c.strokeStyle = good ? "#8ffff0" : "#ffe27a";
       c.beginPath(); c.arc(cx, cy, target, 0, Math.PI * 2); c.stroke();
       if (fg.ring > -0.2) { c.lineWidth = 5; c.strokeStyle = "rgba(255,255,255,0.9)"; c.beginPath(); c.arc(cx, cy, ringR, 0, Math.PI * 2); c.stroke(); }
       if (fg.flash) {
         c.globalAlpha = Math.abs(fg.flash);
-        c.font = "700 34px Fredoka, sans-serif"; c.textAlign = "center"; c.lineWidth = 5; c.strokeStyle = "#0d1e45";
-        const txt = fg.flash > 0 ? "PERFECT!" : "MISS";
-        c.strokeText(txt, cx, cy - R - 20); c.fillStyle = fg.flash > 0 ? "#7dffa8" : "#ff6b7a"; c.fillText(txt, cx, cy - R - 20);
+        c.font = "800 40px 'Baloo 2', sans-serif"; c.textAlign = "center";
+        const txt = fg.flash > 0 ? "✔" : "✖";
+        c.shadowColor = "rgba(2,30,50,0.8)"; c.shadowBlur = 8;
+        c.fillStyle = fg.flash > 0 ? "#8ffff0" : "#ff6f61"; c.fillText(txt, cx, cy - R - 20); c.shadowBlur = 0;
         c.globalAlpha = 1;
       }
       // hit pips
@@ -1438,6 +1494,15 @@ export class Renderer {
         c.fillStyle = i < fg.hits ? "#ffe066" : "rgba(255,255,255,0.25)";
         c.beginPath(); c.arc(cx - (fg.need - 1) * 12 + i * 24, cy + R + 30, 8, 0, Math.PI * 2); c.fill();
       }
+    }
+    // a Legend fight: three rounds, shown as three crowns over the ring
+    if (fg.rounds) {
+      c.font = "26px system-ui"; c.textAlign = "center";
+      for (let i = 0; i < fg.rounds; i++) {
+        c.globalAlpha = i < (fg.round ?? 1) - 1 ? 1 : i === (fg.round ?? 1) - 1 ? 0.75 + 0.25 * Math.sin(t * 6) : 0.3;
+        c.fillText(i < (fg.round ?? 1) - 1 ? "👑" : "⚔️", cx + (i - (fg.rounds - 1) / 2) * 38, cy + R + (fg.kind === "follow" ? 110 : 62));
+      }
+      c.globalAlpha = 1;
     }
     // line health / catch progress ring
     c.lineCap = "round";
@@ -1456,16 +1521,16 @@ export class Renderer {
     c.save();
     c.translate(cx + Math.sin(t * 13) * (good ? 2 : 9), cy);
     c.rotate(Math.sin(t * 6) * 0.25);
-    const size = Math.min(R * 1.25, fg.fish.size * 1.5) / SPRITE_SCALE * 1.2;
+    const size = (fg.rounds ? R * 1.5 : Math.min(R * 1.25, fg.fish.size * 1.5)) / SPRITE_SCALE * 1.2;
     this.drawFishSprite(c, fg.fish.def, fg.fish.mut, size, t, true, 2.5, 1.8);
     c.restore();
     // get-ready countdown
     if (fg.t < FIGHT_GRACE) {
       const n = Math.ceil(FIGHT_GRACE - fg.t), k = (FIGHT_GRACE - fg.t) % 1;
-      c.font = `700 ${Math.round(70 + k * 40)}px Fredoka, sans-serif`; c.textAlign = "center";
-      c.lineWidth = 8; c.strokeStyle = "#0d1e45"; c.globalAlpha = 0.5 + k * 0.5;
-      c.strokeText(String(n), cx, cy - R - 60); c.fillStyle = "#ffe066"; c.fillText(String(n), cx, cy - R - 60);
-      c.globalAlpha = 1;
+      c.font = `800 ${Math.round(70 + k * 40)}px 'Baloo 2', sans-serif`; c.textAlign = "center";
+      c.globalAlpha = 0.5 + k * 0.5; c.shadowColor = "rgba(2,30,50,0.85)"; c.shadowBlur = 14;
+      c.fillStyle = "#ffe27a"; c.fillText(String(n), cx, cy - R - 60);
+      c.globalAlpha = 1; c.shadowBlur = 0;
     }
     c.restore();
   }

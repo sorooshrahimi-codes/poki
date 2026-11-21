@@ -12,6 +12,7 @@ import { HARBOR, bestCatches, harborBuilt, harborNext, statueFish, tankFish, typ
 import type { HarborView } from "./render/harbor.ts";
 import { CREW, TRIPS, WHEEL, WHEEL_AD_SPINS, WHEEL_FREE_MS, spinWheel, tripCoins, wheelCoins, type WheelPrize } from "./core/extras.ts";
 import { EYES } from "./data/eyes.ts";
+import { CHARGE_PER_UPGRADE, LEGEND, ROAD, chargeFor, legendCoins, legendNeed, nextPlace } from "./data/legends.ts";
 import { SPOT_BY_ID, kindsCaught, spotsOf, type SpotDef } from "./data/spots.ts";
 import { WorldMap } from "./ui/worldmap.ts";
 import { DERBY_COOLDOWN_MS, DERBY_MS, DERBY_RULES, LEAGUE_SIZE, PROMOTE, DEMOTE, TIERS, TIER_ICON, addXp, derbyRivals, leaguePoints, leagueReward, leagueTable, levelReward, rankOf, titleIndex, voyageCoinMult, weekEndsAt, weekOf, xpForCatch, xpNeed, type DerbyRule, type Tier } from "./core/progress.ts";
@@ -23,9 +24,10 @@ import { setDucked, setMusicMood, setMuted, setRain, sfx, unlockAudio } from "./
 import { WEATHER, weatherAt, type WeatherId } from "./core/weather.ts";
 import { commercialBreak, gameplayStart, gameplayStop, initPoki, isAdPlaying, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
 import { loadSave, writeSave } from "./platform/storage.ts";
-import "@fontsource/fredoka/500.css";
-import "@fontsource/fredoka/600.css";
-import "@fontsource/fredoka/700.css";
+import "@fontsource/baloo-2/latin-600.css";
+import "@fontsource/baloo-2/latin-800.css";
+import "@fontsource/baloo-2/devanagari-600.css";
+import "@fontsource/baloo-2/devanagari-800.css";
 import { artUrl, img, loadAssets, loadRest, spriteTinted } from "./render/assets.ts";
 import { drawFish } from "./render/fish.ts";
 import { recolor } from "./render/recolor.ts";
@@ -80,7 +82,6 @@ window.addEventListener("keydown", (e) => {
   keys.add(e.key.toLowerCase());
   if (e.key === " " || e.key === "Enter" || e.key === "ArrowUp" || e.key === "w") tapEdge = true;
   if ((e.key === " " || e.key === "Enter") && scene.mode === "dock" && !anyPanelOpen()) void cast();
-  if ((e.key === " " || e.key === "Enter") && scene.mode === "reveal" && !$("reveal").classList.contains("hidden")) void collect(false);
 });
 window.addEventListener("keyup", (e) => keys.delete(e.key.toLowerCase()));
 window.addEventListener("blur", () => { keys.clear(); pointerDown = false; });
@@ -101,7 +102,7 @@ async function cast() {
   if (busy || paused || scene.mode !== "dock" || anyPanelOpen()) return;
   busy = true;
   // the natural break: before every cast after the first. Poki decides if an ad actually plays.
-  if (save.dives > 0) await commercialBreak();
+  if (save.dives > 2) await commercialBreak();
   busy = false;
   if (paused) return;
   gameplayStart();
@@ -117,19 +118,21 @@ async function cast() {
     : { upgrades: save.upgrades, event: scene.event, night: isNight(Date.now()), rng: dailyRng ?? Math.random, weather: weatherAt(Date.now()).def, bait, spot: play.kind === "daily" ? null : currentSpot(), easyFight: save.stats.fightsWon === 0 };
   const playSec = save.playMs / 1000;
   const floor = ZONES[scene.zone].floor;
+  // the line has reached the Legend: this cast goes for it
+  const legendCall = !ch && legendReady() ? { id: LEGEND[scene.zone], tier: save.legends[scene.zone] ?? 0 } : null;
   const surprise = ch ? null : forcedSurprise ?? pickSurprise(save.director, playSec, { zone: scene.zone, bottom: Math.min(maxDepth(save.upgrades), floor), floor, capacity: capacity(save.upgrades) }, Math.random);
   if (surprise) noteSurprise(save.director, surprise, playSec);
-  const treasure = !ch && treasureNext;
+  const treasure = !ch && treasureNext && !legendCall;
   if (treasure) { treasureNext = false; save.mapPieces -= 3; }
   // first-minute pacing: a rare is guaranteed in rounds 2-3, and round 6 teases a legend below
   const hasRare = Object.keys(save.album).some((id) => FISH_BY_ID[id] && FISH_BY_ID[id].rarity !== "common" && !FISH_BY_ID[id].junk);
   // the first casts show what makes this game different: cast 1 a golden fish (mutations), cast 2 an epic fighter,
   // cast 3 a rare if none yet
-  const guarantee: Intro = ch ? null : save.dives === 0 ? "gold" : save.dives === 1 ? "epic" : save.dives === 2 && !hasRare ? "rare" : null;
+  const guarantee: Intro = ch || legendCall ? null : save.dives === 0 ? "gold" : save.dives === 1 ? "epic" : save.dives === 2 && !hasRare ? "rare" : null;
   let sur = treasure ? null : surprise;
   if (!ch && !sur && !save.seenGlimpse && save.dives === 5) { sur = "glimpse"; save.seenGlimpse = true; }
-  scene.dive = startDive(scene.zone, ctx, sur, treasure, guarantee);
-  if (save.dives === 1) guide("dodge");
+  scene.dive = startDive(scene.zone, ctx, legendCall ? null : sur, treasure, guarantee, legendCall);
+  if (legendCall) { sfx.event(); renderer.shakeIt(6); }
   scene.mode = "dive";
   scene.hint = false;
   sfx.cast();
@@ -151,7 +154,7 @@ function handleFx(d: Dive) {
       if (combo >= 2) {
         const bonus = Math.round(v * 0.25 * (combo - 1));
         d.bonusCoins += bonus;
-        renderer.floatText(d.hookX - 22, d.hookY - 34, `COMBO x${combo}!`, combo >= 4 ? "#ff7ad9" : "#7be495", 1.3 + combo * 0.08);
+        renderer.floatText(d.hookX - 22, d.hookY - 34, `🔥×${combo}`, combo >= 4 ? "#ff7ad9" : "#7be495", 1.3 + combo * 0.08);
         sfx.coin(combo);
       }
       renderer.burst(d.hookX, d.hookY, fx.fish.mut ? "#ffe066" : RARITY_COLOR[fx.fish.def.rarity], fx.fish.def.rarity === "common" ? 8 : 18);
@@ -165,7 +168,7 @@ function handleFx(d: Dive) {
       // depth record: the deepest you have ever been
       const m = Math.round(d.hookY / 10);
       if (m > (save.stats.maxDepth ?? 0)) {
-        if ((save.stats.maxDepth ?? 0) > 0) { renderer.floatText(d.hookX, d.hookY + 30, `📏 ${m} m RECORD!`, "#9be7ff", 1.4); sfx.newFish(); }
+        if ((save.stats.maxDepth ?? 0) > 0) { renderer.floatText(d.hookX, d.hookY + 30, `📏 ${m} m`, "#9be7ff", 1.4); sfx.newFish(); }
         save.stats.maxDepth = m;
       }
     }
@@ -178,39 +181,42 @@ function handleFx(d: Dive) {
       renderer.shakeIt(10);
       renderer.flashIt(1);
       renderer.punch(d.hookX, d.hookY, 0.14);
-      renderer.floatText(d.hookX, d.hookY - 30, `${tRarity(fx.fish.def.rarity)}!`, RARITY_COLOR[fx.fish.def.rarity], 1.6);
+      renderer.floatText(d.hookX, d.hookY - 30, fx.fish.legend ? "👑" : "✨", RARITY_COLOR[fx.fish.def.rarity], 1.6);
+      if (fx.fish.legend) { slowmo = 0.9; renderer.flashIt(1.4); }
     } else if (fx.kind === "snap") {
       sfx.snap();
       renderer.shakeIt(12);
       showSnap(fx.fish.def.id, fx.fish.mut, d.fight?.retried ?? true);
+    } else if (fx.kind === "round") {
+      sfx.event(); renderer.shakeIt(9); renderer.flashIt(0.7);
+      pop(`⚔️ ${fx.round}/3`);
     } else if (fx.kind === "surprise") {
-      toast(`${SURPRISE_ICON[fx.surprise]} ${t(`sur.${fx.surprise}` as Parameters<typeof t>[0])}`, 2200);
+      pop(SURPRISE_ICON[fx.surprise]);
       if (fx.surprise === "shark" || fx.surprise === "shadow") sfx.snap(); else sfx.event();
     } else if (fx.kind === "stolen") {
-      toast(`🦈 ${t("stolen")}`); sfx.snap(); renderer.shakeIt(10);
+      pop("🦈💨"); sfx.snap(); renderer.shakeIt(10);
     } else if (fx.kind === "sharkGone") {
-      toast(`😎 ${t("escaped")}`); sfx.buy();
+      pop("😎"); sfx.buy();
     } else if (fx.kind === "bottle") {
-      toast(`🍾 ${t("map")} ${save.mapPieces + d.mapPieces}/3`); sfx.newFish(); renderer.burst(d.hookX, d.hookY, "#bdf3ff", 20);
+      pop("🍾"); sfx.newFish(); renderer.burst(d.hookX, d.hookY, "#bdf3ff", 20);
     } else if (fx.kind === "chest") {
-      toast(`💰 +${fx.coins}`); sfx.reveal("legendary"); renderer.burst(d.hookX, d.hookY, "#ffd84a", 40, 260); renderer.flashIt(0.6);
+      pop(`💰 +${shortNum(fx.coins)}`); sfx.reveal("legendary"); renderer.burst(d.hookX, d.hookY, "#ffd84a", 40, 260); renderer.flashIt(0.6);
     } else if (fx.kind === "boing") {
       sfx.boing(); renderer.shakeIt(5);
       renderer.floatText(d.hookX, d.hookY - 24, "BOING!", "#ffe066", 1.2);
     } else if (fx.kind === "crabOff") {
       sfx.buy(); renderer.burst(d.hookX, d.hookY, "#ff9a6a", 20, 200);
-      renderer.floatText(d.hookX, d.hookY - 24, `🦀💨 ${t("crab.off")}`, "#9bffb0", 1.2);
+      renderer.floatText(d.hookX, d.hookY - 24, "🦀💨", "#9bffb0", 1.2);
     } else if (fx.kind === "snipped") {
       sfx.snap(); renderer.shakeIt(8);
-      renderer.floatText(d.hookX, d.hookY - 24, fx.fish ? `✂️ ${fishName(fx.fish.def)}!` : "✂️", "#ff8a8a", 1.2);
+      renderer.floatText(d.hookX, d.hookY - 24, "✂️", "#ff8a8a", 1.2);
     } else if (fx.kind === "gull") {
       sfx.coin(2); sfx.newFish();
-      toast(`🐦 ${t("gull.paid").replace("{x}", fishName(fx.fish.def))} 🪙+${fx.coins}`, 2600);
+      pop(`🐦 🪙+${shortNum(fx.coins)}`);
     } else if (fx.kind === "vent") {
       sfx.snap(); renderer.shakeIt(9);
       renderer.burst(fx.x, fx.y, "#ff8a3a", 34, 280);
-      renderer.floatText(fx.x, fx.y - 20, fx.fish ? `🔥 ${fishName(fx.fish.def)}: HOT HOT HOT!` : "🔥 HOT!", "#ffb35a", 1.3);
-      if (!save.tips.includes("vent")) { save.tips.push("vent"); toast(`🌋 ${t("vent")}`, 2600); }
+      renderer.floatText(fx.x, fx.y - 20, "🔥", "#ffb35a", 1.6);
     } else if (fx.kind === "bonk") {
       sfx.bonk(); renderer.shakeIt(3);
     } else if (fx.kind === "whirlpool") {
@@ -241,61 +247,213 @@ function finishDive(d: Dive) {
   save.dives++;
   const best = pending.reduce((m, c) => Math.max(m, RARITY_ORDER.indexOf(FISH_BY_ID[c.fish].rarity) + (c.mut ? 1 : 0)), -1);
   setPose(best >= 1 ? "cheer" : "idle");
+  const legendDive = d.legendTier !== undefined;
+  const legend = d.hooked.find((f) => f.legend);
+  if (legendDive && !legend) {
+    // it got away: the line slips back a little, the next try is close
+    save.charge[scene.zone] = Math.floor(legendNeed(scene.zone, save.legends[scene.zone] ?? 0) * 0.7);
+    pop("💨");
+  }
+  if (legend) {
+    const c = pending.find((x) => x.fish === legend.def.id)!;
+    showLegend(c, () => landLegend(c));
+    return;
+  }
   const star = pending.filter((c) => RARITY_ORDER.indexOf(FISH_BY_ID[c.fish].rarity) >= 3)
     .sort((a, b) => b.value - a.value)[0];
-  if (star) showLegend(star, () => showReveal(pending));
-  else showReveal(pending);
+  if (star) showLegend(star, () => haul(pending));
+  else haul(pending);
 }
 
-async function collect(double: boolean) {
-  if (scene.mode !== "reveal") { $("reveal").classList.add("hidden"); return; } // never leave a stray panel stuck
-  if (busy || $("reveal").classList.contains("hidden")) return;
-  if (double) {
-    busy = true;
-    const ok = await rewardedBreak();
-    busy = false;
-    if (!ok) return;
-  }
+/** the Legend of this place is landed: coins, the next page of the logbook, the next place */
+function landLegend(c: Catch) {
+  const z = scene.zone;
+  const tier = save.legends[z] ?? 0;
+  save.legends[z] = tier + 1;
+  save.charge[z] = 0;
+  const coins = legendCoins(FISH_BY_ID[c.fish].value, tier);
+  // the Legend itself is the trophy; its coins come as the big reward
+  pending = pending.filter((x) => x !== c);
+  pendingBonus += coins;
+  const e = (save.album[c.fish] ??= { count: 0, muts: [], best: 0 });
+  e.count++; e.best = Math.max(e.best, c.value);
+  const nx = nextPlace(z);
+  const opened = nx && !save.zones.includes(nx) ? nx : null;
+  if (opened) save.zones.push(opened);
+  writeSave(save);
+  showLogbook({ landed: z, opened }, () => {
+    haul(pending);
+    if (opened) { pickZone(opened); }
+  });
+}
+
+/** the catch flies into your coins: no panel, the sea stays yours (the 🎬×2 bubble waits at the side) */
+function haul(list: Catch[]) {
+  if (scene.mode !== "reveal") return;
   let total = 0;
-  for (const [i, c] of pending.entries()) {
-    if (keepSet.has(i)) keep(save.tank, c.fish); else total += c.value;
+  for (const c of list) {
+    total += c.value;
+    const def = FISH_BY_ID[c.fish];
+    const isNew = !save.album[c.fish];
     const e = (save.album[c.fish] ??= { count: 0, muts: [], best: 0 });
     e.count++;
     e.best = Math.max(e.best, c.value);
     e.bestKg = Math.max(e.bestKg ?? 0, c.kg ?? 0);
     save.stats.catches++;
     if (c.mut && !e.muts.includes(c.mut)) e.muts.push(c.mut);
+    if (play.kind !== "challenge") save.charge[scene.zone] = (save.charge[scene.zone] ?? 0) + chargeFor(def.rarity, !!c.mut, !!def.junk);
+    (c as Catch & { isNew?: boolean }).isNew = isNew;
   }
   total = play.kind === "challenge" ? 0 : Math.round(total * voyageCoinMult(save.voyage));
   total += pendingBonus;
   pendingBonus = 0;
-  // progression: every catch (kept or sold) gives XP and league points
   let xp = 0, pts = 0;
-  for (const c of pending) {
+  for (const c of list) {
     const def = FISH_BY_ID[c.fish];
     xp += xpForCatch(c.value);
     pts += leaguePoints(def.rarity, !!c.mut, !!def.junk);
   }
   rollLeague();
   save.league.points += pts;
-  const ups = addXp(save.prog, xp);
-  for (const lv of ups) { const r = levelReward(lv); save.coins += r; setTimeout(() => { toast(`⭐ ${t("levelup")} ${lv} · ${titleText()} · 🪙+${r}`, 2600); sfx.event(); }, 900); }
-  scorePlay(pending);
-  if (keepSet.size) toast(`📥 ${keepSet.size} → 🐠`, 1600);
-  keepSet.clear();
-  if (double) total *= 2;
+  for (const lv of addXp(save.prog, xp)) save.coins += levelReward(lv);
+  scorePlay(list);
   save.coins += total;
-  setTimeout(checkMission, 500);
-  pending.forEach((_, i) => setTimeout(() => sfx.coin(i), i * 40));
+  showHaul(list, total);
+  lastHaul = total;
+  $("doubleBtn").classList.toggle("hidden", total < 40 || play.kind === "challenge");
+  clearTimeout(doubleTimer);
+  doubleTimer = window.setTimeout(() => $("doubleBtn").classList.add("hidden"), 7000);
   pending = [];
-  $("reveal").classList.add("hidden");
-  setPose("idle");
+  setPose(list.length ? "cheer" : "idle");
+  setTimeout(() => { if (scene.mode === "dock") setPose("idle"); }, 1200);
   scene.mode = "dock";
   scene.dive = null;
   writeSave(save);
   updateUi();
+  if (legendReady()) { sfx.event(); }
   setTimeout(afterPlayCollect, 400);
 }
+let lastHaul = 0, doubleTimer = 0;
+
+/** the rewarded ×2: the last catch pays again */
+async function doubleHaul() {
+  if (busy || !lastHaul) return;
+  busy = true;
+  const ok = await rewardedBreak();
+  busy = false;
+  if (!ok) return;
+  save.coins += lastHaul;
+  pop(`🪙 +${shortNum(lastHaul)}`);
+  lastHaul = 0;
+  $("doubleBtn").classList.add("hidden");
+  sfx.coin(4);
+  writeSave(save);
+  updateUi();
+}
+
+/** fish thumbnails pop up over the boat, then fly into the coin counter */
+function showHaul(list: Catch[], total: number) {
+  const box = $("haul");
+  box.innerHTML = "";
+  const order = [...list].sort((a, b) => RARITY_ORDER.indexOf(FISH_BY_ID[b.fish].rarity) - RARITY_ORDER.indexOf(FISH_BY_ID[a.fish].rarity) || b.value - a.value);
+  const groups = new Map<string, Catch[]>();
+  for (const c of order) { const k = `${c.fish}|${c.mut ?? ""}`; (groups.get(k) ?? groups.set(k, []).get(k)!).push(c); }
+  let i = 0;
+  for (const g of groups.values()) {
+    const c = g[0], def = FISH_BY_ID[c.fish];
+    const el = document.createElement("div");
+    el.className = "hf" + (RARITY_ORDER.indexOf(def.rarity) >= 1 || c.mut ? " rare" : "");
+    el.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
+    el.style.animationDelay = `${i * 0.09}s`;
+    el.appendChild(fishThumb(c.fish, c.mut, 62, 38));
+    if (g.length > 1) el.insertAdjacentHTML("beforeend", `<b class="hx">×${g.length}</b>`);
+    if ((c as Catch & { isNew?: boolean }).isNew) el.insertAdjacentHTML("beforeend", `<i class="hn">✨</i>`);
+    box.appendChild(el);
+    setTimeout(() => sfx.reveal(def.rarity), i * 90);
+    i++;
+  }
+  if (total) box.insertAdjacentHTML("beforeend", `<b class="ht" style="animation-delay:${i * 0.09}s">🪙 +${shortNum(total)}</b>`);
+  box.classList.remove("hidden", "go");
+  void box.offsetWidth;
+  box.classList.add("show");
+  setTimeout(() => { box.classList.add("go"); [0, 1, 2, 3, 4].forEach((k) => setTimeout(() => sfx.coin(k), 100 + k * 60)); }, 1300 + i * 90);
+  setTimeout(() => { box.classList.add("hidden"); box.classList.remove("show", "go"); }, 2100 + i * 90);
+}
+
+/** a big icon pops in the middle for a moment (instead of words) */
+function pop(icon: string) {
+  const el = $("pop");
+  el.textContent = icon;
+  el.classList.remove("hidden");
+  el.style.animation = "none"; void el.offsetWidth; el.style.animation = "";
+  clearTimeout(popTimer);
+  popTimer = window.setTimeout(() => el.classList.add("hidden"), 1500);
+}
+let popTimer = 0;
+
+// ------------------------------------------------------------------ the Legend of each place
+const chargeNow = () => save.charge[scene.zone] ?? 0;
+const needNow = () => legendNeed(scene.zone, save.legends[scene.zone] ?? 0);
+function legendReady() { return play.kind !== "challenge" && chargeNow() >= needNow(); }
+
+/** the gauge on the left: your line going down toward the Legend waiting at the bottom */
+function renderGauge() {
+  const k = Math.min(1, chargeNow() / needNow());
+  const g = $("gauge");
+  g.classList.toggle("hidden", play.kind === "challenge");
+  $("gaugeFill").style.height = `${Math.round(k * 100)}%`;
+  g.classList.toggle("ready", k >= 1);
+  const tier = save.legends[scene.zone] ?? 0;
+  $("gaugeStar").textContent = tier ? "★".repeat(Math.min(3, tier + 1)) + (tier >= 3 ? tier + 1 : "") : "";
+  const id = LEGEND[scene.zone];
+  const port = $("gaugeFish");
+  if (port.dataset.id !== id + (k >= 1) + tier) {
+    port.dataset.id = id + (k >= 1) + tier;
+    port.innerHTML = "";
+    // before the first landing it is a mystery shape; when the line reaches it, it lights up
+    port.appendChild(fishThumb(id, null, 64, 40, !save.album[id] && k < 1));
+  }
+  scene.legend = { id, k, tier };
+}
+
+// ------------------------------------------------------------------ the logbook: the wordless story
+/**
+ * Captain Bo's logbook: five pages, one Legend each, joined by a dotted sea road. It opens the
+ * game (the first time) and after every Legend you land (its page lights up, the boat sails on).
+ */
+function showLogbook(o: { landed: ZoneId | null; opened: ZoneId | null }, done: () => void) {
+  const el = $("logbook");
+  const road = $("lbRoad");
+  road.innerHTML = "";
+  const here = o.opened ?? (o.landed ?? scene.zone);
+  ROAD.forEach((z, i) => {
+    const page = document.createElement("div");
+    const caught = (save.legends[z] ?? 0) > 0;
+    page.className = "lbp" + (caught ? " got" : "") + (z === o.landed ? " fresh" : "") + (z === here ? " here" : "") + (save.zones.includes(z) ? "" : " far");
+    page.style.setProperty("--i", String(i));
+    page.appendChild(fishThumb(LEGEND[z], null, 84, 52, !caught));
+    page.insertAdjacentHTML("beforeend", `<span class="lbz">${ZONE_ICON[z]}</span>`);
+    if (z === here) page.insertAdjacentHTML("beforeend", `<img class="lbboat" src="${artUrl(`kid_${(save.wear.hat ?? "hat_cap").replace("hat_", "")}_idle`)}" alt="">`);
+    road.appendChild(page);
+  });
+  $("lbCaptain").classList.toggle("hidden", !!o.landed);
+  el.classList.remove("hidden");
+  el.classList.toggle("story", !o.landed);
+  sfx.event();
+  if (o.landed) setTimeout(() => sfx.reveal("legendary"), 500);
+  let closed = false;
+  const t0 = performance.now();
+  const close = () => {
+    if (closed || performance.now() - t0 < 700) return;
+    closed = true;
+    el.classList.add("hidden");
+    el.onclick = null;
+    done();
+  };
+  el.onclick = close;
+  setTimeout(close, o.landed ? 3600 : 3000);
+}
+const ZONE_ICON: Record<ZoneId, string> = { lake: "🌲", ocean: "🌊", ice: "🧊", reef: "🪸", volcano: "🌋" };
 
 // ------------------------------------------------------------------ panels
 function fishThumb(id: string, mut: Catch["mut"], w: number, h: number, silhouette = false) {
@@ -327,80 +485,15 @@ function fishThumb(id: string, mut: Catch["mut"], w: number, h: number, silhouet
   return cv;
 }
 
-/** indices of pending catches the player chose to keep in the tank */
-const keepSet = new Set<number>();
-function updateRevealTotal() {
-  const sold = pending.reduce((a, c, i) => a + (keepSet.has(i) ? 0 : c.value), 0);
-  $("totalN").textContent = String(sold + pendingBonus);
-  $("keepN").textContent = keepSet.size ? `📥 ${keepSet.size}` : "";
-}
-
-function showReveal(list: Catch[]) {
-  if (scene.mode !== "reveal") return;
-  setTimeout(() => guide("reveal"), 900);
-  keepSet.clear();
-  $("keepHint").textContent = t("tank.tap");
-  $("keepN").textContent = "";
-  const box = $("cards");
-  box.innerHTML = "";
-  // compact tiles: the same fish (and mutation) shares one tile with a ×N count; best first
-  const order = [...list].sort((a, b) => RARITY_ORDER.indexOf(FISH_BY_ID[b.fish].rarity) - RARITY_ORDER.indexOf(FISH_BY_ID[a.fish].rarity) || b.value - a.value);
-  const groups = new Map<string, Catch[]>();
-  for (const c of order) { const k = `${c.fish}|${c.mut ?? ""}`; (groups.get(k) ?? groups.set(k, []).get(k)!).push(c); }
-  let total = 0, i = 0;
-  for (const g of groups.values()) {
-    const c = g[0], def = FISH_BY_ID[c.fish];
-    const isNew = !save.album[c.fish];
-    const bestKg = Math.max(...g.map((x) => x.kg ?? 0));
-    const isRecord = !isNew && !def.junk && bestKg > (save.album[c.fish]?.bestKg ?? 0);
-    const wanted = save.orders.some((o) => o.need.kind === "fish" ? o.need.fish === c.fish : def.rarity === o.need.rarity && def.zone === o.need.zone);
-    const special = RARITY_ORDER.indexOf(def.rarity) >= 2 || !!c.mut || isNew;
-    const value = g.reduce((a, x) => a + x.value, 0);
-    const card = document.createElement("div");
-    card.className = "card" + (special ? " big" : "");
-    card.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
-    card.style.animationDelay = `${i * 0.12}s`;
-    card.appendChild(fishThumb(c.fish, c.mut, 70, 40));
-    card.insertAdjacentHTML("beforeend", (special ? `<div class="cn">${fishName(def)}</div>` : "") + `<div class="cv">🪙${value}</div>` +
-      (g.length > 1 ? `<div class="cx">×${g.length}</div>` : "") + (c.mut ? `<div class="cm">${MUT_ICON[c.mut]}</div>` : "") +
-      (isNew ? `<div class="newb">${t("new")}</div>` : isRecord ? `<div class="newb rec">🏆</div>` : "") + (wanted && !def.junk && FEATURES.orders ? `<div class="wantb">📋</div>` : "") + `<div class="kp"></div>`);
-    if (!def.junk) {
-      // tap keeps one more of this fish; when all are kept, a tap releases them
-      const idxs = g.map((x) => list.indexOf(x));
-      card.classList.add("keepable");
-      card.onclick = () => {
-        const kept = idxs.filter((n) => keepSet.has(n)).length;
-        if (kept < idxs.length) keepSet.add(idxs.find((n) => !keepSet.has(n))!); else idxs.forEach((n) => keepSet.delete(n));
-        const now = idxs.filter((n) => keepSet.has(n)).length;
-        card.classList.toggle("kept", now > 0);
-        (card.querySelector(".kp") as HTMLElement).textContent = now ? `📥${now > 1 || idxs.length > 1 ? now : ""}` : "";
-        sfx.tap();
-        updateRevealTotal();
-      };
-    }
-    box.appendChild(card);
-    const delay = i * 120;
-    setTimeout(() => { sfx.reveal(def.rarity); if (isNew || isRecord) sfx.newFish(); }, delay);
-    total += value;
-    i++;
-  }
-  // the keep tip only while it is new to you
-  $("keepHint").classList.toggle("hidden", save.dives > 4);
-  $("totalN").textContent = String(total + pendingBonus);
-  $("bonusN").textContent = pendingBonus ? `💰 +${pendingBonus}` : "";
-  $("collectBtn").textContent = list.length ? t("collect") : "OK";
-  // the x2 offer only when there is something worth doubling
-  $("doubleBtn").classList.toggle("hidden", total < 40 || play.kind === "challenge");
-  $("reveal").classList.remove("hidden");
-}
-
 /** cinematic moment for legendary and secret catches: rays, spotlight, big sprite, then the cards */
 function showLegend(c: Catch, done: () => void) {
   const def = FISH_BY_ID[c.fish];
   const el = $("legend");
   el.style.setProperty("--rc", RARITY_COLOR[def.rarity]);
-  $("legendRarity").textContent = tRarity(def.rarity);
-  $("legendName").textContent = fishName(def) + (c.mut ? " " + MUT_ICON[c.mut] : "");
+  // wordless: a crown for a Legend, stars for its rarity, never a word
+  const isLegend = Object.values(LEGEND).includes(def.id) && scene.dive?.legendTier !== undefined;
+  $("legendRarity").textContent = isLegend ? "👑" : def.rarity === "secret" ? "💎" : "⭐⭐⭐";
+  $("legendName").textContent = c.mut ? MUT_ICON[c.mut] : "";
   const holder = $("legendFish");
   holder.innerHTML = "";
   holder.appendChild(fishThumb(c.fish, c.mut, 300, 170));
@@ -425,7 +518,7 @@ function showLegend(c: Catch, done: () => void) {
 const MUT_ICON: Record<string, string> = { gold: "✨", rainbow: "🌈", giant: "⬆️", ghost: "👻", electric: "⚡" };
 
 function showSnap(id: string, mut: Catch["mut"], retried: boolean) {
-  $("snapTitle").textContent = t("snapped");
+  $("snapTitle").textContent = "💥";
   $("retryBtn").classList.toggle("hidden", retried);
   const cv = $<HTMLCanvasElement>("snapFish");
   const c = cv.getContext("2d")!;
@@ -463,7 +556,7 @@ function showAlbum() {
     cell.insertAdjacentHTML("beforeend", `<div class="an">${e ? fishName(def) : "?"}</div><div class="am">${e ? e.muts.map((m) => MUT_ICON[m]).join("") : ""}</div>${e?.bestKg ? `<div class="ak">🏆 ${fmtKg(e.bestKg)}</div>` : ""}`);
     grid.appendChild(cell);
   }
-  $("albumTitle").textContent = "📖 " + t("album");
+  $("albumTitle").textContent = "📖";
   $("albumCount").textContent = albumText();
   $("album").classList.remove("hidden");
 }
@@ -578,7 +671,7 @@ function renderWardPreview() {
 }
 
 function renderWardrobe() {
-  $("wardNote").textContent = t("ward.note");
+  $("wardNote").textContent = "";
   renderWardPreview();
   const box = $("wardGrid");
   box.innerHTML = "";
@@ -712,7 +805,7 @@ function openAquarium(welcome: boolean, keepOpen = false) {
       }
       ctx.save(); ctx.translate(f.x, y); ctx.scale(f.dir, 1);
       ctx.drawImage(sp, -w / 2, -h / 2, w, h); ctx.restore();
-      if (f.star > 1) { ctx.font = "700 13px Fredoka, sans-serif"; ctx.fillStyle = "#ffe066"; ctx.textAlign = "center"; ctx.fillText(STARS[f.star], f.x, y - h / 2 - 2); }
+      if (f.star > 1) { ctx.font = "800 13px 'Baloo 2', sans-serif"; ctx.fillStyle = "#ffe066"; ctx.textAlign = "center"; ctx.fillText(STARS[f.star], f.x, y - h / 2 - 2); }
     }
     if (!$("aquarium").classList.contains("hidden")) aquaRaf = requestAnimationFrame(step); else aquaRaf = 0;
   };
@@ -799,6 +892,8 @@ type TipId = "start" | "reveal" | "dodge" | "upgrade" | "fight" | "shopBtn" | "a
 const tipQueue: TipId[] = [];
 let tipShowing = false;
 function guide(id: TipId) {
+  // wordless game: the moving hand, glows and arrows teach instead of speech bubbles
+  void id; return;
   if (save.tips.includes(id) || tipQueue.includes(id)) return;
   tipQueue.push(id);
   if (!tipShowing) nextTip();
@@ -899,7 +994,7 @@ function updateHarbor(dt: number) {
     if (save.dives > 0) {
       harborFresh = id; harborFreshT = 0;
       const st = HARBOR.find((h) => h.id === id)!;
-      setTimeout(() => { toast(`🏗️ ${st.icon} ${t(`hb.${id}`)}!`, 2600); sfx.reveal("epic"); }, 300);
+      setTimeout(() => { pop(st.icon); sfx.reveal("epic"); }, 300);
     }
     writeSave(save);
   }
@@ -1176,7 +1271,7 @@ function startChallenge(seed: number, target: number | null) {
   play = { kind: "challenge", seed, zone, back: scene.zone, dive: 0, score: 0, target };
   scene.zone = zone;
   ["compete", "result"].forEach((id) => $(id).classList.add("hidden"));
-  toast(`🤝 ${t("ch.title")} · ${tZone(zone)} · 🎣×${CH_DIVES}${target ? ` · 🎯 🪙${target.toLocaleString()}` : ""}`, 3000);
+  pop(`🤝 🎣×${CH_DIVES}`);
   sfx.event();
   updateUi();
 }
@@ -1190,12 +1285,11 @@ function endChallenge() {
   const prize = p.target === null ? 150 : won ? 500 : 150;
   save.coins += prize;
   writeSave(save); updateUi();
-  const lines = [`🎣 ${t("cmp.you")} · 🪙 <b>${p.score.toLocaleString()}</b>`];
-  if (p.target !== null) lines.push(`🤝 ${t("ch.friend")} · 🪙 ${p.target.toLocaleString()}`);
-  lines.push(`<small>${t("ch.send")}</small>`);
-  showResult(`🤝 ${t("ch.title")}`, lines, p.target === null ? `🪙+${prize}` : `${won ? t("ch.won") : t("ch.lost")} · 🪙+${prize}`, won);
+  const lines = [`🎣 🪙 <b>${p.score.toLocaleString()}</b>`];
+  if (p.target !== null) lines.push(`🤝 🪙 ${p.target.toLocaleString()}`);
+  showResult(won && p.target !== null ? "🏆" : "🤝", lines, `🪙+${prize}`, won);
   shareFor = { seed: p.seed, score: p.score };
-  $("resultAct").textContent = `📤 ${t("ch.share")}`;
+  $("resultAct").textContent = "📤";
   $("resultAct").classList.remove("hidden");
 }
 
@@ -1208,7 +1302,7 @@ async function shareChallenge() {
   try {
     if (navigator.share) { await navigator.share({ text, url }); return; }
   } catch { /* cancelled: fall back to copying */ }
-  try { await navigator.clipboard.writeText(`${text} ${url}`); toast(`📋 ${t("ch.copied")}`, 2200); }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); pop("📋✓"); }
   catch { toast(url, 6000); }
 }
 
@@ -1218,7 +1312,7 @@ function offerChallenge() {
   if (!(seed > 0) || !(score >= 0)) return;
   shareFor = null;
   $("resultAct").classList.add("hidden");
-  showResult(`🤝 ${t("ch.title")}`, [`${t("ch.got")}`, `🎯 🪙 <b>${score.toLocaleString()}</b>`, `<small>${t("ch.desc")}</small>`], "", false);
+  showResult("🤝", [`🎯 🪙 <b>${score.toLocaleString()}</b>`, `🎣×${CH_DIVES}`], "", false);
   $("resultPlay").classList.remove("hidden");
   $("resultPlay").onclick = () => { $("resultPlay").classList.add("hidden"); startChallenge(seed, score); };
 }
@@ -1353,20 +1447,8 @@ function checkMission() {
 }
 
 function renderMission() {
-  const el = $("mission");
-  const m = MISSIONS[save.mission];
-  if (!m) {
-    // starter missions done: the goal line shows the next thing your harbor will get
-    const nx = harborNext(save);
-    el.classList.toggle("hidden", !nx || scene.mode !== "dock");
-    if (!nx) return;
-    const [cur, goal] = nx.progress(save);
-    el.innerHTML = `🏗️ ${nx.icon} ${t(`hb.${nx.id}`)} <b>${cur}/${goal}</b><i style="width:${Math.round((cur / goal) * 100)}%"></i>`;
-    return;
-  }
-  el.classList.toggle("hidden", scene.mode !== "dock");
-  const [cur, goal] = m.progress(save);
-  el.innerHTML = `🎯 ${m.text[getLang()] ?? m.text.en} <b>${Math.floor(cur)}/${goal}</b> <span class="mr">🪙${m.reward}</span><i style="width:${Math.round((cur / goal) * 100)}%"></i>`;
+  // the Legend gauge is the goal now; the old starter missions stay off
+  $("mission").classList.add("hidden");
 }
 
 /** the next new species the line upgrade reaches: a silhouette teaser on the button */
@@ -1388,8 +1470,9 @@ function buy(id: UpgradeId) {
   sfx.buy();
   writeSave(save);
   updateUi();
-  toast(`✅ ${tUpgrade(id)}: ${t(`fx.${id}` as Parameters<typeof t>[0])}`, 1800);
-  checkMission();
+  save.charge[scene.zone] = chargeNow() + CHARGE_PER_UPGRADE;
+  $("gauge").classList.remove("bump"); void $("gauge").offsetWidth; $("gauge").classList.add("bump");
+  renderGauge();
 }
 
 
@@ -1415,12 +1498,13 @@ const worldMap = new WorldMap($("wmapCanvas") as HTMLCanvasElement, () => ({
   boat: `kid_${(save.wear.hat ?? "hat_cap").replace("hat_", "")}_idle`,
   regionLabel: (z) => {
     const all = FISH.filter((f) => f.zone === z).length;
-    return save.zones.includes(z) ? `${ZONE_TECH[z] ?? ""} ${tZone(z)} · 🐟${kindsIn(z)}/${all}` : `🔒 ${tZone(z)}`;
+    return save.zones.includes(z) ? `${ZONE_ICON[z]} 🐟${kindsIn(z)}/${all}${(save.legends[z] ?? 0) > 0 ? " 👑" : ""}` : "🔒";
   },
 }), (sp, z) => renderMapCard(sp, z));
 
 function openMap() {
   if (scene.mode !== "dock") return;
+  if (!save.tips.includes("mapSeen")) { save.tips.push("mapSeen"); updateUi(); }
   $("map").classList.remove("hidden");
   worldMap.open();
 }
@@ -1429,7 +1513,7 @@ function closeMap() { $("map").classList.add("hidden"); worldMap.close(); }
 /** the card under the map: what this spot or place offers, and the one action you can take */
 function renderMapCard(sp: SpotDef | null, z: ZoneId | null) {
   const card = $("mapCard");
-  if (!z) { card.innerHTML = `<div class="mcHint">👆 ${t("map.tap")}</div>`; return; }
+  if (!z) { card.innerHTML = `<div class="mcHint">👆</div>`; return; }
   const owned = save.zones.includes(z);
   if (!owned || !sp) {
     const reach = zoneReachable(z), price = ZONES[z].price;
@@ -1438,9 +1522,15 @@ function renderMapCard(sp: SpotDef | null, z: ZoneId | null) {
     for (const f of fish) card.querySelector(".mcFish")!.appendChild(fishThumb(f.id, null, 44, 34, !save.album[f.id]));
     const b = document.createElement("button");
     b.className = "btn big gold";
-    if (owned) { b.textContent = `🎣 ${t("map.go")}`; b.onclick = () => { pickZone(z); closeMap(); }; }
-    else if (!reach) { b.textContent = `🔒 ${t("map.needs")} ${tZone(ZONES[z].after!)}`; b.disabled = true; }
-    else { b.innerHTML = `🔓 ${tZone(z)} · 🪙${price.toLocaleString()}`; b.disabled = save.coins < price; b.onclick = () => { pickZone(z); renderMapCard(spotsOf(z)[0], z); }; }
+    if (owned) { b.textContent = "🎣 ▶"; b.onclick = () => { pickZone(z); closeMap(); }; }
+    else {
+      // locked: land the Legend of the place before it
+      void reach; void price;
+      const prev = ROAD[ROAD.indexOf(z) - 1];
+      b.innerHTML = "🔒 ";
+      if (prev) b.appendChild(fishThumb(LEGEND[prev], null, 46, 28, !save.album[LEGEND[prev]]));
+      b.disabled = true;
+    }
     card.querySelector(".mcAct")!.appendChild(b);
     return;
   }
@@ -1450,27 +1540,20 @@ function renderMapCard(sp: SpotDef | null, z: ZoneId | null) {
   for (const id of sp.attracts) card.querySelector(".mcFish")!.appendChild(fishThumb(id, null, 44, 34, !save.album[id]));
   const b = document.createElement("button");
   b.className = "btn big " + (open ? "ok" : "plain");
-  if (here) { b.textContent = `📍 ${t("map.here")}`; b.onclick = closeMap; }
-  else if (open) { b.textContent = `🎣 ${t("map.go")}`; b.onclick = () => { save.spot = sp.id; pickZone(z); closeMap(); }; }
-  else { b.textContent = `🔒 ${t("map.catch").replace("{n}", String(sp.need)).replace("{z}", tZone(z))} (${kindsIn(z)}/${sp.need})`; b.disabled = true; }
+  if (here) { b.textContent = "📍 ✓"; b.onclick = closeMap; }
+  else if (open) { b.textContent = "🎣 ▶"; b.onclick = () => { save.spot = sp.id; pickZone(z); closeMap(); }; }
+  else { b.textContent = `🔒 🐟 ${kindsIn(z)}/${sp.need}`; b.disabled = true; }
   card.querySelector(".mcAct")!.appendChild(b);
 }
 
 function pickZone(z: ZoneId) {
   if (scene.mode !== "dock" || play.kind === "challenge") return;
-  if (!save.zones.includes(z)) {
-    if (save.coins < ZONES[z].price || !zoneReachable(z)) return;
-    save.coins -= ZONES[z].price;
-    save.zones.push(z);
-    sfx.event();
-    toast(`🗺️ ${tZone(z)}!`);
-    guide("zone");
-  }
+  // places open only by landing the Legend before them (the logbook road)
+  if (!save.zones.includes(z)) return;
   save.zone = z;
   scene.zone = z;
   writeSave(save);
   updateUi();
-  checkMission();
 }
 
 function updateUi() {
@@ -1480,33 +1563,37 @@ function updateUi() {
   $("albumN").textContent = albumText();
   $("langBtn").innerHTML = `<img class="flag" src="${LANG_FLAG[getLang()]}" alt="">`;
   $("muteBtn").textContent = save.muted ? "🔇" : "🔊";
-  $("resumeBtn").textContent = "▶ " + t("resume");
-  $("retryLbl").textContent = t("retry");
-  $("letgoBtn").textContent = t("letgo");
-  $("doubleLbl").textContent = t("double");
+  $("resumeBtn").textContent = "▶";
+  $("retryLbl").textContent = "↻";
+  $("letgoBtn").textContent = "✕";
   const dock = scene.mode === "dock";
   document.body.classList.toggle("diving", !dock);
   renderMission();
   // new players see only the essentials; each button arrives when it starts to matter
+  // one clear line: fish -> coins -> upgrades -> the Legend. Only the wardrobe (show off) and the map remain.
   const gates: [string, boolean][] = [
-    ["shopBtn", save.dives >= 4],
-    ["aquaBtn", save.dives >= 8 || Object.keys(save.tank).length > 0],
-    ["ordersBtn", save.dives >= 8],
-    ["wardBtn", save.dives >= 10 || save.prog.level >= 3],
-    ["competeBtn", FEATURES.compete && (save.prog.level >= 3 || save.dives >= 14)],
-    ["wheelBtn", FEATURES.gifts && save.dives >= 3],
-    ["crewBtn", save.dives >= 12],
+    ["shopBtn", false],
+    ["aquaBtn", false],
+    ["ordersBtn", false],
+    ["wardBtn", save.dives >= 6],
+    ["competeBtn", false],
+    ["wheelBtn", false],
+    ["crewBtn", false],
   ];
   for (const [id, open] of gates) {
-    const host = MERGED[id];
+    const host = id === "wardBtn" ? undefined : MERGED[id];
     const el = $(host ?? id);
     if (host) $(id).classList.add("hidden"); else el.classList.toggle("hidden", !open);
     if (open && !save.seenBtns.includes(id)) {
       save.seenBtns.push(id);
-      if (save.dives > 0) { guide(id as TipId); el.classList.add("newbtn"); setTimeout(() => el.classList.remove("newbtn"), 6000); toast(`✨ ${el.textContent?.trim() || "🛒"} !`, 1800); }
+      if (save.dives > 0) { el.classList.add("newbtn"); setTimeout(() => el.classList.remove("newbtn"), 6000); }
     }
   }
-  $("lvlPill").classList.toggle("hidden", save.dives < 3);
+  $("lvlPill").classList.add("hidden");
+  // bring a friend: once you have landed a Legend, a 3-cast challenge you can send as a link
+  $("duelBtn").classList.toggle("hidden", !Object.values(save.legends).some((n) => (n ?? 0) > 0) || play.kind !== "normal");
+  $("side").classList.toggle("hidden", !dock);
+  renderGauge();
   refillOrders();
   const fo = fillableOrders();
   $("ordersBadge").textContent = fo ? String(fo) : "";
@@ -1514,7 +1601,7 @@ function updateUi() {
   $("aquaBadge").textContent = fo && FEATURES.orders ? String(fo) : "";
   $("aquaBadge").classList.toggle("hidden", !fo || !FEATURES.orders);
   const mb = $<HTMLButtonElement>("mapBtn");
-  mb.classList.toggle("hidden", save.mapPieces < 1);
+  mb.classList.add("hidden");
   mb.disabled = false;
   mb.classList.toggle("dim", save.mapPieces < 3); // still collecting: tapping explains instead of doing nothing
   $("mapN").textContent = `${Math.min(save.mapPieces, 3)}/3`;
@@ -1526,9 +1613,11 @@ function updateUi() {
   zones.innerHTML = "";
   const b = document.createElement("button");
   // one button: where you are now; it opens the world map. It glows when a new place is affordable.
-  const canUnlock = ZONE_ORDER.some((z) => !save.zones.includes(z) && zoneReachable(z) && save.coins >= ZONES[z].price);
-  b.className = "btn zone on" + (canUnlock ? " glow" : "");
-  b.innerHTML = `🗺️ ${spotName(currentSpot())}${canUnlock ? " ✨" : ""}`;
+  const canUnlock = false;
+  b.className = "btn zone on" + (save.zones.length > 1 && !save.tips.includes("mapSeen") ? " glow" : "");
+  void canUnlock;
+  b.innerHTML = `<span class="zi">${ZONE_ICON[scene.zone]}</span>`;
+  b.title = spotName(currentSpot());
   b.onclick = openMap;
   zones.appendChild(b);
 
@@ -1538,13 +1627,14 @@ function updateUi() {
     const cost = upgradeCost(save.upgrades, id);
     const b = document.createElement("button");
     const can = cost !== null && cost <= save.coins;
-    if (can && scene.mode === "dock") setTimeout(() => guide("upgrade"), 1200);
-    b.className = "btn up" + (can ? " can" : "");
+    // the very first affordable upgrade gets a bouncing arrow (no words)
+    const firstUp = can && save.upgrades.line + save.upgrades.capacity + save.upgrades.luck === 0 && id === UPGRADE_ORDER.find((u) => (upgradeCost(save.upgrades, u) ?? Infinity) <= save.coins);
+    b.className = "btn up" + (can ? " can" : "") + (firstUp ? " point" : "");
     b.disabled = cost === null;
     const valAt = (l: number) => id === "line" ? `${(400 + 120 * l) / 10}m` : id === "capacity" ? `×${3 + l}` : `+${l * 12}%`;
     const lv = save.upgrades[id];
     const lvl = cost === null ? valAt(lv) : `${valAt(lv)}→${valAt(lv + 1)}`;
-    b.innerHTML = `<span class="ui"><img src="${artUrl(UP_ICON[id])}" alt="" onerror="this.replaceWith('${UPGRADES[id].icon}')"></span><span class="ul">${tUpgrade(id)}</span><span class="ul2">${String(lvl).includes("→") ? `<i class="cur">${String(lvl).split("→")[0]}→</i>${String(lvl).split("→")[1]}` : lvl}</span><span class="uc">${cost === null ? t("max") : "🪙" + cost.toLocaleString()}</span>`;
+    b.innerHTML = `<span class="ui"><img src="${artUrl(UP_ICON[id])}" alt="" onerror="this.replaceWith('${UPGRADES[id].icon}')"></span><span class="ul2">${String(lvl).includes("→") ? `<i class="cur">${String(lvl).split("→")[0]}→</i>${String(lvl).split("→")[1]}` : lvl}</span><span class="uc">${cost === null ? t("max") : "🪙" + cost.toLocaleString()}</span>`;
     b.title = t(`fx.${id}` as Parameters<typeof t>[0]);
     b.onclick = () => buy(id);
     if (id === "line" && cost !== null) {
@@ -1575,13 +1665,14 @@ function updateWeather(now: number) {
   scene.daylight = daylightAt(Date.now());
   const pill = $("weatherPill");
   const left = Math.max(0, Math.ceil((w.endsAt - now) / 1000));
-  pill.textContent = `${w.def.icon} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+  void left;
+  pill.textContent = w.def.icon;
   pill.title = tWeather(w.def.id);
   // rain is heard when it starts, then settles to a faint background so it never nags
   if (w.def.id !== lastWeather) rainSince = now;
   const wet = w.def.id === "storm" ? 1 : w.def.id === "rain" ? 0.6 : 0;
   setRain(wet * (now - rainSince < 9000 ? 1 : 0.12));
-  if (lastWeather && lastWeather !== w.def.id) { toast(`${w.def.icon} ${tWeather(w.def.id)}`, 2400); sfx.event(); if (w.def.id !== "sunny") guide("weather"); }
+  if (lastWeather && lastWeather !== w.def.id && scene.mode === "dock") { pop(w.def.icon); sfx.event(); }
   lastWeather = w.def.id;
 }
 
@@ -1606,7 +1697,8 @@ function updateEvent(now: number) {
   const pill = $("eventPill");
   if (ev) {
     const left = Math.max(0, Math.ceil((ev.endsAt - now) / 1000));
-    pill.textContent = `${ev.def.icon} ${tEvent(ev.def.id)} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    pill.textContent = `${ev.def.icon} ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+    pill.title = tEvent(ev.def.id);
     pill.classList.remove("hidden");
     pill.style.background = "";
   } else {
@@ -1621,7 +1713,7 @@ function updateEvent(now: number) {
   }
   const id = ev ? ev.def.id + ev.endsAt : null;
   if (id !== lastEventId) {
-    if (ev) { sfx.event(); toast(`${ev.def.icon} ${tEvent(ev.def.id)}!`, 3000); save.seenEvent = true; if (save.dives > 0) guide("event"); }
+    if (ev) { sfx.event(); if (scene.mode === "dock") pop(ev.def.icon); save.seenEvent = true; }
     lastEventId = id;
   }
 }
@@ -1650,10 +1742,9 @@ function frame(now: number) {
       $("depthN").textContent = `${Math.round(d.hookY / 10)}m`;
       $("slots").textContent = "●".repeat(d.hooked.length) + "○".repeat(Math.max(0, d.capacity - d.hooked.length));
       $("reelHint").classList.toggle("hidden", d.phase !== "fight");
-      if (d.phase === "fight" && d.fight && d.fight.t < 0.1) guide("fight");
       if (d.phase === "fight" && d.fight) {
         const fg = d.fight, left = Math.ceil(2.6 - fg.t);
-        const how = fg.kind === "hold" ? "👇 " + t("reel") : fg.kind === "timing" ? "👆 " + t("fight.tap") : "↔️ " + t("fight.follow");
+        const how = fg.kind === "hold" ? "👇" : fg.kind === "timing" ? "👆" : "👈👉";
         $("reelHint").textContent = left > 0 ? `${left}… ${how}` : how;
       }
     } else $("reelHint").classList.add("hidden");
@@ -1689,8 +1780,7 @@ function tintedThumb(id: string, mut: NonNullable<Catch["mut"]>) {
   return spriteTinted(id, mut) ?? (img(id) as unknown as HTMLCanvasElement);
 }
 document.querySelectorAll<HTMLButtonElement>("#ui button").forEach((b) => b.addEventListener("click", () => sfx.tap()));
-$("collectBtn").onclick = () => void collect(false);
-$("doubleBtn").onclick = () => void collect(true);
+$("doubleBtn").onclick = () => void doubleHaul();
 $("retryBtn").onclick = () => void snapChoice(true);
 $("letgoBtn").onclick = () => void snapChoice(false);
 $("albumBtn").onclick = () => { if (scene.mode === "dock") showAlbum(); };
@@ -1738,7 +1828,9 @@ $("mapClose").onclick = closeMap;
 $("shopBtn").onclick = () => openTab("shop");
 $("shopClose").onclick = () => $("shop").classList.add("hidden");
 $("albumClose").onclick = () => $("album").classList.add("hidden");
-$("pauseBtn").onclick = () => togglePause(true);
+$("pauseBtn").onclick = () => { $("tray").classList.add("hidden"); togglePause(true); };
+$("gearBtn").onclick = () => $("tray").classList.toggle("hidden");
+$("duelBtn").onclick = () => { if (scene.mode === "dock" && play.kind === "normal") startChallenge(1 + Math.floor(Math.random() * 999_983), null); };
 $("resumeBtn").onclick = () => togglePause(false);
 $("muteBtn").onclick = () => { save.muted = !save.muted; setMuted(save.muted); writeSave(save); updateUi(); };
 $("langBtn").onclick = () => {
@@ -1770,16 +1862,15 @@ Promise.all([
 ]).then(() => {
   loadingFinished();
   void loadRest();
-  setTimeout(() => { if (save.dives === 0) guide("start"); }, 600);
+  if (!save.seenIntro) setTimeout(() => showLogbook({ landed: null, opened: null }, () => { save.seenIntro = true; writeSave(save); }), 200);
   setTimeout(offerChallenge, 900);
   $("loading").classList.add("gone");
-  if (save.aquariumAt && aquariumEarned(save.tank, save.aquariumAt, Date.now()) >= 25) openAquarium(true);
-  else if (!save.aquariumAt) save.aquariumAt = Date.now();
+  if (!save.aquariumAt) save.aquariumAt = Date.now();
   $("coinIco").innerHTML = `<img src="${artUrl("i_coin")}" alt="">`;
   updateUi();
 });
 updateUi();
 requestAnimationFrame(frame);
 
-// debug handle for automated checks (harmless in production)
-(window as unknown as { __deepLuck: unknown }).__deepLuck = { save, scene, renderer, worldMap, blinkTest, catchValue, updateUi, FISH_BY_ID, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };
+// debug handle for automated checks: only in the separate QA build, never in the Poki build
+if (import.meta.env.MODE === "qa") (window as unknown as { __deepLuck: unknown }).__deepLuck = { legendReady, showLogbook, save, scene, renderer, worldMap, blinkTest, catchValue, updateUi, FISH_BY_ID, showLegend, endPlayNow: () => { if (play.kind === "derby") play.endsAt = Date.now() - 1; }, force: (k: typeof forcedSurprise) => { forcedSurprise = k; }, weather: (w: WeatherId) => { forcedWeather = w; } };

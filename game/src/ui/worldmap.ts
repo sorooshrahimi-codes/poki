@@ -334,7 +334,7 @@ export class WorldMap {
     // place names on banners
     for (const z of Object.keys(REGION) as ZoneId[]) {
       const label = st.regionLabel(z), [lx, y] = LABEL_AT[z];
-      c.font = "bold 30px Fredoka, system-ui"; c.textAlign = "center"; c.textBaseline = "middle";
+      c.font = "bold 30px 'Baloo 2', system-ui"; c.textAlign = "center"; c.textBaseline = "middle";
       const w = c.measureText(label).width + 40;
       c.fillStyle = "rgba(13,30,69,0.82)"; c.strokeStyle = "#ffe066"; c.lineWidth = 3;
       c.beginPath(); c.roundRect(lx - w / 2, y - 22, w, 44, 22); c.fill(); c.stroke();

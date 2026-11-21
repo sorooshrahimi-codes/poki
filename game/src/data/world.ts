@@ -2,10 +2,10 @@ import type { EventDef, MutationDef, Rarity, ZoneDef, ZoneId } from "../core/typ
 
 export const ZONES: Record<ZoneId, ZoneDef> = {
   lake: { id: "lake", floor: 1650, price: 0, water: ["#5cc6e0", "#2a7f9e", "#123a4f"] },
-  ocean: { id: "ocean", floor: 3650, price: 1200, after: "lake", water: ["#3aa7e8", "#14558f", "#060f2b"] },
-  ice: { id: "ice", floor: 2800, price: 6000, water: ["#6fd3ee", "#1f7aa6", "#082238"], ice: true, after: "ocean" },
-  reef: { id: "reef", floor: 3200, price: 6000, water: ["#5fe0ea", "#1a86b5", "#0a2a52"], currents: true, after: "ocean" },
-  volcano: { id: "volcano", floor: 4200, price: 18000, water: ["#ff9a5a", "#7a2a3a", "#1a0612"], vents: true, after: "ocean" },
+  ocean: { id: "ocean", floor: 3650, price: 0, after: "lake", water: ["#3aa7e8", "#14558f", "#060f2b"] },
+  ice: { id: "ice", floor: 2800, price: 0, water: ["#6fd3ee", "#1f7aa6", "#082238"], ice: true, after: "ocean" },
+  reef: { id: "reef", floor: 3200, price: 0, water: ["#5fe0ea", "#1a86b5", "#0a2a52"], currents: true, after: "ice" },
+  volcano: { id: "volcano", floor: 4200, price: 0, water: ["#ff9a5a", "#7a2a3a", "#1a0612"], vents: true, after: "reef" },
 };
 export const ZONE_ORDER: ZoneId[] = ["lake", "ocean", "ice", "reef", "volcano"];
 

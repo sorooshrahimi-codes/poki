@@ -92,7 +92,8 @@ function botInput(d: Dive, rng: () => number, skill: number, memo: { x: number; 
   return { targetX: best, axis: 0, hold: false };
 }
 
-interface Result { buys: number[]; gaps: number[]; ice: number; surprises: number; firstSurprise: number; stolen: number; firstUpgrade: number; ocean: number; coins: number[]; rarities: Record<Rarity, number>; fights: number; won: number; dives: number; legFights: number; firstLegendary: number }
+import { LEGEND, ROAD, chargeFor, legendCoins, legendNeed, nextPlace } from "../src/data/legends.ts";
+interface Result { legendAt: number[]; legendTries: number; buys: number[]; gaps: number[]; ice: number; surprises: number; firstSurprise: number; stolen: number; firstUpgrade: number; ocean: number; coins: number[]; rarities: Record<Rarity, number>; fights: number; won: number; dives: number; legFights: number; firstLegendary: number }
 
 const KSTAT: Record<string, [number, number]> = {};
 let curKind = "";
@@ -104,6 +105,7 @@ function session(seed: number): Result {
   const buyTimes: number[] = [];
   const coins: number[] = [];
   const rarities = Object.fromEntries(RARITY_ORDER.map((r) => [r, 0])) as Record<Rarity, number>;
+  const legendAt = ROAD.map(() => -1); let legendTries = 0;
   let fights = 0, won = 0, dives = 0, earned = 0, legFights = 0, firstLegendary = -1, surprises = 0, firstSurprise = -1, stolen = 0;
   const director = newDirector();
   while (t < MINUTES * 60) {
@@ -111,7 +113,10 @@ function session(seed: number): Result {
     const ctx: DiveContext = { upgrades: s.upgrades, event: null, night: false, rng, weather: weatherAt(seed * 977_000 + t * 1000).def };
     const kind = pickSurprise(director, t, { zone: s.zone, bottom: Math.min(maxDepth(s.upgrades), ZONES[s.zone].floor), floor: ZONES[s.zone].floor, capacity: capOf(s.upgrades) }, rng);
     if (kind) { noteSurprise(director, kind, t); surprises++; if (firstSurprise < 0) firstSurprise = t; }
-    const d = startDive(s.zone, ctx, kind);
+    const tier = s.legends[s.zone] ?? 0;
+    const legendDive = (s.charge[s.zone] ?? 0) >= legendNeed(s.zone, tier);
+    const d = startDive(s.zone, ctx, legendDive ? null : kind, false, null, legendDive ? { id: LEGEND[s.zone], tier } : null);
+    if (legendDive) legendTries++;
     const memo = { x: d.hookX, next: 0, hold: false, stuck: 0, lastY: -1 };
     let fighting = false;
     while (d.phase !== "done" && d.t < 120) {
@@ -128,25 +133,31 @@ function session(seed: number): Result {
     }
     dives++;
     t += d.t + OVERHEAD;
-    for (const f of d.hooked) { const v = catchValue(f); s.coins += v; earned += v; rarities[f.def.rarity]++; }
+    for (const f of d.hooked) {
+      if (f.legend) {
+        s.legends[s.zone] = tier + 1; s.charge[s.zone] = 0;
+        const v = legendCoins(f.def.value, tier); s.coins += v; earned += v;
+        if (tier === 0) legendAt[ROAD.indexOf(s.zone)] = t;
+        const nx = nextPlace(s.zone);
+        if (nx && !s.zones.includes(nx)) { s.zones.push(nx); s.zone = nx; if (nx === "ocean") ocean = t; if (nx === "ice") ice = t; }
+        continue;
+      }
+      const v = catchValue(f); s.coins += v; earned += v; rarities[f.def.rarity]++;
+      s.charge[s.zone] = (s.charge[s.zone] ?? 0) + chargeFor(f.def.rarity, !!f.mut, !!f.def.junk);
+    }
+    if (legendDive && !d.hooked.some((f) => f.legend)) s.charge[s.zone] = Math.floor(legendNeed(s.zone, tier) * 0.7);
     s.coins += d.bonusCoins; earned += d.bonusCoins;
     noteDive(director, !!kind || d.hooked.some((f) => f.mut || f.def.rarity !== "common"));
     // spending: unlock the ocean as soon as it is affordable, otherwise the cheapest upgrade,
     // but stop buying small upgrades once the ticket is close
-    const oceanLocked = !s.zones.includes("ocean");
-    if (oceanLocked && s.coins >= ZONES.ocean.price) { s.coins -= ZONES.ocean.price; s.zones.push("ocean"); s.zone = "ocean"; ocean = t; }
-    else if (!oceanLocked && s.upgrades.line >= 12) {
-      // the map forks after the ocean: half the bots go north, half to the reef
-      const pick = seed % 2 ? "ice" : "reef";
-      if (!s.zones.includes(pick) && s.coins >= ZONES[pick].price) { s.coins -= ZONES[pick].price; s.zones.push(pick); s.zone = pick; ice = t; }
-    }
+    // places open by landing the Legend before them (see above)
     for (;;) {
       const options = UPGRADE_ORDER.map((id) => ({ id, cost: upgradeCost(s.upgrades, id) })).filter((o) => o.cost !== null) as { id: typeof UPGRADE_ORDER[number]; cost: number }[];
       options.sort((a, b) => a.cost - b.cost);
       const o = options[0];
       if (!o || o.cost > s.coins) break;
-      if (!s.zones.includes("ocean") && s.coins - o.cost < ZONES.ocean.price * 0.5 && o.cost > ZONES.ocean.price * 0.3) break;
       s.coins -= o.cost; s.upgrades[o.id]++;
+      s.charge[s.zone] = (s.charge[s.zone] ?? 0) + 1;
       buyTimes.push(t);
       if (firstUpgrade < 0) firstUpgrade = t;
     }
@@ -157,7 +168,7 @@ function session(seed: number): Result {
   const early = [0, ...buyTimes.filter((x) => x <= 300), 300];
   const mid = [300, ...buyTimes.filter((x) => x > 300 && x <= 900), 900];
   const gaps = [Math.max(...early.slice(1).map((x, i) => x - early[i])), Math.max(...mid.slice(1).map((x, i) => x - mid[i]))];
-  return { buys, gaps, ice, firstUpgrade, ocean, coins, rarities, fights, won, dives, legFights, firstLegendary, surprises, firstSurprise, stolen };
+  return { legendAt, legendTries, buys, gaps, ice, firstUpgrade, ocean, coins, rarities, fights, won, dives, legFights, firstLegendary, surprises, firstSurprise, stolen };
 }
 
 const median = (a: number[]) => { const b = a.filter((x) => x >= 0).sort((x, y) => x - y); return b.length ? b[Math.floor(b.length / 2)] : NaN; };
@@ -169,7 +180,9 @@ const ocean = median(results.map((r) => r.ocean));
 const reachedOcean = results.filter((r) => r.ocean >= 0).length / SESSIONS;
 console.log(`Deep Luck economy sim: ${SESSIONS} sessions x ${MINUTES} min, ${FISH.length} fish`);
 console.log(`first upgrade   median ${fmt(first)}   (target 0:12-1:15: sooner is better)`);
-console.log(`ocean unlocked  median ${fmt(ocean)}   (target 4:30-8:00), ${(reachedOcean * 100).toFixed(0)}% of sessions`);
+console.log(`ocean unlocked  median ${fmt(ocean)}   (target 1:30-3:30: the first Legend), ${(reachedOcean * 100).toFixed(0)}% of sessions`);
+ROAD.forEach((z, i) => console.log(`Legend ${String(i + 1)} (${z.padEnd(7)}) median ${fmt(median(results.map((r) => r.legendAt[i])))}, ${(results.filter((r) => r.legendAt[i] >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions`));
+console.log(`Legend dives per session ${(results.reduce((a, r) => a + r.legendTries, 0) / SESSIONS).toFixed(1)}`);
 console.log(`upgrades bought  by 2 min ${median(results.map((r) => r.buys[0]))}, by 5 min ${median(results.map((r) => r.buys[1]))}, by 10 min ${median(results.map((r) => r.buys[2]))}; longest wait in first 5 min median ${fmt(median(results.map((r) => r.gaps[0])))}, in 5-15 min ${fmt(median(results.map((r) => r.gaps[1])))}`);
 console.log(`third zone       median ${fmt(median(results.map((r) => r.ice)))}, ${(results.filter((r) => r.ice >= 0).length / SESSIONS * 100).toFixed(0)}% of sessions`);
 console.log(`dives per minute ${(median(results.map((r) => r.dives)) / MINUTES).toFixed(1)}`);
@@ -187,7 +200,7 @@ console.log(`surprises per session ${sur.toFixed(1)} (one every ${((MINUTES * 60
 console.log("fight types:", Object.entries(KSTAT).map(([k, [n, w]]) => `${k} ${(w / n * 100).toFixed(0)}% of ${n}`).join(", "));
 const fails: string[] = [];
 if (!(first >= 12 && first <= 75)) fails.push("first upgrade out of range");
-if (!(ocean >= 270 && ocean <= 480)) fails.push("ocean unlock out of range");
+if (!(ocean >= 90 && ocean <= 210)) fails.push("first Legend out of range");
 if (fights && !(won / fights >= 0.5 && won / fights <= 0.92)) fails.push("fight win rate out of range");
 if (fails.length) { console.log("FAIL: " + fails.join("; ")); process.exit(1); }
 console.log("PASS");

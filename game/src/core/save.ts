@@ -56,6 +56,12 @@ export interface SaveData {
   crew?: Record<string, { endsAt: number; trip: number; rushed?: boolean }>;
   /** Captain Bo's tips already shown */
   tips: string[];
+  /** Legends landed per place (= the ★ of the next one there) */
+  legends: Partial<Record<ZoneId, number>>;
+  /** how far your line has reached toward each place's Legend */
+  charge: Partial<Record<ZoneId, number>>;
+  /** the logbook opening has been seen */
+  seenIntro: boolean;
 }
 
 export const newSave = (): SaveData => ({
@@ -73,6 +79,9 @@ export const newSave = (): SaveData => ({
   avg: { value: 30, count: 3, kg: 1 },
   seenBtns: [],
   tips: [],
+  legends: {},
+  charge: {},
+  seenIntro: false,
 });
 
 /** parse anything (old, partial or broken) into a valid save */
@@ -82,7 +91,7 @@ export function readSave(raw: string | null): SaveData {
   try {
     const d = JSON.parse(raw);
     if (!d || d.v !== 1) return base;
-    return { ...base, ...d, upgrades: { ...base.upgrades, ...d.upgrades }, album: d.album ?? {}, director: { ...base.director, ...d.director }, gear: { ...base.gear, ...d.gear }, wear: { ...base.wear, ...d.wear }, stats: { ...base.stats, ...d.stats }, prog: { ...base.prog, ...d.prog }, league: { ...base.league, ...d.league }, derby: { ...base.derby, ...d.derby }, daily: { ...base.daily, ...d.daily }, avg: { ...base.avg, ...d.avg } };
+    return { ...base, ...d, upgrades: { ...base.upgrades, ...d.upgrades }, album: d.album ?? {}, director: { ...base.director, ...d.director }, gear: { ...base.gear, ...d.gear }, wear: { ...base.wear, ...d.wear }, stats: { ...base.stats, ...d.stats }, prog: { ...base.prog, ...d.prog }, league: { ...base.league, ...d.league }, derby: { ...base.derby, ...d.derby }, daily: { ...base.daily, ...d.daily }, avg: { ...base.avg, ...d.avg }, legends: { ...d.legends }, charge: { ...d.charge } };
   } catch {
     return base;
   }
