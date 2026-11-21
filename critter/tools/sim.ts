@@ -4,7 +4,7 @@
 import { newField, resetBossClock, stepField } from "../src/core/field.ts";
 import { UPGRADE_ORDER, upgradeCost, vacLevel, type Upgrades } from "../src/core/economy.ts";
 import { makeRng } from "../src/core/rng.ts";
-import { BIOMES, CRITTERS, MUTATIONS, STAR_MULT, catchCoinsOf, giantOf, starOf } from "../src/data/critters.ts";
+import { BIOMES, CRITTERS, MUTATIONS, STAR_MULT, catchCoinsOf, giantStep, starOf } from "../src/data/critters.ts";
 import type { BiomeId } from "../src/core/types.ts";
 
 const SESSIONS = Number(process.argv[2] ?? 60), MINUTES = Number(process.argv[3] ?? 15), DT = 1 / 30;
@@ -13,6 +13,7 @@ const fmt = (s: number) => (isNaN(s) ? "never" : `${Math.floor(s / 60)}:${String
 
 let bossTotal = 0;
 const giants: number[] = [];
+const winT: number[] = [];
 const lvlAt: Record<number, number[]> = {}, lvlT: Record<number, number[]> = {};
 const res: { frost: number; firstJar: number; forest: number; coins: number[]; buys: number; income: number; species: number; tugs: number; tugWon: number }[] = [];
 for (let n = 0; n < SESSIONS; n++) {
@@ -25,15 +26,17 @@ for (let n = 0; n < SESSIONS; n++) {
   let coins = 0, t = 0, firstJar = -1, forest = -1, buys = 0, biome: BiomeId = "meadow", tugs = 0, tugWon = 0;
   const owned: BiomeId[] = ["meadow"];
   const restored: BiomeId[] = [];
-  let firstGiant = -1;
+  let firstGiant = -1, wins = 0;
   const coinsAt: number[] = [];
   const income = () => CRITTERS.reduce((a, d) => a + d.income * STAR_MULT[starOf(index[d.id] ?? 0)], 0);
   while (t < MINUTES * 60) {
+    { const g0 = giantStep(wins); if (g0.biome !== biome && owned.includes(g0.biome) && vacLevel(up) >= g0.need) biome = g0.biome; }
     const f = newField(360, 640, up, biome);
     if (t > 0) f.script = 2;
     f.nozzle = { x: 110, y: 640 * 0.8 };
-    const g = giantOf(biome);
-    if (g && !restored.includes(biome)) f.giant = { id: g.id, ready: vacLevel(up) >= g.need, resist: g.resist };
+    const g = giantStep(wins);
+    if (g.biome !== biome && owned.includes(g.biome) && vacLevel(up) >= g.need) biome = g.biome;
+    if (g.biome === biome) f.giant = { id: g.id, ready: vacLevel(up) >= g.need, resist: g.resist, scale: g.scale };
     const jar: string[] = [];
     let aimX = 250, aimY = 560, holdT = 0;
     // one visit: catch until the jar is full (or 90 s pass)
@@ -55,7 +58,7 @@ for (let n = 0; n < SESSIONS; n++) {
         if (e.kind === "caught") { jar.push(e.c.def.id); coins += catchCoinsOf(e.c.def, MUTATIONS.find((m) => m.id === e.c.mut)?.mult ?? 1); if (e.c.resist > 1.5) tugWon++; }
         if (e.kind === "tug") tugs++;
         if (e.kind === "caught" && e.c.boss > 0) {
-          bosses++;
+          bosses++; wins++; winT.push(t);
           if (!restored.includes(biome)) {
             restored.push(biome);
             if (firstGiant < 0) firstGiant = t;
@@ -93,3 +96,4 @@ console.log(`upgrades bought   median ${median(res.map((r) => r.buys))}; species
 console.log(`tug fights        ${(res.reduce((a, r) => a + r.tugs, 0) / SESSIONS).toFixed(1)} per session, won ${Math.round((res.reduce((a, r) => a + r.tugWon, 0) / Math.max(1, res.reduce((a, r) => a + r.tugs, 0))) * 100)}%`);
 console.log(`bosses caught     ${(bossTotal / SESSIONS).toFixed(1)} per session`);
 console.log("vacuum level reached at (median): " + Object.keys(lvlT).map((k) => `L${k} ${fmt(median(lvlT[+k]))}`).join(", "));
+console.log(`giants beaten     ${(winT.length / SESSIONS).toFixed(1)} per session`);

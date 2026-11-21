@@ -65,7 +65,7 @@ export interface Field {
   /** the kid walks: x = steps from the left edge, d = depth on the ground (1 = nearest), walk = distance walked (for the stride) */
   kid: { x: number; d: number; walk: number; face: 1 | -1 };
   /** this place's giant, when it is still to be caught; ready = the vacuum is strong enough, so it comes down */
-  giant: { id: string; ready: boolean; resist: number } | null;
+  giant: { id: string; ready: boolean; resist: number; scale: number } | null;
   giantT: number;
   critters: Critter[];
   beam: boolean; aim: { x: number; y: number };
@@ -222,7 +222,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
     if (f.giantT <= 0) {
       const def = CRITTER_BY_ID[f.giant.id];
       const c = spawn(f, rng, { def, mut: null, x: f.right - 80, y: f.farY + (f.nearY - f.farY) * 0.5 });
-      c.boss = 3; c.scale = 3.3; c.resist = f.giant.resist; c.dir = -1;
+      c.boss = 3; c.scale = f.giant.scale; c.resist = f.giant.resist; c.dir = -1;
       f.giantT = 8;
       f.ev.push({ kind: "surprise", s: "boss", c });
     }

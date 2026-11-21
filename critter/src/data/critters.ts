@@ -127,3 +127,12 @@ export const GIANTS: GiantDef[] = [
   { biome: "frost", id: "glacier", need: 62, resist: 4.4 },
 ];
 export const giantOf = (b: BiomeId) => GIANTS.find((g) => g.biome === b) ?? null;
+
+/** the giant ladder never ends: the three giants first, then each comes back stronger (★2, ★3, ...), bigger and heavier.
+ *  Step i of the ladder is the i-th giant to beat; there is always a next one for the coins to work toward. */
+export interface GiantStep extends GiantDef { tier: number; scale: number }
+export function giantStep(i: number): GiantStep {
+  const g = GIANTS[i % GIANTS.length], tier = Math.floor(i / GIANTS.length) + 1;
+  const need = i < GIANTS.length ? g.need : GIANTS[GIANTS.length - 1].need + (i - GIANTS.length + 1) * 12;
+  return { ...g, tier, need, resist: g.resist + (tier - 1) * 1.2, scale: 3.3 + (tier - 1) * 0.35 };
+}

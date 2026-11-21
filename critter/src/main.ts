@@ -6,7 +6,7 @@ import { newField, sizeField, stepField, spawn, type Field } from "./core/field.
 import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tankSize, upgradeCost, type UpgradeId } from "./core/economy.ts";
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
-import { GIANTS, giantOf } from "./data/critters.ts";
+import { GIANTS, giantOf, giantStep } from "./data/critters.ts";
 import { vacLevel } from "./core/economy.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
@@ -88,6 +88,7 @@ function handleEvents() {
       if (c.boss > 0) coins += Math.round(c.def.income * 60);
       if (rush) rush.score += coins; else { save.coins += coins; save.catches++; }
       if (combo >= 3) { view.text(field.nozzle.x + 70 * field.kid.face, field.nozzle.y - 70, `🔥×${combo}`, combo >= 6 ? "#ff7ad1" : "#7cf29a", 16 + Math.min(10, combo)); sfx.coin(combo); }
+      if (c.boss > 0 && nextGiant().biome === field.biome) save.giantWins = (save.giantWins ?? 0) + 1;
       if (c.boss > 0 && !(save.restored ??= []).includes(field.biome)) {
         // the giant was Gloom's: the colour floods back into this place, for good
         save.restored.push(field.biome);
@@ -643,13 +644,13 @@ function toast(html: string, ms = 1800) {
   clearTimeout(toastT); toastT = window.setTimeout(() => el.classList.add("hidden"), ms);
 }
 /** the giant still standing in a place (null once caught) and the next giant on the road */
-const giantLeft = (b: BiomeId) => { const g = giantOf(b); return g && !(save.restored ?? []).includes(b) ? g : null; };
-const nextGiant = () => GIANTS.find((g) => !(save.restored ?? []).includes(g.biome)) ?? null;
+const nextGiant = () => giantStep(save.giantWins ?? 0);
+const giantLeft = (b: BiomeId) => { const g = nextGiant(); return g.biome === b ? g : null; };
 const giantImg = (id: string, cls = "") => `<img class="gi ${cls}" src="./art/${CRITTER_BY_ID[id].art}.webp" alt="">`;
 /** the gauge: your vacuum against a giant. Full = it will come down and fight */
-function gauge(g: { id: string; need: number }) {
+function gauge(g: { id: string; need: number; tier?: number }) {
   const L = vacLevel(save.up), k = Math.min(1, L / g.need);
-  return `<div class="gauge${k >= 1 ? " full" : ""}"><span class="me">🌀<b>${L}</b></span><span class="gbar"><i style="width:${Math.round(k * 100)}%"></i></span><span class="them">${giantImg(g.id)}<b>${g.need}</b></span></div>`;
+  return `<div class="gauge${k >= 1 ? " full" : ""}"><span class="me">🌀<b>${L}</b></span><span class="gbar"><i style="width:${Math.round(k * 100)}%"></i></span><span class="them">${giantImg(g.id)}${(g.tier ?? 1) > 1 ? `<sup>★${g.tier}</sup>` : ""}<b>${g.need}</b></span></div>`;
 }
 const ic = (id: string) => `<img src="./art/${CRITTER_BY_ID[id].art}.webp" alt="">`;
 const COIN = `<img src="./art/coin.webp" alt="">`;
@@ -690,7 +691,8 @@ function updateUi() {
   const here = BIOMES.find((b) => b.id === field.biome)!;
   const found = CRITTERS.filter((d) => d.biome === field.biome && save.index[d.id]).length, total = CRITTERS.filter((d) => d.biome === field.biome).length;
   const gHere = giantLeft(field.biome);
-  $("fhPlace").innerHTML = mode === "rush" ? "" : gHere ? gauge(gHere) : `${here.icon} 📖 ${found}/${total} 🌈`;
+  const ngF = nextGiant();
+  $("fhPlace").innerHTML = mode === "rush" ? "" : gHere ? gauge(gHere) : `<span class="where">${BIOMES.find((b) => b.id === ngF.biome)!.icon}</span>${gauge(ngF)}`;
   $("fhGoal").textContent = "";
   renderTools();
   placeGuide();
@@ -748,7 +750,7 @@ function frame(now: number) {
   view.colour += (colourTarget - view.colour) * Math.min(1, dt * 1.2);
   field.companion = null; // companions were cut
   const gH = mode === "rush" ? null : giantLeft(field.biome), L = vacLevel(save.up);
-  field.giant = gH ? { id: gH.id, ready: L >= gH.need, resist: gH.resist } : null;
+  field.giant = gH ? { id: gH.id, ready: L >= gH.need, resist: gH.resist, scale: gH.scale } : null;
   view.giant = gH ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need } : null;
   view.vac = L;
   if (mode === "rush" && rush) {
