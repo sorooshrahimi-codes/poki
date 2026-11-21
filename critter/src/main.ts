@@ -101,10 +101,15 @@ function handleEvents() {
         }
         writeSave(save); mapKey = "";
         view.gloomFlee = 0.01; colourTarget = 1;
-        setTimeout(() => { toast(`☁️💨 ${BIOMES.find((b) => b.id === field.biome)!.icon} 🌈`, 3600); sfx.reveal("legendary"); view.shake = 10; }, 700);
+        setTimeout(() => { sfx.reveal("legendary"); view.shake = 10; }, 700);
       }
       if (c.boss > 0) {
-        toast(`👑${ic(c.def.id)} ✔ ${COIN}+${short(coins)}`, 3200); view.shake = 14; sfx.reveal("legendary");
+        // the big moment: POP, a burst of light and a rain of coins, then the kid burps
+        sfx.pop(); view.shake = 18;
+        for (let i = 0; i < 4; i++) setTimeout(() => view.burst(field.nozzle.x + (Math.random() - 0.5) * 60, field.nozzle.y - Math.random() * 40, ["#ffe066", "#ff7ad1", "#7be495", "#5bc8ff"][i], 30), i * 90);
+        flyCoins(field.nozzle.x, field.nozzle.y, 14);
+        setTimeout(() => { sfx.burp(); view.cheer = 1.6; view.shake = 6; view.text(field.nozzle.x - 40 * field.kid.face, field.nozzle.y - 70, "💨", "#ffffff", 34); }, 900);
+        setTimeout(() => sfx.reveal("legendary"), 1400);
         // after the celebration: on to where the next giant waits (a natural moment for a break)
         setTimeout(() => void nextPlace(), 4200);
       }
@@ -113,7 +118,9 @@ function handleEvents() {
       view.burst(field.nozzle.x, field.nozzle.y, c.mut === "gold" ? "#ffd84a" : RARITY_COLOR[c.def.rarity], c.def.rarity === "common" && !c.mut ? 10 : 24);
       view.text(field.nozzle.x + 40 * field.kid.face, field.nozzle.y - 34 - (save.catches % 2) * 22, `+🪙${short(coins)}`, "#ffe066", 17);
       if (!rush) flyCoins(field.nozzle.x, field.nozzle.y, Math.min(4, 1 + Math.floor(Math.log10(coins + 1))));
-      if (isNew) { celebrating.add(c.def.id); void celebrate([c.def.id]); }
+      // a new species gets its big moment, unless a giant fight is on (then it slips into the book quietly)
+      if (isNew && !field.critters.some((k) => k.boss > 0 && k.state !== "caught") && c.boss === 0) { celebrating.add(c.def.id); void celebrate([c.def.id]); }
+      else if (isNew) { const bb = $("bookBtn"); bb.classList.remove("got"); void bb.offsetWidth; bb.classList.add("got"); }
       if (c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") { view.shake = 8; sfx.reveal(c.def.rarity === "legendary" ? "legendary" : "epic"); }
       if (isNew) sfx.newFish();
     } else if (e.kind === "tug") {
@@ -127,10 +134,8 @@ function handleEvents() {
       $("parkBtn").classList.add("pulse");
     } else if (e.kind === "surprise") {
       sfx.event(); view.shake = 4;
-      if (e.s === "visitor" && e.c) toast(`✨${ic(e.c.def.id)}✨`, 2600);
-      else if (e.s === "boss" && e.c) { toast(`⚠️ 👑${ic(e.c.def.id)}`, 3200); view.shake = 10; sfx.snap(); }
-      else if (e.s === "golden_rain") toast("🌧️ ✨🪙✨", 2400);
-      else toast("💨💨💨", 2400);
+      // surprises speak for themselves on the field: only a sound, and a shake for the giant
+      if (e.s === "boss") { view.shake = 10; sfx.snap(); } else sfx.event();
     } else if (e.kind === "bubbled") {
       sfx.boing(); view.text(e.c.x, e.c.y - 80, "🫧", "#bfefff", 15);
     } else if (e.kind === "ability") {
@@ -140,10 +145,11 @@ function handleEvents() {
       view.burst(e.c.x, e.c.y - 30, "#7fd3ff", 14, 140); view.text(e.c.x, e.c.y - 70, "✌️", "#9be7ff", 15); sfx.boing();
     } else if (e.kind === "hide") {
       sfx.bonk();
-      if (started && !save.tips.includes(e.c.def.behave)) { save.tips.push(e.c.def.behave); toast(e.c.def.behave === "shell" ? `${ic(e.c.def.id)} 🐚 ➜ ⏳ ➜ 🌀` : `${ic(e.c.def.id)} 🕳️ ➜ 👀 ➜ 🌀`, 3000); }
+      // (no tip messages: the critter's behaviour shows on the field)
     } else if (e.kind === "flee") {
-      if (started && !save.tips.includes("shy")) { save.tips.push("shy"); toast("🙈 ➜ 🐢🌀", 3000); }
+      // (no tip message)
     } else if (e.kind === "bossPhase") {
+      slowT = 0.45;
       view.shake = 12; sfx.snap(); view.burst(e.c.x, e.c.y - 60, "#ffd84a", 30, 220);
       view.text(e.c.x, e.c.y - 110, `👑 ${"❤️".repeat(e.c.boss)}`, "#ffe066", 17);
     } else if (e.kind === "spawn" && e.c.mut) {
@@ -247,7 +253,7 @@ async function startRush(seed: number, goal: number | null) {
   field.script = 2;
   for (let i = 0; i < 7; i++) spawn(field, rushRng);
   $("result").classList.add("hidden");
-  toast(goal ? `🏁 🎯 ${goal.toLocaleString()}` : "🏁 ⏱60", 2600);
+
   gameplayStart();
   updateUi();
 }
@@ -333,7 +339,7 @@ function renderUpBar() {
     const b = document.createElement("button");
     b.className = "upb" + (ok ? " ok" : "");
     b.dataset.up = id;
-    b.innerHTML = `<span class="ui">${UPGRADES[id].icon}</span><span class="uv">${UP_LABEL[id](save.up[id])}</span><span class="uc">${c === null ? "MAX" : `${COIN}${short(c)}`}</span>`;
+    b.innerHTML = `<span class="ui">${UPGRADES[id].icon}</span><span class="uc">${c === null ? "MAX" : `${COIN}${short(c)}`}</span><i class="lvl" style="width:${Math.min(100, (save.up[id] / UPGRADES[id].max) * 100)}%"></i>`;
     b.onpointerdown = (ev) => { ev.stopPropagation(); };
     b.onclick = () => { buy(id); b.classList.add("bought"); flyUp(b); };
     box.appendChild(b);
@@ -421,14 +427,14 @@ async function lure() {
   busy = false;
   if (!ok) return;
   field.lure += 3;
-  toast("✨🪙 ×3", 2600);
+  view.burst(field.nozzle.x, field.nozzle.y - 40, "#ffd84a", 30);
   sfx.reveal("epic");
 }
 
 function buy(id: UpgradeId) {
   const cost = upgradeCost(save.up, id);
   if (cost === null) return;
-  if (cost > save.coins) { toast(`${COIN} ${short(save.coins)} / ${short(cost)}`, 1400); sfx.tap(); return; }
+  if (cost > save.coins) { sfx.tap(); return; }
   save.coins -= cost; save.up[id]++;
   sfx.buy(); writeSave(save); updateUi();
 }
@@ -822,8 +828,15 @@ applyLang();
 
 // ------------------------------------------------------------------ main loop
 let last = performance.now(), uiT = 0, coinAcc = 0;
+/** slow motion: a beat when a giant breaks free, and while it is finally being pulled in */
+let slowT = 0, timeK = 1;
 function frame(now: number) {
-  const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
+  const rdt = Math.min(0.05, (now - last) / 1000); last = now;
+  const finale = mode === "field" && field.critters.some((c) => c.boss > 0 && c.state === "pulled");
+  slowT = Math.max(0, slowT - rdt);
+  timeK += ((finale || slowT > 0 ? 0.3 : 1) - timeK) * Math.min(1, rdt * 8);
+  view.zoomTarget = finale ? 1.14 : 0;
+  const dt = rdt * timeK; t += dt;
   // the park pays every second, wherever you are
   coinAcc += incomePerSec() * dt;
   if (coinAcc >= 1) { const n = Math.floor(coinAcc); coinAcc -= n; save.coins += n; save.lastSeen = Date.now(); }

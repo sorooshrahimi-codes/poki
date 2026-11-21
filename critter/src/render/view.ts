@@ -100,7 +100,7 @@ export class View {
     const c = this.c;
     if (this.colour < 1) c.filter = `saturate(${0.25 + 0.75 * this.colour}) brightness(${0.85 + 0.15 * this.colour})`;
     // the camera leans in a little while the vacuum roars
-    this.zoom += ((f.beam ? 1.035 : 1) - this.zoom) * Math.min(1, dt * 3);
+    this.zoom += ((this.zoomTarget || (f.beam ? 1.035 : 1)) - this.zoom) * Math.min(1, dt * 3);
     const zx = f.nozzle.x + 120, zy = f.nearY - 40;
     c.translate(zx, zy); c.scale(this.zoom, this.zoom); c.translate(-zx, -zy);
     this.cover(BIOMES.find((b) => b.id === f.biome)!.bg, -f.kid.x * 0.14);
@@ -163,6 +163,8 @@ export class View {
     this.foreground(f, t);
   }
   zoom = 1;
+  /** set by the controller for the giant's finale (0 = normal) */
+  zoomTarget = 0;
   private faceAnim = 1;
   private swing = 0;
   /** the kid as a little puppet: the picture is cut at the hips, the legs swing in turn, the body bobs and leans,

@@ -132,6 +132,14 @@ export const sfx = {
     noise(t, 1.6, 0.5, 120, 0.6, 50); noise(t + 0.05, 0.6, 0.3, 400, 0.8, 90);
   },
   tap() { if (!ok()) return; bloop(700, 1100, now(), 0.12, 0.06); },
+  /** the giant goes in: a deep rubbery POP */
+  pop() { if (!ok()) return; const t = now(); bloop(900, 70, t, 0.5, 0.35); noise(t, 0.25, 0.35, 600, 1.2, 120); bloop(300, 900, t + 0.18, 0.25, 0.15); },
+  /** ...and the kid burps */
+  burp() {
+    if (!ok()) return; const t = now();
+    for (let i = 0; i < 5; i++) bloop(150 - i * 8 + (i % 2) * 25, 110 - i * 6, t + i * 0.07, 0.4, 0.09);
+    noise(t, 0.4, 0.18, 260, 4, 160);
+  },
   newFish() { if (!ok()) return; const t = now(); [0, 7, 12].forEach((n, i) => bell(midi(88 + n), t + i * 0.07, 0.12, 0.8)); },
 };
 
