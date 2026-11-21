@@ -3,6 +3,7 @@
 // into a grid over the world, the grid is blurred, and each mite moves down the density gradient.
 // No sorting, no atomics, the same path on every WebGL2 device, and the cost does not depend on crowding.
 import { FULLSCREEN_VS, bindTex, program, target, type GL, type Program, type Target } from "./gl.ts";
+import { MAT_GLSL } from "./mats.ts";
 
 export const S = 512; // 262,144 slots
 export const WORLD = 160; // world units across the density grid
@@ -113,6 +114,9 @@ void main() {
       }
     }
   }
+  // the mist at the edge of the land: nobody gets through
+  float rw = length(pos.xz);
+  if (rw > 62.0) vel.xz -= pos.xz / rw * (rw - 62.0) * 14.0 * uDt;
   float sp = length(vel);
   float vmax = uSpeed * 1.8 + 6.0;
   if (sp > vmax) vel *= vmax / sp;
@@ -214,29 +218,40 @@ void main() {
 // where the swarm bites: stone chips fly out and dust rises (drawn only for mites that are eating)
 const CHIP_VS = `#version 300 es
 precision highp float;
-uniform sampler2D uPos;
+uniform sampler2D uPos, uAtlas;
 uniform mat4 uVP;
-uniform vec3 uCamR, uCamU;
+uniform vec3 uCamR, uCamU, uLeader;
+uniform vec4 uB[64];
+uniform vec4 uS2[64];
 uniform float uS, uTime;
 in vec2 aCorner;
 out vec2 vUv;
 out float vA;
 out float vKind;
+out vec3 vCol;
 ${HASH}
+${MAT_GLSL}
+ivec2 atlasTexel(int b, ivec3 v) { return ivec2((b % 8) * 256 + (v.z % 8) * 32 + v.x, (b / 8) * 128 + (v.z / 8) * 32 + v.y); }
 void main() {
   int i = gl_InstanceID;
   vec4 p = texelFetch(uPos, ivec2(i % int(uS), i / int(uS)), 0);
   if (p.w < 1.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   vec3 r = h31(float(i) * 3.1);
-  // a looping little arc: each biting mite throws a chip out and up every ~0.6 s
-  float ph = fract(uTime * (1.4 + r.x) + r.y);
-  vec3 dir = normalize(vec3(r.x - 0.5, 0.8 + r.z, r.y - 0.5));
-  vec3 cp = p.xyz + dir * ph * 1.6 + vec3(0.0, -4.0 * ph * ph * 0.4, 0.0);
-  bool dust = r.z > 0.55;
-  float size = dust ? 0.35 + 0.6 * ph : 0.05 + 0.04 * r.x;
+  // what is being bitten: the material of the voxel at the bite (its true colour)
+  int b = int(floor(p.w - 2.0));
+  vec3 lp = (p.xyz - vec3(uB[b].x, uS2[b].y, uB[b].y)) / (${VS_W.toFixed(3)} * uS2[b].x) + vec3(16.0, 0.0, 16.0);
+  ivec3 v = clamp(ivec3(floor(lp)), ivec3(0), ivec3(31));
+  vec4 vox = texelFetch(uAtlas, atlasTexel(b, v), 0);
+  vCol = vox.b > 0.5 ? MAT[int(vox.b + 0.5)] : vec3(0.42, 0.40, 0.38);
+  // each bite throws a crumb that arcs into the swarm's heart and feeds it
+  float ph = fract(uTime * (0.9 + r.x * 0.8) + r.y);
+  vec3 to = uLeader + vec3(r.x - 0.5, 1.2 + r.z, r.y - 0.5) * 2.0;
+  vec3 cp = mix(p.xyz, to, ph * ph) + vec3(0.0, sin(ph * 3.14159) * (1.5 + 2.0 * r.z), 0.0);
+  bool dust = r.z > 0.7;
+  float size = dust ? 0.3 + 0.5 * ph : 0.07 + 0.06 * r.x;
   vKind = dust ? 1.0 : 0.0;
-  vA = dust ? (1.0 - ph) * 0.18 : 1.0 - ph * 0.6;
-  vec3 wp = (dust ? p.xyz + vec3(0.0, ph * 1.2, 0.0) : cp) + (uCamR * aCorner.x + uCamU * aCorner.y) * size;
+  vA = dust ? (1.0 - ph) * 0.15 : 1.0 - smoothstep(0.75, 1.0, ph);
+  vec3 wp = (dust ? p.xyz + vec3(0.0, ph * 1.2, 0.0) : cp) + (uCamR * aCorner.x + uCamU * aCorner.y) * size * (dust ? 1.0 : 1.0 - ph * 0.5);
   vUv = aCorner;
   gl_Position = uVP * vec4(wp, 1.0);
 }`;
@@ -245,11 +260,12 @@ precision mediump float;
 in vec2 vUv;
 in float vA;
 in float vKind;
+in vec3 vCol;
 out vec4 o;
 void main() {
   float r2 = dot(vUv, vUv);
   if (r2 > 1.0) discard;
-  vec3 c = vKind > 0.5 ? vec3(0.55, 0.52, 0.50) : vec3(0.42, 0.40, 0.38);
+  vec3 c = vKind > 0.5 ? mix(vec3(0.55, 0.52, 0.50), vCol, 0.4) : vCol * 1.3 + vec3(0.25, 0.15, 0.05) * (1.0 - r2);
   float a = vKind > 0.5 ? vA * (1.0 - r2) : vA;
   o = vec4(c * a, a);
 }`;
@@ -333,7 +349,7 @@ export class Swarm {
     pass(this.denB.tex[0], this.denA, 2, 0); pass(this.denA.tex[0], this.denB, 0, 2);
   }
 
-  draw(vp: Float32Array, camR: Float32Array, camU: Float32Array, t: number, active: number, pxScale: number) {
+  draw(vp: Float32Array, camR: Float32Array, camU: Float32Array, t: number, active: number, pxScale: number, leader: Float32Array, world: { atlas: WebGLTexture; b: Float32Array; s2: Float32Array }) {
     const gl = this.gl, u = this.mite.u;
     gl.useProgram(this.mite.p);
     bindTex(gl, 0, this.state.tex[0], u.uPos); bindTex(gl, 1, this.state.tex[1], u.uVel);
@@ -347,7 +363,8 @@ export class Swarm {
     // chips and dust where the swarm is biting (premultiplied alpha, no depth writes)
     const c = this.chip.u;
     gl.useProgram(this.chip.p);
-    bindTex(gl, 0, this.state.tex[0], c.uPos);
+    bindTex(gl, 0, this.state.tex[0], c.uPos); bindTex(gl, 1, world.atlas, c.uAtlas);
+    gl.uniform3fv(c.uLeader, leader); gl.uniform4fv(c.uB, world.b); gl.uniform4fv(c.uS2, world.s2);
     gl.uniformMatrix4fv(c.uVP, false, vp); gl.uniform3fv(c.uCamR, camR); gl.uniform3fv(c.uCamU, camU);
     gl.uniform1f(c.uS, S); gl.uniform1f(c.uTime, t);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);

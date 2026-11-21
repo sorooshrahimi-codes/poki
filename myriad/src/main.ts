@@ -3,8 +3,9 @@ import { invert, lookAt, mul, perspective } from "./gl.ts";
 import { Governor, TIERS } from "./perf.ts";
 import { Post } from "./post.ts";
 import { S, Swarm } from "./swarm.ts";
-import { World } from "./world.ts";
-import { City, type Kind } from "./city.ts";
+import { WALL, World, type Palette } from "./world.ts";
+import { City, theme, type Kind } from "./city.ts";
+import { poki } from "./poki.ts";
 import { Grass } from "./grass.ts";
 import { Audio } from "./audio.ts";
 
@@ -13,7 +14,7 @@ const hudCanvas = document.getElementById("hud") as HTMLCanvasElement;
 const hud = hudCanvas.getContext("2d")!;
 const params = new URLSearchParams(location.search);
 // test phase: the frame-time chart is on by default (H toggles it); the Poki build will hide it
-const showHud = params.get("hud") !== "0";
+const showHud = params.get("hud") === "1" || (import.meta.env.MODE === "qa" && params.get("hud") !== "0");
 hudCanvas.style.display = showHud ? "block" : "none";
 
 const gl = canvas.getContext("webgl2", { antialias: false, alpha: false, depth: true, powerPreference: "high-performance", preserveDrawingBuffer: false })!;
@@ -35,26 +36,53 @@ const audio = new Audio();
 const MILESTONES = [1000, 2500, 5000, 10000, 25000, 50000, 100000, 150000, 200000];
 let milestone = 0;
 
-// ---------------------------------------------------------------- a district: a petrified farm village
-function village(seed: number) {
-  let a = seed;
+// ---------------------------------------------------------------- the five lands the grey has taken
+// The grey spread out from a dead volcano at the heart of the world. The swarm brings each land back to life,
+// one by one, from the meadow at the edge to the crystal heart. Then the lands come round again, harder.
+type Land = { icon: string; pal: Palette; snow: boolean; mix: [Kind, number][]; starter: [Kind, number, number]; gap: number; skip: number; giant: number };
+const LANDS: Land[] = [
+  { icon: "🌼", snow: false, gap: 17, skip: 0.25, giant: 2.4, starter: [6, 0.38, 0.15], mix: [[1, 0.42], [0, 0.33], [3, 0.15], [2, 0.1]],
+    pal: { skyLow: [0.20, 0.13, 0.22], skyTop: [0.03, 0.04, 0.10], horizon: [0.55, 0.28, 0.20], stoneA: [0.20, 0.19, 0.23], stoneB: [0.38, 0.36, 0.40], fog: [0.12, 0.08, 0.13], grassA: [0.20, 0.48, 0.16], grassB: [0.42, 0.70, 0.22] } },
+  { icon: "🍄", snow: false, gap: 16, skip: 0.2, giant: 2.5, starter: [7, 0.35, 0.12], mix: [[7, 0.42], [1, 0.3], [0, 0.18], [4, 0.1]],
+    pal: { skyLow: [0.16, 0.10, 0.26], skyTop: [0.02, 0.03, 0.09], horizon: [0.25, 0.45, 0.50], stoneA: [0.17, 0.18, 0.22], stoneB: [0.33, 0.34, 0.40], fog: [0.09, 0.08, 0.15], grassA: [0.10, 0.42, 0.30], grassB: [0.30, 0.66, 0.38] } },
+  { icon: "🏰", snow: false, gap: 15, skip: 0.15, giant: 2.6, starter: [6, 0.4, 0.15], mix: [[9, 0.5], [2, 0.16], [1, 0.2], [0, 0.14]],
+    pal: { skyLow: [0.28, 0.15, 0.12], skyTop: [0.05, 0.04, 0.10], horizon: [0.75, 0.40, 0.16], stoneA: [0.22, 0.20, 0.20], stoneB: [0.40, 0.37, 0.36], fog: [0.14, 0.09, 0.09], grassA: [0.26, 0.50, 0.16], grassB: [0.50, 0.72, 0.24] } },
+  { icon: "❄️", snow: true, gap: 16, skip: 0.2, giant: 2.7, starter: [8, 0.35, 0.12], mix: [[8, 0.45], [0, 0.25], [9, 0.15], [2, 0.15]],
+    pal: { skyLow: [0.20, 0.24, 0.34], skyTop: [0.04, 0.06, 0.14], horizon: [0.50, 0.60, 0.75], stoneA: [0.30, 0.32, 0.38], stoneB: [0.55, 0.57, 0.63], fog: [0.16, 0.18, 0.24], grassA: [0.22, 0.50, 0.30], grassB: [0.50, 0.75, 0.45] } },
+  { icon: "🌋", snow: false, gap: 16, skip: 0.2, giant: 3.0, starter: [10, 0.32, 0.12], mix: [[10, 0.45], [4, 0.25], [2, 0.15], [7, 0.15]],
+    pal: { skyLow: [0.30, 0.08, 0.06], skyTop: [0.05, 0.02, 0.05], horizon: [1.00, 0.30, 0.08], stoneA: [0.13, 0.11, 0.12], stoneB: [0.28, 0.24, 0.25], fog: [0.16, 0.06, 0.05], grassA: [0.24, 0.46, 0.14], grassB: [0.55, 0.72, 0.20] } },
+];
+function landOf(d: number) { return LANDS[(d - 1) % LANDS.length]; }
+function makeLand(d: number) {
+  const L = landOf(d);
+  let a = d * 101 + 7;
   const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
   const list: { x: number; z: number; kind: Kind; seed: number; scale?: number }[] = [];
-  // the first meals are right next to the seed: little stone flower bushes, a bite away
+  // the first meals are right next to the seed: little things, a bite away
   for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2 + rnd(), r = 5 + rnd() * 4;
-    list.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, kind: 6, seed: Math.floor(rnd() * 1e6), scale: 0.38 + rnd() * 0.15 });
+    const an = (i / 7) * Math.PI * 2 + rnd(), r = 5 + rnd() * 4;
+    list.push({ x: Math.cos(an) * r, z: Math.sin(an) * r, kind: L.starter[0], seed: Math.floor(rnd() * 1e6), scale: L.starter[1] + rnd() * L.starter[2] });
   }
-  for (let gz = -3; gz <= 3; gz++) for (let gx = -3; gx <= 3; gx++) {
-    if (Math.abs(gx) + Math.abs(gz) <= 0) continue; // the square in the middle stays open: the seed starts there
-    if (rnd() < 0.25) continue;
-    const r = rnd();
-    const kind: Kind = r < 0.42 ? 1 : r < 0.75 ? 0 : r < 0.9 ? 3 : 2;
-    list.push({ x: gx * 17 + (rnd() - 0.5) * 6, z: gz * 17 + (rnd() - 0.5) * 6, kind, seed: Math.floor(rnd() * 1e6) });
+  const n = Math.floor(54 / L.gap);
+  for (let gz = -n; gz <= n; gz++) for (let gx = -n; gx <= n; gx++) {
+    if (gx === 0 && gz === 0) continue; // the square in the middle stays open: the seed starts there
+    const x = gx * L.gap + (rnd() - 0.5) * 6, z = gz * L.gap + (rnd() - 0.5) * 6;
+    if (Math.hypot(x, z) > WALL - 9 || rnd() < L.skip) continue;
+    let r = rnd(), kind = L.mix[0][0];
+    for (const [k, w] of L.mix) { if (r < w) { kind = k; break; } r -= w; }
+    list.push({ x, z, kind, seed: Math.floor(rnd() * 1e6) });
   }
-  return list;
+  theme.snow = L.snow;
+  world.pal = L.pal;
+  return list.slice(0, 62);
 }
-city.build(village(Number(params.get("seed") ?? 7)));
+// progress is kept: the land you are on and how big the swarm has grown
+const SAVE = "glowmites-save";
+let saved: { land: number; active: number } = { land: 1, active: 800 };
+try { const j = JSON.parse(localStorage.getItem(SAVE) || "null"); if (j && j.land >= 1) saved = j; } catch { /* private mode */ }
+function save() { try { localStorage.setItem(SAVE, JSON.stringify({ land: district, active })); } catch { /* ignore */ } }
+let district = params.has("land") ? Number(params.get("land")) : saved.land;
+city.build(makeLand(district));
 
 
 // ---------------------------------------------------------------- sizing (capped pixel count keeps the fill cost bounded)
@@ -99,16 +127,42 @@ function xform(out: Float32Array, m: Float32Array, v: Float32Array) {
 let down = false;
 countNInit();
 function countNInit() { const el = document.getElementById("countN"); if (el) el.textContent = String(Number(params.get("start") ?? 800)); }
-document.getElementById("next")!.addEventListener("click", () => {
-  // the next village: a new seed, the swarm keeps everything it has
-  district++;
-  city.build(village(district * 101 + 7));
-  giant = -1; giantState = "sleep"; won = false; progress = 0; milestone = Math.min(milestone, MILESTONES.length);
-  leader[0] = leader[2] = 0; target[0] = target[2] = 0;
+function nextLand() {
+  // the next land: the swarm keeps everything it has
+  district++; save();
+  city.build(makeLand(district));
+  giant = -1; giantState = "sleep"; won = false; progress = 0; time = Math.min(time, 1e9); landT = 0; firstBite = false;
+  leader[0] = leader[2] = 0; target[0] = target[2] = 0; camD = 6;
   document.getElementById("win")!.classList.remove("show");
   audio.chime(2);
+  poki.gameplayStart();
+}
+let adBusy = false;
+document.getElementById("next")!.addEventListener("click", () => {
+  if (adBusy) return; adBusy = true;
+  audio.setMuted(true);
+  poki.commercialBreak().then(() => { adBusy = false; audio.setMuted(false); nextLand(); });
 });
+document.getElementById("boost")!.addEventListener("click", (e) => {
+  if (adBusy) return; adBusy = true; audio.setMuted(true);
+  const btn = e.currentTarget as HTMLElement;
+  poki.rewardedBreak().then((ok) => {
+    adBusy = false; audio.setMuted(false);
+    if (ok) { active = Math.min(CAP, Math.round(active * 1.5) + 2000); save(); btn.classList.add("used"); for (let i = 0; i < 5; i++) setTimeout(() => audio.chime(6 + i), i * 120); }
+  });
+});
+function renderPath() {
+  // the road through the five lands: done ones in colour, the next one pulsing
+  const el = document.getElementById("path")!;
+  const lap = Math.floor((district - 1) / LANDS.length), at = (district - 1) % LANDS.length;
+  el.innerHTML = LANDS.map((L, i) => `<span class="${i <= at ? "done" : i === at + 1 ? "next" : ""}">${L.icon}</span>`).join("<i></i>") + (lap > 0 ? `<b>${"★".repeat(Math.min(5, lap))}</b>` : "");
+}
 const hand = document.getElementById("hand")!, countN = document.getElementById("countN")!, countBox = document.getElementById("count")!, goalFill = document.getElementById("goalFill")!;
+// test builds only: five quick taps on the swarm counter skip to the next land
+const SKIP_TEST = true;
+let taps = 0, tapT = 0;
+countBox.style.pointerEvents = "auto";
+countBox.addEventListener("pointerdown", () => { if (!SKIP_TEST) return; const n = performance.now(); taps = n - tapT < 600 ? taps + 1 : 1; tapT = n; if (taps >= 5) { taps = 0; nextLand(); } });
 let touched = false;
 // pointers: one finger (or the mouse) steers; two fingers pinch to zoom; the wheel zooms too
 const ptrs = new Map<number, { x: number; y: number }>();
@@ -119,6 +173,7 @@ canvas.addEventListener("pointerdown", (e) => {
   if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); zoom0 = userZoom; aiming = false; }
   else { down = true; aiming = true; aimX = e.clientX; aimY = e.clientY; }
   if (!touched) { touched = true; hand.classList.add("gone"); }
+  if (!document.getElementById("win")!.classList.contains("show")) poki.gameplayStart();
 });
 addEventListener("pointermove", (e) => {
   const p = ptrs.get(e.pointerId);
@@ -146,11 +201,11 @@ addEventListener("keydown", (e) => {
 const CAP = Math.min(S * S, Number(params.get("n") ?? 200_000));
 // "grow=1" is the phase-1 stress demo (grows by itself); the game grows only by eating
 const grow = params.get("grow") === "1";
-let active = grow ? 100 : Number(params.get("start") ?? 800);
+let active = grow ? 100 : Number(params.get("start") ?? Math.max(800, saved.land === district ? saved.active : 800));
 let meal = 0;
-let district = 1;
+let landT = 0, firstBite = false;
 // ---------------------------------------------------------------- the stone giant: wakes when the village is mostly colour again
-const GIANT_SCALE = 2.4, GIANT_H = 32 * 0.28 * GIANT_SCALE;
+let GIANT_SCALE = 2.4, GIANT_H = 32 * 0.28 * GIANT_SCALE;
 let giant = -1, giantState: "sleep" | "rise" | "walk" | "fallen" = "sleep", giantT = 0, giantY = -GIANT_H, nextStomp = 0, won = false;
 let progress = 0;
 city.onEat = (b, amount) => {
@@ -163,7 +218,7 @@ city.onEat = (b, amount) => {
   // structural failure: a fifth of a building gone and the rest comes down (trees a little later)
   const failAt = B.kind === 1 ? 0.3 : B.kind === 6 ? 0.5 : B.kind === 5 ? 0.45 : 0.3;
   if (B.eaten > B.solid * failAt && B.collapseAt < 0 && b !== giant) {
-    B.collapseAt = time; city.fail(b);
+    B.collapseAt = time; city.fail(b); firstBite = true;
     shake = B.kind === 6 ? 0.2 : 0.9; audio.thump(B.kind === 1 || B.kind === 6 ? 0.6 : 1.2);
   }
 };
@@ -190,7 +245,9 @@ function frame(now: number) {
     // it rises on the far side of the swarm from the camera, so the player sees it come up out of the ground
     const ang = Math.atan2(leader[2] - cam[2], leader[0] - cam[0]);
     const gx = Math.max(-60, Math.min(60, leader[0] + Math.cos(ang) * 38)), gz = Math.max(-60, Math.min(60, leader[2] + Math.sin(ang) * 38));
-    giant = city.add({ x: gx, z: gz, kind: 5, seed: 4242 }, GIANT_SCALE, -GIANT_H, 0.06); // hard stone: a real fight
+    GIANT_SCALE = landOf(district).giant; GIANT_H = 32 * 0.28 * GIANT_SCALE;
+    const lap = Math.floor((district - 1) / LANDS.length);
+    giant = city.add({ x: gx, z: gz, kind: 5, seed: 4242 + district }, GIANT_SCALE, -GIANT_H, 0.06 / (1 + lap * 0.5)); // hard stone: a real fight
     giantState = "rise"; giantT = 0; audio.thump(1.4); shake = 1.2;
   }
   if (giant >= 0 && !city.gone[giant]) {
@@ -218,7 +275,8 @@ function frame(now: number) {
   }
   if (giant >= 0 && city.gone[giant] && !won) {
     won = true; shake = 1; city.bloom = 3.5;
-    setTimeout(() => document.getElementById("win")!.classList.add("show"), 2200);
+    save(); poki.gameplayStop();
+    setTimeout(() => { district++; renderPath(); district--; document.getElementById("boost")!.classList.remove("used"); document.getElementById("win")!.classList.add("show"); }, 2200);
     for (let i = 0; i < 6; i++) setTimeout(() => audio.chime(4 + i), i * 160);
   }
   while (milestone < MILESTONES.length && active >= MILESTONES[milestone]) audio.chime(milestone++);
@@ -229,6 +287,7 @@ function frame(now: number) {
     const a = time * 0.16;
     target[0] = Math.cos(a) * 34 + Math.sin(a * 2.3) * 12; target[2] = Math.sin(a * 1.3) * 28 + Math.cos(a * 3.1) * 6;
   }
+  { const r = Math.hypot(target[0], target[2]), lim = WALL - 4; if (r > lim) { target[0] *= lim / r; target[2] *= lim / r; } }
   const speed = 8.5 + Math.sqrt(active) * 0.025;
   const dx = target[0] - leader[0], dz = target[2] - leader[2], d = Math.hypot(dx, dz);
   // the seed is the finger: it gets there fast, easing in at the end
@@ -239,6 +298,15 @@ function frame(now: number) {
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
   city.feed(swarm.state.tex[0], swarm.state.tex[1], active, dt, time);
   if (city.bloom > 0) { city.bloom -= dt; city.flood(dt * 0.45); }
+  // onboarding (wordless): a pulsing ring around the nearest little thing until the first bite brings it down
+  landT += dt;
+  world.hint[3] = 0;
+  if (!firstBite && district === 1 && time > 2.5) {
+    let best = -1, bd = 1e9;
+    for (let b = 0; b < Math.min(7, city.buildings.length); b++) { if (city.gone[b]) continue; const B = city.buildings[b]; const dd = Math.hypot(B.x - leader[0], B.z - leader[2]); if (dd < bd) { bd = dd; best = b; } }
+    if (best >= 0) { const B = city.buildings[best]; world.hint[0] = B.x; world.hint[1] = B.z; world.hint[2] = 3.2; world.hint[3] = Math.min(1, (time - 2.5) * 0.7); if (touched && bd < 4) hand.classList.add("gone"); else if (!touched) hand.classList.remove("gone"); }
+  }
+  if ((gov.frames & 255) === 0) save();
 
   // camera: behind and above the seed, pulling back as the swarm grows
   const want = 15 + Math.sqrt(active) * 0.13 + (giant >= 0 && giantState !== "fallen" && !city.gone[giant] ? 14 : 0);
@@ -261,12 +329,13 @@ function frame(now: number) {
   camU[0] = view[1]; camU[1] = view[5]; camU[2] = view[9];
 
   post.begin(tier.scale);
-  world.draw(vp, inv, cam, swarm.light, city.color.tex[0]);
+  world.draw(vp, inv, cam, swarm.light, city.color.tex[0], time);
   city.focus[0] = leader[0]; city.focus[1] = 1.5; city.focus[2] = leader[2];
   city.draw(vp, cam, swarm.light);
   grass.draw(vp, cam, camX, camZ - camD * 0.1, time, city.color.tex[0], swarm.light, swarm.light, 1);
   city.shadows = gov.tier <= 2;
-  swarm.draw(vp, camR, camU, time, active, 2 / (proj[5] * ch * tier.scale));
+  world.drawWall(vp, time);
+  swarm.draw(vp, camR, camU, time, active, 2 / (proj[5] * ch * tier.scale), leader, cityLink);
   post.end(tier.scale, time, tier.bloom, cw, ch);
 
   // the wordless HUD: the swarm count, and how much of the village has its colour back
@@ -280,5 +349,6 @@ function frame(now: number) {
   if (showHud && hudCanvas.style.display !== "none" && (gov.frames & 3) === 0) gov.graph(hud, `${active.toLocaleString()} mites  ${cw}x${ch} @${Math.round(tier.scale * 100)}%`);
 }
 requestAnimationFrame(frame);
+poki.init().then(() => poki.loadingFinished());
 
 if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { gov, city, leader, target, get active() { return active; }, set active(v: number) { active = v; } };

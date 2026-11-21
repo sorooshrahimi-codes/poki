@@ -15,6 +15,7 @@
 //  * The colour map is world-space paint: everything blends from stone grey to its real colours where the swarm went.
 import { FULLSCREEN_VS, bindTex, program, target, texture, type GL, type Program, type Target } from "./gl.ts";
 import { S, WORLD } from "./swarm.ts";
+import { MAT_GLSL } from "./mats.ts";
 
 export const V = 32;
 export const VS = 0.28;
@@ -23,35 +24,13 @@ export const AW = 2048, AH = 1024; // atlas: 8 x 8 tiles of 256 x 128
 export const GRID = 80;
 export const COLOR = 512;
 
-export type Kind = 0 | 1 | 2 | 3 | 4 | 5 | 6; // house, tree, tower, barn, boulders, giant, flower bush
+export type Kind = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10; // house, tree, tower, barn, boulders, giant, flower bush, mushroom, pine, townhouse, crystal spire
 export interface Building { x: number; z: number; kind: Kind; seed: number; solid: number; eaten: number; collapseAt: number; h: number; rubble?: number }
 
 // materials (index -> colour); index 0 = empty
-const MATS: [number, number, number][] = [
-  [0, 0, 0],
-  [0.93, 0.87, 0.74], // 1 plaster
-  [0.42, 0.27, 0.16], // 2 timber
-  [0.74, 0.28, 0.18], // 3 roof tile
-  [0.35, 0.62, 0.92], // 4 glass
-  [0.52, 0.32, 0.18], // 5 door wood
-  [0.60, 0.58, 0.54], // 6 stone
-  [0.40, 0.27, 0.17], // 7 bark
-  [0.27, 0.62, 0.22], // 8 leaf
-  [0.48, 0.78, 0.30], // 9 light leaf
-  [1.00, 0.62, 0.80], // 10 blossom
-  [0.90, 0.76, 0.36], // 11 hay
-  [0.66, 0.30, 0.22], // 12 brick
-  [1.00, 0.82, 0.35], // 13 gold window
-  [0.24, 0.40, 0.82], // 14 blue roof
-  [0.74, 0.20, 0.14], // 15 red plank
-  [0.95, 0.95, 0.90], // 16 white trim
-  [0.50, 0.50, 0.47], // 17 granite
-  [1.00, 0.60, 0.15], // 18 giant's eyes
-  [0.30, 0.48, 0.22], // 19 moss
-];
-const MAT_GLSL = `const vec3 MAT[${MATS.length}] = vec3[${MATS.length}](${MATS.map((m) => `vec3(${m.map((v) => v.toFixed(3)).join(",")})`).join(",")});`;
+
 // how far support carries sideways, per material (stone short, wood long, leaves on branches longest)
-const HOLD = [0, 0.86, 0.93, 0.9, 0.85, 0.92, 0.84, 0.95, 0.965, 0.965, 0.965, 0.8, 0.86, 0.85, 0.9, 0.92, 0.9, 0.9, 0.9, 0.9];
+const HOLD = [0, 0.86, 0.93, 0.9, 0.85, 0.92, 0.84, 0.95, 0.965, 0.965, 0.965, 0.8, 0.86, 0.85, 0.9, 0.92, 0.9, 0.9, 0.9, 0.9, 0.95, 0.95, 0.95, 0.8, 0.965, 0.88, 0.86, 0.9];
 const HOLD_GLSL = `const float HOLD[${HOLD.length}] = float[${HOLD.length}](${HOLD.map((v) => v.toFixed(3)).join(",")});`;
 
 const ATLAS = `
@@ -62,6 +41,7 @@ ivec2 atl(int b, ivec3 v) { return ivec2((b % 8) * 256 + (v.z % 8) * 32 + v.x, (
 const SIM_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uSrc;
+uniform float uMark; // 1 in play: pieces that move are marked as fallen (0 while the land settles at load)
 uniform ivec3 uDir; // this pass's sliding direction (cycles through the four sides)
 out vec4 o;
 ${ATLAS}${HOLD_GLSL}
@@ -88,9 +68,9 @@ void main() {
   vec4 tgt = cell(v + uDir - ivec3(0, 1, 0));                    // where this voxel could slide to
   vec4 tgtUp = cell(v + uDir);                                   // the cell above that target
   bool upFalls = up.r > 0.5 && up.g < THR;
-  if (!solid && upFalls) r = vec4(up.r, -1.0, up.b, up.a);                                       // drop in from above
+  if (!solid && upFalls) r = vec4(up.r, -1.0, up.b, fract(up.a) + 2.0 * uMark);                          // drop in from above
   else if (!solid && up.r < 0.5 && src.r > 0.5 && src.g < 0.0 && srcDn.r > 0.5 && srcDn.g < THR && v.y < 31)
-    r = vec4(src.r, -1.0, src.b, src.a);                                                         // slide in diagonally
+    r = vec4(src.r, -1.0, src.b, fract(src.a) + 2.0 * uMark);                                            // slide in diagonally
   else if (solid && c.g < THR && !dnSolid) r = vec4(0.0);                                       // drop out
   else if (solid && c.g < 0.0 && dnSolid && dn.g < THR && tgt.r < 0.5 && tgtUp.r < 0.5 && v.y > 0 && all(greaterThanEqual(v + uDir, ivec3(0))) && all(lessThanEqual(v + uDir, ivec3(31))))
     r = vec4(0.0);                                                                               // slide out diagonally
@@ -194,7 +174,8 @@ void main() {
   vec4 clip = uVP * vec4(wp, 1.0);
   gl_FragDepth = clip.z / clip.w * 0.5 + 0.5;
   // material, with a per-voxel variation and a soft bevel so it reads as many small pieces
-  vec3 col = MAT[int(hit.b + 0.5)] * (0.86 + 0.28 * hit.a);
+  vec3 col = MAT[int(hit.b + 0.5)] * (0.86 + 0.28 * fract(hit.a));
+  bool fallen = hit.a >= 2.0; // pieces that came down show their true colours
   vec3 f = fract(hp) - 0.5;
   vec3 fa = abs(f) * (1.0 - abs(nrm));
   float bevel = 1.0 - smoothstep(0.38, 0.5, max(fa.x, max(fa.y, fa.z))) * 0.18;
@@ -213,7 +194,7 @@ void main() {
   }
   float diff = max(dot(nrm, uSun), 0.0) * sh;
   vec2 uv = wp.xz / uWorld + 0.5;
-  float rest = clamp(texture(uColor, uv).r * 1.4, 0.0, 1.0);
+  float rest = fallen ? 1.0 : clamp(texture(uColor, uv).r * 1.4, 0.0, 1.0);
   vec3 grey = vec3(dot(col, vec3(0.3, 0.59, 0.11))) * 0.62 + 0.05;
   vec3 base = mix(grey, col, rest);
   float sw = texture(uLight, uv).r;
@@ -222,6 +203,7 @@ void main() {
   vec3 sunC = mix(vec3(0.85, 0.72, 0.65), vec3(1.25, 1.12, 0.95), rest);
   vec3 c = base * (sky * (0.55 + 0.45 * nrm.y) * ao + sunC * diff * 0.9) * bevel + base * glow * 1.4 + vec3(1.0, 0.5, 0.15) * glow * 0.25;
   if (int(hit.b + 0.5) == 18) c = vec3(3.0, 1.6, 0.4); // the giant's eyes burn
+  if (int(hit.b + 0.5) == 25) c += col * (0.4 + 0.6 * rest) * 0.9; // crystals glow
   float dist = length(wp - uCam);
   c = mix(c, vec3(0.20, 0.16, 0.22), smoothstep(80.0, 240.0, dist));
   o = vec4(c, 1.0);
@@ -360,7 +342,7 @@ void main() { o = vec4(uAmount); }`, "fill");
       }
       this.buildings.push({ x: L.x, z: L.z, kind: L.kind, seed: L.seed, solid, eaten: 0, collapseAt: -1, h: top + 1 });
       // how hard each thing is to eat: bushes are soft, trees firmer, houses and barns hard, towers hardest
-      const TOUGH = [0.35, 0.65, 0.22, 0.33, 0.25, 0.06, 1.0];
+      const TOUGH = [0.35, 0.65, 0.22, 0.33, 0.25, 0.06, 1.0, 0.5, 0.6, 0.22, 0.18];
       this.s2Arr[b * 4] = L.scale ?? 1; this.s2Arr[b * 4 + 1] = 0; this.s2Arr[b * 4 + 2] = TOUGH[L.kind];
       const half = (V * VS * (L.scale ?? 1)) / 2 + 1.0;
       for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) {
@@ -387,6 +369,7 @@ void main() { o = vec4(uAmount); }`, "fill");
     gl.bindVertexArray(this.vao);
     gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST);
     gl.useProgram(this.sim.p);
+    gl.uniform1f(this.sim.u.uMark, 0);
     for (let i = 0; i < passes; i++) {
       const [src, dst] = i % 2 ? [this.atlasB, this.atlas] : [this.atlas, this.atlasB];
       gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb); gl.viewport(0, 0, AW, AH);
@@ -407,6 +390,7 @@ void main() { o = vec4(uAmount); }`, "fill");
     bindTex(gl, 0, this.atlas.tex[0], this.failP.u.uSrc); gl.uniform1f(this.failP.u.uSeed, b * 7.31);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.useProgram(this.sim.p);
+    gl.uniform1f(this.sim.u.uMark, 1);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.atlas.fb); gl.viewport(x, y, 256, 128);
     bindTex(gl, 0, this.atlasB.tex[0], this.sim.u.uSrc); gl.uniform3i(this.sim.u.uDir, 1, 0, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -450,6 +434,7 @@ void main() { o = vec4(uAmount); }`, "fill");
     gl.disable(gl.BLEND);
     // gravity: two passes per frame (A -> B -> A) over the tiles that are awake
     gl.useProgram(this.sim.p);
+    gl.uniform1f(this.sim.u.uMark, 1);
     for (let b = 0; b < this.buildings.length; b++) {
       if (this.gone[b] || this.active[b] <= 0) continue;
       this.active[b] -= dt;
@@ -562,7 +547,9 @@ void main() { o = vec4(uAmount); }`, "fill");
 }
 
 // ---------------------------------------------------------------- procedural shapes at 32^3, with real materials
+export const theme = { snow: false };
 function generate(kind: Kind, vol: Uint8Array, rnd: () => number) {
+  const ROOF = theme.snow ? 23 : 3;
   const set = (x: number, y: number, z: number, m: number) => { if (x >= 0 && y >= 0 && z >= 0 && x < V && y < V && z < V) vol[(z * V + y) * V + x] = m; };
   const get = (x: number, y: number, z: number) => (x >= 0 && y >= 0 && z >= 0 && x < V && y < V && z < V ? vol[(z * V + y) * V + x] : 0);
   if (kind === 0) { // timber-framed cottage with a tiled gable roof and a brick chimney
@@ -585,7 +572,7 @@ function generate(kind: Kind, vol: Uint8Array, rnd: () => number) {
       if (half < 0) break;
       for (let x = x0 - 1; x <= x1 + 1; x++) for (let z = 0; z < V; z++) {
         const d = Math.abs(z - cz);
-        if (d <= half && d > half - 2.2) set(x, y, z, 3);
+        if (d <= half && d > half - 2.2) set(x, y, z, ROOF);
         else if (d <= half - 2.2 && (x === x0 || x === x1)) set(x, y, z, 1); // gable ends
       }
     }
@@ -640,7 +627,7 @@ function generate(kind: Kind, vol: Uint8Array, rnd: () => number) {
       if (half < 0) break;
       for (let x = x0 - 1; x <= x1 + 1; x++) for (let z = 0; z < V; z++) {
         const d = Math.abs(z - cz);
-        if (d <= half && d > half - 1.8) set(x, y, z, 3);
+        if (d <= half && d > half - 1.8) set(x, y, z, ROOF);
         else if (d <= half - 1.8 && (x === x0 || x === x1)) set(x, y, z, 15);
       }
     }
@@ -659,6 +646,50 @@ function generate(kind: Kind, vol: Uint8Array, rnd: () => number) {
     for (let x = 17; x <= 19; x++) for (let y = 26; y <= 27; y++) set(x, y, 11, 18);
     // carve a little shape into the blocks (shoulders, a brow)
     for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) { set(x, 31, z, 0); if ((x === 8 || x === 23) && z % 3 === 0) set(x, 22, z, 0); }
+  } else if (kind === 7) { // a giant mushroom: a creamy stem and a red cap with white spots
+    const c = 15.5, capY = 18 + Math.floor(rnd() * 4);
+    for (let y = 0; y < capY; y++) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) if ((x - c) ** 2 + (z - c) ** 2 <= (3.2 - y * 0.04) ** 2) set(x, y, z, 22);
+    for (let y = capY; y < V; y++) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) {
+      const r = Math.hypot(x - c, z - c), top = 13.5 * Math.sqrt(Math.max(0, 1 - ((y - capY) / (V - capY)) ** 2));
+      if (r <= top && (r > top - 2.6 || y >= V - 2 - (r / 13.5) * 6)) set(x, y, z, rnd() < 0.1 ? 21 : 20);
+    }
+  } else if (kind === 8) { // a pine: layered cones on a trunk (snow on the tiers in the snow lands)
+    const c = 15.5;
+    for (let y = 0; y < 8; y++) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) if ((x - c) ** 2 + (z - c) ** 2 <= 2.2) set(x, y, z, 7);
+    for (let y = 6; y < V; y++) {
+      const tier = (y - 6) % 7, r = Math.max(0.6, (10 - (y - 6) * 0.32) * (1 - tier / 9));
+      for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) {
+        const d = Math.hypot(x - c, z - c);
+        if (d <= r + (rnd() - 0.5) * 0.8) set(x, y, z, theme.snow && tier <= 1 && d > r - 2 ? 23 : 24);
+      }
+    }
+  } else if (kind === 9) { // a tall town house: stone ground floor, plaster storeys, slate roof, many windows
+    const x0 = 8, x1 = 23, z0 = 8, z1 = 23, top = 22;
+    for (let y = 0; y <= top; y++) for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
+      const ex = x === x0 || x === x1, ez = z === z0 || z === z1;
+      if (!(ex || ez) && y % 7 !== 0) continue;
+      let m = y < 6 ? 6 : 1;
+      if ((ex && ez) || y % 7 === 0) m = y < 6 ? 6 : 2;
+      if (y % 7 >= 2 && y % 7 <= 4 && ((ez && (x - x0) % 4 === 2) || (ex && (z - z0) % 4 === 2))) m = 4;
+      if (z === z0 && x >= 14 && x <= 16 && y >= 1 && y <= 4) m = 5;
+      set(x, y, z, m);
+    }
+    for (let y = top + 1; y < V; y++) {
+      const half = 8.5 - (y - top - 1) * 1.1;
+      if (half < 0) break;
+      for (let z = 0; z < V; z++) for (let x = x0 - 1; x <= x1 + 1; x++) { const d = Math.abs(z - 15.5); if (d <= half && d > half - 2) set(x, y, z, theme.snow ? 23 : 27); else if (d <= half - 2 && (x === x0 || x === x1)) set(x, y, z, 1); }
+    }
+  } else if (kind === 10) { // a crystal spire on obsidian
+    const c = 15.5;
+    for (let y = 0; y < 5; y++) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) if ((x - c) ** 2 + (z - c) ** 2 < 60 - y * 8 + (rnd() - 0.5) * 6) set(x, y, z, 26);
+    for (let k = 0; k < 4; k++) {
+      const a = rnd() * 6.28, tilt = 0.15 + rnd() * 0.25, bx = c + Math.cos(a) * 2, bz = c + Math.sin(a) * 2, h = 18 + rnd() * 13;
+      for (let y = 2; y < h; y++) {
+        const r = 2.6 * (1 - (y - 2) / h) + 0.4;
+        const cx = bx + Math.cos(a) * y * tilt, cz = bz + Math.sin(a) * y * tilt;
+        for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) if (Math.abs(x - cx) + Math.abs(z - cz) <= r) set(x, Math.round(y), z, 25);
+      }
+    }
   } else if (kind === 6) { // a flower bush: a mound of leaves with big blossoms (seen small: scale ~0.45)
     const c = 15.5;
     for (let y = 0; y < 22; y++) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) {
