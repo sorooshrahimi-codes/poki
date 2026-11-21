@@ -1476,6 +1476,8 @@ Promise.all([initPoki({ adStart: () => setDucked(true), adEnd: () => setDucked(f
 // test handle for automated checks (harmless in production)
 if (import.meta.env.MODE === "qa") (window as unknown as { __cv: unknown }).__cv = {
   field: () => field, save,
+  /** test hook: the level in play (so a capture can make it last) */
+  lvl: () => lvl,
   spawn: (id: string, opt: { mut?: "gold" | "rainbow" | "giant" | null; boss?: boolean; x?: number } = {}) => {
     const c = spawn(field, rng, { def: CRITTER_BY_ID[id], mut: opt.mut ?? null, x: opt.x });
     if (opt.boss) { c.boss = 3; c.scale = 2.1; }
