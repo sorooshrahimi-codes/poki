@@ -5,8 +5,8 @@
 |---|---|---|---|
 | Game build | `critter-vac-poki.zip` (repo root, = `critter/dist`) | HTML5, initial download well under 8 MB | 3.5 MB total, ~0.6 MB before play (the rest streams in) |
 | Static thumbnail | `promo/thumb_1080.jpg` (also `thumb_628.jpg`) | square, ≥ 628 px, full-bleed, no text | 1080 × 1080, full-bleed, no text: new 2K key art (the kid vacuuming a giant cake monster stretched like taffy, critters and coins flying); `thumb_1080_moon.jpg` is an alternative |
-| Animated thumbnail | `promo/animated_thumbnail_1080.mp4` | square ≥ 1080, ≥ 50 fps, 4–6 s, muted, mp4, ≤ 100 MB | 1080 × 1080, 60 fps, 5.85 s, muted, 6.6 MB; starts on the static art, then full-frame close-ups of the giant, the tug of war, the slow-motion taffy stretch and the POP, and loops back to the art |
-| Trailer (optional, for the page / socials) | `promo/trailer_1280x720.mp4` | — | 33 s, 60 fps, full-frame gameplay cut to a 136 BPM track with sound effects: cold open on the giant, title slam, combos, the tornado, forest, ice, lava, "6 WORLDS", the build-up, the giant fight, the slow-motion POP, the rocket to the Moon |
+| Animated thumbnail | `promo/animated_thumbnail_1080.mp4` | square ≥ 1080, ≥ 50 fps, 4–6 s, muted, mp4, ≤ 100 MB | 1080 × 1080, 60 fps, 5.95 s, muted, 11 MB; starts on the static art, then the critter swarm, a giant, the real giant fight, the giant cake sucked in with a POP, and loops back to the art |
+| Trailer (optional, for the page / socials) | `promo/trailer_1280x720.mp4` | — | 33 s, 60 fps, with music and sound effects; the story in animated illustrations mixed with real gameplay: the dream of the Moon, setting off, the swarm, the rival, 6 worlds, 6 giants, the giant fight, the POP, building the rocket, vacuuming the Moon |
 
 ## Title
 **Critter Vac**
