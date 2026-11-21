@@ -179,7 +179,8 @@ export const giantOf = (b: BiomeId) => GIANTS.find((g) => g.biome === b) ?? null
 export interface GiantStep extends GiantDef { tier: number; scale: number }
 export function giantStep(i: number): GiantStep {
   const g = GIANTS[i % GIANTS.length], tier = Math.floor(i / GIANTS.length) + 1;
-  const need = i < GIANTS.length ? g.need : GIANTS[GIANTS.length - 1].need + (i - GIANTS.length + 1) * 8;
+  // later laps: the same giant, a little more power needed, but mostly a tougher fight
+  const need = g.need + (tier - 1) * 10;
   return { ...g, tier, need, resist: g.resist + (tier - 1) * 1.2, scale: 3.3 + (tier - 1) * 0.35 };
 }
 

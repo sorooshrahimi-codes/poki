@@ -39,7 +39,7 @@ for (let n = 0; n < SESSIONS; n++) {
         const c = e.c;
         combo = v - last < 1.7 ? combo + 1 : 1; last = v;
         index[c.def.id] = (index[c.def.id] ?? 0) + 1;
-        coins += catchCoinsOf(c.def, MUTATIONS.find((m) => m.id === c.mut)?.mult ?? 1) * valueMult(up) * (1 + (combo - 1) * 0.25);
+        coins += catchCoinsOf(c.def, MUTATIONS.find((m) => m.id === c.mut)?.mult ?? 1) * valueMult(up) * (1 + (combo - 1) * 0.25) * (1 + 1.5 * Math.floor(wins / 6));
         if (c.boss > 0) { f.ev.length = 0; t += v; return { ok: true, left: 1 }; }
         charge += CH[c.def.rarity] * (c.mut ? 2 : 1);
         if (task === "any" || task === "rival" || (task === "species" && c.def.id === f.favor) || (task === "golden" && c.mut === "gold")) cnt++;
@@ -55,9 +55,11 @@ for (let n = 0; n < SESSIONS; n++) {
   const shop = () => { for (;;) { const o = UPGRADE_ORDER.map((id) => ({ id, c: upgradeCost(up, id) })).filter((x) => x.c !== null).sort((a, b) => a.c! - b.c!)[0]; if (!o || o.c! > coins) break; coins -= o.c!; up[o.id]++; } };
   while (t < MINUTES * 60) {
     const g = giantStep(wins), biome = g.biome, k = BIOMES.findIndex((b) => b.id === biome);
-    const st = (stars[biome] ??= [0, 0, 0, 0, 0]);
+    const lap = Math.floor(wins / 6), key = lap ? `${biome}@${lap}` : biome;
+    const st = (stars[key] ??= [0, 0, 0, 0, 0]);
     const tasks = ["any", "species", "combo", "golden", "rival"];
-    const goals = [k ? 11 + k * 3 : 8, 7 + k, 6 + (k >= 2 ? 1 : 0), 7 + k, 18 + k * 3], limits = [45, 45, 45, 35, 55];
+    const lapK = 1 + 0.12 * Math.min(4, Math.floor(wins / 6));
+    const goals0 = [k ? 11 + k * 3 : 8, 7 + k, 6 + (k >= 2 ? 1 : 0), 7 + k, 18 + k * 3]; const goals = goals0.map((x) => Math.round(x * lapK)); const limits = [45, 45, 45, 35, 55];
     const i = st.findIndex((x) => x === 0);
     if (i >= 0) {
       const s0 = t, r = play(biome, tasks[i], goals[i], limits[i], false);

@@ -704,3 +704,5 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 #launch .smoke { position: absolute; left: 0; right: 0; bottom: 0; height: 22%; background: radial-gradient(ellipse at 50% 100%, rgba(255,255,255,.95), rgba(255,255,255,0) 70%); }
 @keyframes shake { 50% { transform: translateX(2px); } }
 #world .rocket { left: 72%; top: 79%; }
+#world.night .art { filter: brightness(.55) saturate(1.2) hue-rotate(-10deg); }
+#world .lap { position: absolute; left: 50%; top: 18%; translate: -50% 0; font-size: 28px; font-weight: 800; color: #ffe066; text-shadow: 0 0 10px #000, 0 3px 0 #0d1e45; }

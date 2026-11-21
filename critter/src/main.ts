@@ -97,7 +97,7 @@ function handleEvents() {
       combo = t - lastCatch < 1.7 + 0.5 * perkN("combo") ? combo + 1 : 1;
       lastCatch = t;
       const airborne = (c.launch ?? 0) > 0;
-      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up) * (1 + 0.25 * perkN("coins"))) * (airborne ? 2 : 1) * (field.frenzy > 0 ? 2 : 1) * (c.kind === "treasure" ? 12 : 1));
+      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up) * (1 + 0.25 * perkN("coins"))) * (airborne ? 2 : 1) * (field.frenzy > 0 ? 2 : 1) * (c.kind === "treasure" ? 12 : 1) * (rush ? 1 : 1 + 1.5 * lapNow()));
       if (c.kind === "treasure") { view.text(field.nozzle.x, field.nozzle.y - 110, "💰💰💰", "#ffe066", 30); view.shake = 6; }
       if (c.kind === "box") openBox();
       if (airborne) view.text(field.nozzle.x + 50 * field.kid.face, field.nozzle.y - 100, "🔥×2", "#ff9a3a", 22);
@@ -389,6 +389,7 @@ async function nextPlace() {
   busy = true;
   await commercialBreak();
   const toI = BIOMES.findIndex((b) => b.id === save.biome);
+  if (lapNow() > 0 && !save.tips.includes(`night${lapNow()}`)) { save.tips.push(`night${lapNow()}`); writeSave(save); toast(`🌙 ➜ 🌃 ★${lapNow() + 1}`, 3200); }
   if (toI !== fromI) {
     if (BIOMES[toI].id === "moon" && BIOMES[fromI].id === "volcano") await showLaunch();
     await showWorld({ walkFrom: fromI + 1, newPart: true });
@@ -471,7 +472,8 @@ function showWorld(o: { walkFrom?: number; browse?: boolean; newPart?: boolean }
     const box = $("world"), here = placeIndex(save.biome) + 1; // pin index: 0 = home
     const rv = Math.min(BIOMES.length, Math.floor(rivalPos(save.playTime ?? 0)) % GIANTS.length + 1);
     const pin = (i: number) => `left:${WORLD_PINS[i][0]}%;top:${WORLD_PINS[i][1]}%`;
-    box.innerHTML = `<div class="wbg"></div><div class="wmap"><img class="art" src="./art/world_map.webp" alt="">
+    box.classList.toggle("night", lapNow() > 0);
+    box.innerHTML = `<div class="wbg"></div><div class="wmap"><img class="art" src="./art/world_map.webp" alt="">${lapNow() ? `<div class="lap">★${lapNow() + 1}</div>` : ""}
       <div class="pin home" style="${pin(0)}">🏠</div>
       <div class="rocket${o.newPart ? " built" : ""}"><img src="./art/rocket_${rocketStage()}.webp" alt=""><span class="parts">${[0, 1, 2, 3, 4].map((k) => `<i class="${k < rocketStage() ? "on" : ""}"></i>`).join("")}</span></div>
       ${BIOMES.map((b, k) => { const i = k + 1, g = GIANTS.find((x) => x.biome === b.id), beat = (save.restored ?? []).includes(b.id);
@@ -1038,7 +1040,10 @@ interface Level { biome: BiomeId; idx: number; task: Task; goal: number; count: 
 let lvl: Level | null = null;
 const placeIndex = (b: BiomeId) => BIOMES.findIndex((x) => x.id === b);
 /** seven nodes per place: 0 and 1, then a fork (2-3 the normal way, 5-6 the risky way: a lucky wheel and a hard level), then 4, then the giant */
-const starsOf = (b: BiomeId) => { const st = ((save.stars ??= {})[b] ??= [0, 0, 0, 0, 0, 0, 0]); while (st.length < 7) st.push(0); return st; };
+/** the lap: 0 = the first trip to the Moon, 1+ = night trips (every place again, at night, with fresh level maps) */
+const lapNow = () => Math.floor((save.giantWins ?? 0) / GIANTS.length);
+const lapKey = (b: BiomeId) => (lapNow() ? `${b}@${lapNow()}` : b);
+const starsOf = (b: BiomeId) => { const st = ((save.stars ??= {})[lapKey(b)] ??= [0, 0, 0, 0, 0, 0, 0]); while (st.length < 7) st.push(0); return st; };
 const branch = (b: BiomeId) => { const st = starsOf(b); return st[2] || st[3] ? "a" : st[5] || st[6] ? "b" : null; };
 function nodeOpen(b: BiomeId, i: number) {
   const st = starsOf(b), br = branch(b);
@@ -1062,7 +1067,7 @@ function makeLevel(b: BiomeId, idx: number): Level {
   const target = task === "species" ? commons[(k + idx) % commons.length].id : null;
   const goal0 = task === "bush" ? 8 + k : task === "slide" ? 10 + k : task === "sticky" ? 6 + k : task === "lava" ? 10 + k : task === "float" ? 10 + k : task === "any" ? (k ? 11 + k * 3 : 8) : task === "species" ? 7 + k : task === "combo" ? 6 + (k >= 2 ? 1 : 0) : task === "golden" ? 7 + k : task === "rival" ? 18 + k * 3 : 1;
   const total = task === "giant" ? 0 : task === "golden" ? 35 : task === "rival" ? 55 : MISS_TASKS.includes(task) || task === "bush" || task === "sticky" ? 55 : idx === 0 ? 60 : 45;
-  const goal = hard ? Math.round(goal0 * 1.6) : goal0;
+  const goal = Math.round((hard ? goal0 * 1.6 : goal0) * (1 + 0.12 * Math.min(4, lapNow())));
   const more = task === "giant" ? 0 : 8 * perkN("time");
   return { biome: b, idx, task, goal, count: 0, left: total + more, total: total + more, stolen: 0, target, done: false, hard };
 }
@@ -1383,6 +1388,7 @@ function frame(now: number) {
   view.mapMode = onMap;
   view.giant = gH && !teasing && !onMap ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need, k: Math.min(1, L / gH.need) } : null;
   view.vac = L;
+  view.night = mode !== "rush" && lapNow() > 0;
   view.tier = tierOf(vacLevel(save.up));
   const sp = $("specialBtn");
   sp.classList.toggle("hidden", view.tier === 0 || !lvl || lvl.done || mode !== "field");

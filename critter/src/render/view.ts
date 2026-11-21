@@ -117,6 +117,11 @@ export class View {
     c.translate(zx, zy); c.scale(this.zoom, this.zoom); c.translate(-zx, -zy);
     this.cover(BIOMES.find((b) => b.id === f.biome)!.bg, -f.kid.x * 0.14);
     c.filter = "none";
+    if (this.night) {
+      c.fillStyle = "rgba(10,18,60,0.55)"; c.fillRect(-20, -20, this.W + 40, this.H + 40);
+      for (let i = 0; i < 40; i++) { const x = (i * 97.3) % this.W, y = (i * 53.7) % (this.H * 0.45); c.globalAlpha = 0.4 + 0.4 * Math.sin(t * 2 + i); c.fillStyle = "#fff8d0"; c.fillRect(x, y, 2, 2); }
+      c.globalAlpha = 1;
+    }
     // the map is open: only the place's picture behind it (blurred by the page), nothing moving
     if (this.mapMode) { this.particles(dt); return; }
     this.lastField = f;
@@ -202,6 +207,7 @@ export class View {
     }
   }
   tier = 0;
+  night = false;
   mapMode = false;
   /** event critters carry a sign above them, drawn on top of everything so a crowd never hides it */
   private signs(f: Field, t: number) {
