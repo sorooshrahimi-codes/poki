@@ -59,7 +59,7 @@ void main() {
   float vmaxSeek = uSpeed * (1.15 + 0.3 * r.z);
   // each mite keeps its own place inside a body whose size grows with the swarm (sqrt: an even disc)
   float home = uRadius * sqrt(r.y) * 0.95;
-  vec3 seek = inward * clamp((dist - home) * 3.2, -vmaxSeek * 0.3, vmaxSeek);
+  vec3 seek = inward * clamp((dist - home) * 4.5, -vmaxSeek * 0.3, vmaxSeek);
   // 2. a gentle mill around the seed when it rests (life, not chaos)
   vec3 tang = vec3(-inward.z, 0.0, inward.x) * (r.x < 0.5 ? 1.0 : -0.7);
   float calm = 1.0 - min(1.0, length(uLeaderVel) / max(uSpeed * 0.5, 1.0));
@@ -204,7 +204,7 @@ void main() {
   if (body <= 1.0) {
     float tail = smoothstep(0.1, -0.6, q.x);               // the glowing abdomen behind
     float head = smoothstep(0.45, 0.8, q.x);
-    c = mix(vec3(0.10, 0.07, 0.05), vCol * 2.6 * vBright, tail) * (1.0 - head * 0.6);
+    c = mix(vCol * 0.55, vCol * 2.6 * vBright, tail) * (1.0 - head * 0.45);
   } else {
     c = mix(vec3(0.45, 0.60, 0.70), vCol, 0.4) * (0.22 + 0.25 * vBright); // thin wings
   }
@@ -300,8 +300,8 @@ export class Swarm {
     gl.uniform4fv(u.uB, world.b); gl.uniform4fv(u.uB2, world.b2); gl.uniform4fv(u.uS2, world.s2); gl.uniform4fv(u.uShock, this.shock);
     gl.uniform3fv(u.uLeader, leader); gl.uniform3fv(u.uLeaderVel, leaderVel);
     gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uActive, active); gl.uniform1f(u.uS, S); gl.uniform1f(u.uWorld, WORLD);
-    gl.uniform1f(u.uSpeed, speed); gl.uniform1f(u.uRep, 1.0); gl.uniform1f(u.uLift, 1.0);
-    gl.uniform1f(u.uRadius, 3.0 + Math.sqrt(active) * 0.075);
+    gl.uniform1f(u.uSpeed, speed); gl.uniform1f(u.uRep, 1.0); gl.uniform1f(u.uLift, 1.7);
+    gl.uniform1f(u.uRadius, 2.2 + Math.sqrt(active) * 0.05);
     gl.uniform2f(u.uDenTexel, 1 / DEN, 1 / DEN);
     gl.bindVertexArray(this.empty);
     // only the rows that hold living mites (plus the next few to be born) are simulated

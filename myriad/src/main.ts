@@ -130,7 +130,12 @@ city.onEat = (b, amount) => {
   // a building is gone when (nearly) all of it, rubble included, has been eaten
   if (!city.gone[b] && B.eaten > B.solid * 0.97) city.remove(b);
   // the first big bites of a building shake the camera a little (things are coming down)
-  if (B.eaten > B.solid * 0.3 && B.collapseAt < 0) { B.collapseAt = time; shake = 0.8; audio.thump(B.kind === 1 ? 0.6 : 1); }
+  // structural failure: a fifth of a building gone and the rest comes down (trees a little later)
+  const failAt = B.kind === 1 ? 0.28 : B.kind === 6 ? 0.5 : B.kind === 5 ? 0.45 : 0.2;
+  if (B.eaten > B.solid * failAt && B.collapseAt < 0 && b !== giant) {
+    B.collapseAt = time; city.fail(b);
+    shake = B.kind === 6 ? 0.2 : 0.9; audio.thump(B.kind === 1 || B.kind === 6 ? 0.6 : 1.2);
+  }
 };
 
 // ---------------------------------------------------------------- loop

@@ -62,6 +62,7 @@ ivec2 atl(int b, ivec3 v) { return ivec2((b % 8) * 256 + (v.z % 8) * 32 + v.x, (
 const SIM_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uSrc;
+uniform ivec3 uDir; // this pass's sliding direction (cycles through the four sides)
 out vec4 o;
 ${ATLAS}${HOLD_GLSL}
 int B; ivec3 VV;
@@ -81,8 +82,18 @@ void main() {
   vec4 c = cell(v), up = cell(v + ivec3(0, 1, 0)), dn = cell(v - ivec3(0, 1, 0));
   bool solid = c.r > 0.5, dnSolid = dn.r > 0.5;
   vec4 r = solid ? c : vec4(0.0);
-  if (!solid && up.r > 0.5 && up.g < THR) r = vec4(up.r, -1.0, up.b, up.a);      // the loose voxel above drops in
-  else if (solid && c.g < THR && !dnSolid) r = vec4(0.0);                        // this loose voxel drops out
+  // straight down first; then loose voxels resting on loose voxels slide down one side (rubble spreads into a heap)
+  vec4 src = cell(v - uDir + ivec3(0, 1, 0));                    // the voxel that could slide into this cell
+  vec4 srcDn = cell(v - uDir);                                   // what that voxel rests on
+  vec4 tgt = cell(v + uDir - ivec3(0, 1, 0));                    // where this voxel could slide to
+  vec4 tgtUp = cell(v + uDir);                                   // the cell above that target
+  bool upFalls = up.r > 0.5 && up.g < THR;
+  if (!solid && upFalls) r = vec4(up.r, -1.0, up.b, up.a);                                       // drop in from above
+  else if (!solid && up.r < 0.5 && src.r > 0.5 && src.g < 0.0 && srcDn.r > 0.5 && srcDn.g < THR && v.y < 31)
+    r = vec4(src.r, -1.0, src.b, src.a);                                                         // slide in diagonally
+  else if (solid && c.g < THR && !dnSolid) r = vec4(0.0);                                       // drop out
+  else if (solid && c.g < 0.0 && dnSolid && dn.g < THR && tgt.r < 0.5 && tgtUp.r < 0.5 && v.y > 0 && all(greaterThanEqual(v + uDir, ivec3(0))) && all(lessThanEqual(v + uDir, ivec3(31))))
+    r = vec4(0.0);                                                                               // slide out diagonally
   if (r.r > 0.5) {
     if (r.g < 0.0) {
       // falling: it lands only on something that is itself held up
@@ -205,6 +216,26 @@ void main() {
   o = vec4(c, 1.0);
 }`;
 
+const FAIL_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uSrc;
+uniform float uSeed;
+out vec4 o;
+float h(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719)) + uSeed) * 43758.5453); }
+void main() {
+  ivec2 fc = ivec2(gl_FragCoord.xy);
+  ivec2 tile = ivec2(fc.x / 256, fc.y / 128);
+  ivec2 l = fc - tile * ivec2(256, 128);
+  vec3 v = vec3(l.x % 32, l.y % 32, (l.x / 32) + (l.y / 32) * 8);
+  vec4 c = texelFetch(uSrc, fc, 0);
+  if (c.r > 0.5) {
+    // the structure gives way: a share of the base crumbles, everything above comes loose
+    if (v.y < 5.0 && h(v) < 0.45) c = vec4(0.0);
+    else if (v.y >= 1.0) c.g = -1.0;
+  }
+  o = c;
+}`;
+
 // ---------------------------------------------------------------- eating and painting
 const EAT_VS = `#version 300 es
 precision highp float;
@@ -256,7 +287,9 @@ export class City {
   gl: GL;
   atlas: Target; atlasB: Target; counter: Target; color: Target;
   grid: WebGLTexture; gridData = new Uint8Array(GRID * GRID);
-  march: Program; sim: Program; eat: Program; paint: Program; fillP: Program;
+  march: Program; sim: Program; eat: Program; paint: Program; fillP: Program; failP: Program;
+  private pass = 0;
+  private static DIRS = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
   vao: WebGLVertexArrayObject;
   buildings: Building[] = [];
   bArr = new Float32Array(NB * 4); b2Arr = new Float32Array(NB * 4);
@@ -277,6 +310,7 @@ export class City {
     this.grid = texture(gl, GRID, GRID, gl.R8, gl.RED, gl.UNSIGNED_BYTE, gl.NEAREST);
     this.march = program(gl, MARCH_VS, MARCH_FS, "march");
     this.sim = program(gl, FULLSCREEN_VS, SIM_FS, "sim");
+    this.failP = program(gl, FULLSCREEN_VS, FAIL_FS, "fail");
     this.eat = program(gl, EAT_VS, EAT_FS, "eat");
     this.paint = program(gl, PAINT_VS, PAINT_FS, "paint");
     this.fillP = program(gl, FULLSCREEN_VS, `#version 300 es
@@ -340,9 +374,27 @@ void main() { o = vec4(uAmount); }`, "fill");
       const [src, dst] = i % 2 ? [this.atlasB, this.atlas] : [this.atlas, this.atlasB];
       gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb); gl.viewport(0, 0, AW, AH);
       bindTex(gl, 0, src.tex[0], this.sim.u.uSrc);
+      const d = City.DIRS[i & 3]; gl.uniform3i(this.sim.u.uDir, d[0], d[1], d[2]);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+  /** structural failure: the base crumbles and everything above comes down (then gravity and sliding take over) */
+  fail(b: number) {
+    const gl = this.gl;
+    gl.bindVertexArray(this.vao);
+    gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST);
+    const x = (b % 8) * 256, y = Math.floor(b / 8) * 128;
+    gl.useProgram(this.failP.p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.atlasB.fb); gl.viewport(x, y, 256, 128);
+    bindTex(gl, 0, this.atlas.tex[0], this.failP.u.uSrc); gl.uniform1f(this.failP.u.uSeed, b * 7.31);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.useProgram(this.sim.p);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.atlas.fb); gl.viewport(x, y, 256, 128);
+    bindTex(gl, 0, this.atlasB.tex[0], this.sim.u.uSrc); gl.uniform3i(this.sim.u.uDir, 1, 0, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.wake(b, 12);
   }
   syncUniforms() {
     this.bArr.fill(0); this.b2Arr.fill(0);
@@ -389,6 +441,7 @@ void main() { o = vec4(uAmount); }`, "fill");
         gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb);
         gl.viewport(x, y, 256, 128);
         bindTex(gl, 0, src.tex[0], this.sim.u.uSrc);
+        const d = City.DIRS[this.pass++ & 3]; gl.uniform3i(this.sim.u.uDir, d[0], d[1], d[2]);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
     }
