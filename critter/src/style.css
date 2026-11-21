@@ -706,3 +706,4 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 #world .rocket { left: 72%; top: 79%; }
 #world.night .art { filter: brightness(.55) saturate(1.2) hue-rotate(-10deg); }
 #world .lap { position: absolute; left: 50%; top: 18%; translate: -50% 0; font-size: 28px; font-weight: 800; color: #ffe066; text-shadow: 0 0 10px #000, 0 3px 0 #0d1e45; }
+.task .tw { font-size: 20px; padding-inline-end: 6px; border-inline-end: 2px solid rgba(255,255,255,.25); }

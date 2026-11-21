@@ -97,7 +97,7 @@ function handleEvents() {
       combo = t - lastCatch < 1.7 + 0.5 * perkN("combo") ? combo + 1 : 1;
       lastCatch = t;
       const airborne = (c.launch ?? 0) > 0;
-      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up) * (1 + 0.25 * perkN("coins"))) * (airborne ? 2 : 1) * (field.frenzy > 0 ? 2 : 1) * (c.kind === "treasure" ? 12 : 1) * (rush ? 1 : 1 + 1.5 * lapNow()));
+      let coins = Math.round(catchCoins(c.def.income, mult) * (1 + (combo - 1) * 0.25) * (rush ? 1 : valueMult(save.up) * (1 + 0.25 * perkN("coins"))) * (airborne ? 2 : 1) * (field.frenzy > 0 ? 2 : 1) * (c.kind === "treasure" ? 12 : 1) * (field.twist === "big" ? 2 : 1) * (rush ? 1 : 1 + 1.5 * lapNow()));
       if (c.kind === "treasure") { view.text(field.nozzle.x, field.nozzle.y - 110, "💰💰💰", "#ffe066", 30); view.shake = 6; }
       if (c.kind === "box") openBox();
       if (airborne) view.text(field.nozzle.x + 50 * field.kid.face, field.nozzle.y - 100, "🔥×2", "#ff9a3a", 22);
@@ -1033,7 +1033,10 @@ type Task = "any" | "species" | "combo" | "golden" | "rival" | "giant" | "bush" 
 const PLACE_TASK: Record<string, Task> = { meadow: "combo", forest: "bush", frost: "slide", candy: "sticky", volcano: "lava", moon: "float" };
 const MISS_TASKS: Task[] = ["slide", "lava", "float"];
 const LEVEL_TASKS: Task[] = ["any", "species", "combo", "golden", "rival"];
-interface Level { biome: BiomeId; idx: number; task: Task; goal: number; count: number; left: number; total: number; stolen: number; target: string | null; done: boolean; hard: boolean }
+type Twist = NonNullable<Field["twist"]>;
+const TWISTS: Twist[] = ["fog", "big", "tiny", "wind", "gold", "rush"];
+const TWIST_ICON: Record<Twist, string> = { fog: "🌫️", big: "🐘", tiny: "🐜", wind: "🌬️", gold: "🌧️✨", rush: "🏃💨" };
+interface Level { twist: Twist | null; biome: BiomeId; idx: number; task: Task; goal: number; count: number; left: number; total: number; stolen: number; target: string | null; done: boolean; hard: boolean }
 let lvl: Level | null = null;
 const placeIndex = (b: BiomeId) => BIOMES.findIndex((x) => x.id === b);
 /** seven nodes per place: 0 and 1, then a fork (2-3 the normal way, 5-6 the risky way: a lucky wheel and a hard level), then 4, then the giant */
@@ -1066,13 +1069,15 @@ function makeLevel(b: BiomeId, idx: number): Level {
   const total = task === "giant" ? 0 : task === "bonus" ? 30 : task === "golden" ? 35 : task === "rival" ? 55 : MISS_TASKS.includes(task) || task === "bush" || task === "sticky" ? 55 : idx === 0 ? 60 : 45;
   const goal = Math.round((hard ? goal0 * 1.6 : goal0) * (1 + 0.12 * Math.min(4, lapNow())));
   const more = task === "giant" ? 0 : 8 * perkN("time");
-  return { biome: b, idx, task, goal, count: 0, left: total + more, total: total + more, stolen: 0, target, done: false, hard };
+  // a twist on most levels (not the first ones, the treasure room or the giant), different every time you play
+  const twist = task === "giant" || task === "bonus" || (k === 0 && idx < 2) || Math.random() < 0.25 ? null : TWISTS[Math.floor(Math.random() * TWISTS.length)];
+  return { twist, biome: b, idx, task, goal, count: 0, left: total + more, total: total + more, stolen: 0, target, done: false, hard };
 }
 /** what the level asks for, as a picture: the icon (or the critter), the count and the goal */
 function taskHtml(l: Level) {
   const icon = l.task === "species" && l.target ? ic(l.target) : l.task === "rival" ? `<img src="./art/kid_rival.webp" alt="">🛡️` : TASK_ICON[l.task];
   const extra = l.task === "rival" ? ` <span class="lives">${"😏".repeat(l.stolen)}${"·".repeat(Math.max(0, 3 - l.stolen))}</span>` : MISS_TASKS.includes(l.task) ? ` <span class="lives">${"❤️".repeat(Math.max(0, 5 - l.stolen))}${"🖤".repeat(Math.min(5, l.stolen))}</span>` : "";
-  return `<div class="task"><span class="ti">${icon}</span><b>${l.count}/${l.goal}</b>${extra}<span class="tt">⏱${Math.ceil(l.left)}</span></div>`;
+  return `<div class="task">${l.twist ? `<span class="tw">${TWIST_ICON[l.twist]}</span>` : ""}<span class="ti">${icon}</span><b>${l.count}/${l.goal}</b>${extra}<span class="tt">⏱${Math.ceil(l.left)}</span></div>`;
 }
 async function startLevel(b: BiomeId, idx: number) {
   if (busy) return;
@@ -1086,6 +1091,8 @@ async function startLevel(b: BiomeId, idx: number) {
   field = newField(view.W, view.H, save.up, b); field.script = 2;
   field.favor = lvl.target; field.rivalFast = lvl.task === "rival"; applyPerks(field);
   field.bonus = lvl.task === "bonus"; if (field.bonus) field.eventT = 0.6;
+  field.twist = lvl.twist;
+  if (lvl.twist) { const tw = lvl.twist; setTimeout(() => { view.text(view.W / 2, view.H * 0.38, TWIST_ICON[tw], "#ffffff", 54); sfx.event(); }, 500); }
   const m2: Record<string, Field["mode2"]> = { bush: "bush", slide: "slide", sticky: "sticky", lava: "lava", float: "float" };
   field.mode2 = m2[lvl.task] ?? null;
 

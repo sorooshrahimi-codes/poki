@@ -99,6 +99,8 @@ export interface Field {
   /** the giant's next attack in this many seconds; how angry the giants are (0..) */
   attackT: number;
   fury: number;
+  /** this level's twist: fog, giant or tiny critters, wind, golden rain, a stampede toward you */
+  twist: "fog" | "big" | "tiny" | "wind" | "gold" | "rush" | null;
   /** the treasure room: only gifts and treasure runners, one after another */
   bonus: boolean;
   /** a place's own level: bushes to blow open, sliders on the ice, sticky candy, falling into lava, floating away */
@@ -139,7 +141,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, bonus: false, mode2: null, special: 0, specialFx: 0, eventT: 12, eventsOn: false, stun: 0, frenzy: 0, attackT: 3.5, fury: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, twist: null, bonus: false, mode2: null, special: 0, specialFx: 0, eventT: 12, eventsOn: false, stun: 0, frenzy: 0, attackT: 3.5, fury: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -158,7 +160,7 @@ export function spawn(f: Field, rng: Rng, opt: { def?: CritterDef; mut?: Mutatio
   if (opt.mut === undefined) {
     if (f.lure > 0) { mut = "gold"; f.lure--; }
     // candy hills: a sugar rush of golden critters
-    else for (const m of MUTATIONS) if (rng() < m.chance * (f.companion === "prismane" ? 2.2 : 1) * (f.biome === "candy" && m.id === "gold" ? 3.5 : 1) * (m.id === "gold" ? f.goldK : 1)) { mut = m.id; break; }
+    else for (const m of MUTATIONS) if (rng() < m.chance * (f.companion === "prismane" ? 2.2 : 1) * (f.biome === "candy" && m.id === "gold" ? 3.5 : 1) * (m.id === "gold" ? f.goldK * (f.twist === "gold" ? 6 : 1) : 1)) { mut = m.id; break; }
   }
   const mr = MUTATIONS.find((m) => m.id === mut)?.resist ?? 1;
   const c: Critter = {
@@ -167,7 +169,7 @@ export function spawn(f: Field, rng: Rng, opt: { def?: CritterDef; mut?: Mutatio
     y: opt.y ?? f.farY + rng() * (f.nearY - f.farY),
     dir: rng() < 0.5 ? 1 : -1, lift: 0, hopT: rng(), hopPer: 0.7 + rng() * 0.8,
     state: "roam", grip: 0, pullT: 0, resist: def.resist * mr, born: f.t,
-    hidden: false, cycleT: rng() * 3, fleeT: 0, split: false, scale: mut === "giant" ? 1.6 : 1, boss: 0, air: 70 + rng() * 90, bubbled: 0, frozen: 0, herd: 0,
+    hidden: false, cycleT: rng() * 3, fleeT: 0, split: false, scale: (mut === "giant" ? 1.6 : 1) * (f.twist === "big" ? 1.5 : f.twist === "tiny" ? 0.65 : 1), boss: 0, air: 70 + rng() * 90, bubbled: 0, frozen: 0, herd: 0,
   };
   f.critters.push(c);
   f.ev.push({ kind: "spawn", c });
@@ -245,7 +247,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
   }
 
   // keep the meadow lively: a new critter every couple of seconds, up to a crowd
-  const want = 7;
+  const want = f.twist === "tiny" ? 11 : f.twist === "big" ? 5 : 7;
   f.spawnT -= dt;
   if (f.spawnT <= 0 && f.critters.filter((c) => c.state !== "caught").length < want) { const c = spawn(f, rng); if (f.mode2 && rng() < 0.85) makeSpecial(f, c, rng); f.spawnT = (f.mode2 ? 1.0 : 1.4) + rng() * 1.6; }
   // the first minute is scripted: easy catches close by, then a golden one that fights back
@@ -431,7 +433,9 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
       c.hopT += dt / (c.hopPer * (moon ? 1.8 : 1));
       const ph = c.hopT % 1, air = moon ? 0.75 : 0.45;
       c.lift = ph < air ? Math.sin((ph / air) * Math.PI) * c.def.hop * depthK(f, c.y) * (c.boss ? 2 : 1) * (moon && !c.boss ? 3.2 : 1) : 0;
-      if (ph < air) c.x += c.dir * (ice ? 62 : 34) * dt;
+      const sp = f.twist === "tiny" ? 1.8 : f.twist === "big" ? 0.6 : 1;
+      if (f.twist === "rush" && c.boss === 0) c.dir = c.x > f.nozzle.x ? -1 : 1;
+      if (ph < air) c.x += c.dir * (ice ? 62 : 34) * sp * dt;
       else if (ice) c.x += c.dir * 30 * dt;
       if (c.x < f.left + 24) c.dir = 1;
       if (c.x > f.right - 24) c.dir = -1;
@@ -461,7 +465,7 @@ function stepRival(f: Field, dt: number, inp: FieldInput, up: Upgrades, rng: Rng
     // he goes for one in the middle of the field, where you can see him and blow him away
     const mid = (f.left + f.right) / 2 + 40;
     const prey = f.critters.filter((c) => c.state === "roam" && c.boss === 0 && !c.hidden && c.def.behave !== "fly" && c.x < f.right - 110).sort((a, b) => Math.abs(a.x - mid) - Math.abs(b.x - mid))[0];
-    f.rivalT = (f.rivalFast ? 5 + rng() * 4 : 35 + rng() * 25) * f.rivalSlow;
+    f.rivalT = (f.rivalFast ? 2 + rng() * 2 : 35 + rng() * 25) * f.rivalSlow;
     if (!prey) return;
     f.rival = { x: f.right + 60, y: Math.min(f.nearY, prey.y + 6), phase: "in", t: 0, target: prey.uid, got: false };
     f.ev.push({ kind: "rivalIn" });
@@ -486,7 +490,7 @@ function stepRival(f: Field, dt: number, inp: FieldInput, up: Upgrades, rng: Rng
     if (!prey || prey.state !== "roam") { r.phase = "out"; r.t = 0; f.ev.push({ kind: "rivalMiss" }); return; }
     prey.x += (r.x - 30 - prey.x) * Math.min(1, dt * 4);
     prey.lift += 30 * dt;
-    if (r.t > 0.9) { prey.state = "caught"; r.got = true; r.phase = "out"; r.t = 0; f.ev.push({ kind: "stolen", c: prey }); }
+    if (r.t > (f.rivalFast ? 1.5 : 0.9)) { prey.state = "caught"; r.got = true; r.phase = "out"; r.t = 0; f.ev.push({ kind: "stolen", c: prey }); }
   } else if (r.phase === "out") {
     r.x += 170 * dt;
     if (r.x > f.right + 80) f.rival = null;
@@ -522,8 +526,8 @@ function stepEvents(f: Field, dt: number, rng: Rng) {
   if (!f.eventsOn || f.script < 2 || f.critters.some((c) => c.boss > 0 && c.state !== "caught")) return;
   f.eventT -= dt;
   if (f.eventT > 0) return;
-  f.eventT = f.bonus ? 2.2 + rng() * 1.2 : 12 + rng() * 6;
-  const e = f.bonus ? (rng() < 0.55 ? "treasure" : "box") : EVENTS[Math.floor(rng() * EVENTS.length)];
+  f.eventT = f.bonus ? 2.2 + rng() * 1.2 : f.twist === "wind" ? 5 + rng() * 2 : 12 + rng() * 6;
+  const e = f.bonus ? (rng() < 0.55 ? "treasure" : "box") : f.twist === "wind" && rng() < 0.7 ? "gust" : EVENTS[Math.floor(rng() * EVENTS.length)];
   const pool = critterOf(f.biome).filter((d) => d.rarity === "common");
   const y = () => f.farY + (f.nearY - f.farY) * (0.2 + rng() * 0.7);
   if (e === "box") {

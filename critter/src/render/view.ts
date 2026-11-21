@@ -181,6 +181,13 @@ export class View {
       }
     }
     this.signs(f, t);
+    if (f.twist === "fog") {
+      // thick fog: you see a circle around the kid and a spotlight where you aim
+      const g = c.createRadialGradient(f.nozzle.x + 60, f.nozzle.y - 10, 60, f.nozzle.x + 60, f.nozzle.y - 10, 210);
+      g.addColorStop(0, "rgba(230,235,245,0)"); g.addColorStop(1, "rgba(225,230,240,0.93)");
+      c.fillStyle = g; c.fillRect(-20, -20, this.W + 40, this.H + 40);
+    }
+    if (f.twist === "gold") { c.fillStyle = "rgba(255,220,90,0.6)"; for (let i = 0; i < 30; i++) { const x = (i * 71.3 + t * 40) % this.W, y = (i * 37.9 + t * 260) % this.H; c.fillRect(x, y, 2, 9); } }
     this.drawRival(f, t);
     if (f.specialFx > 0) this.drawSpecial(f, t);
     this.particles(dt);
