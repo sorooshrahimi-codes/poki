@@ -5,8 +5,8 @@
 |---|---|---|---|
 | Game build | `release/deep-luck-poki.zip` (= `game/dist`) | HTML5, small initial download | 5.3 MB zip; about 1.4 MB loads before the first cast (the current sea only), the rest streams in while you play |
 | Static thumbnail | `promo/thumb_1080.jpg` (also `thumb_628.jpg`) | square, ≥ 628 px, full-bleed, no text | 1080 × 1080, full-bleed, no text |
-| Animated thumbnail | `promo/animated_thumbnail_1080.mp4` | square ≥ 1080, ≥ 50 fps, 4–6 s, muted, mp4, ≤ 100 MB | 1080 × 1080, 60 fps, 5.7 s, muted, 4.6 MB; it opens on the static art, then the Legend lurking, the fight, the catch reeled up to the boat and the crown |
-| Trailer (optional, for the page and socials) | `promo/trailer_1280x720.mp4` | — | 37 s, 60 fps, with music (key art, five seas, the three-round Legend fight, the logbook) |
+| Animated thumbnail | `promo/animated_thumbnail_1080.mp4` | square ≥ 1080, ≥ 50 fps, 4–6 s, muted, mp4, ≤ 100 MB | 1080 × 1080, 60 fps, 5.85 s, muted, 6 MB; it opens on the static art, then full-frame close-ups: the Legend's face, the bite, the fight hits, reeled up to the boat, the crown |
+| Trailer (optional, for the page and socials) | `promo/trailer_1280x720.mp4` | — | 35 s, 60 fps, full-frame gameplay cut to a 128 BPM track with sound effects: cold open on the Legend, title slam, combos, ice, volcano, "5 SEAS", the build-up, the three-round fight, slow-motion landing, the logbook |
 
 ## Title
 **Deep Luck**
