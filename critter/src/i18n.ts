@@ -19,6 +19,8 @@ export const LANG_FLAG: Record<Lang, string> = {
 };
 
 export type Key =
+  | "nestT" | "shopT" | "huntHere"
+  | "goalGiant"
   | "lab" | "labNeed" | "labStart" | "nestFull"
   | "story" | "storyGo" | "restored"
   | "toolNew" | "tipBubble" | "tipFlute" | "bubbled" | "abHerd" | "abFreeze" | "compJoin" | "compTip" | "compPick"
@@ -32,6 +34,8 @@ export type Key =
 // \u2060 (word joiner) keeps short Japanese button labels on one line: kana may otherwise break between any two characters
 const T: Record<Lang, Partial<Record<Key, string>>> = {
   en: {
+    nestT: "Nest", shopT: "Workshop", huntHere: "Catch here",
+    goalGiant: "☁️ Catch the giant 👑 to bring the colour back",
     lab: "🧪 Lab", labNeed: "🧪 Need 3× {a} and 3× {b}", labStart: "🧪 Fusing {a} + {b}… a lab egg hatches in {n} min!", nestFull: "🥚 The nest is full",
     story: "A grumpy cloud called Gloom drained the colours from Critter Land! Catch critters and beat each place's giant to bring the colour back.", storyGo: "Let's go!", restored: "🌈 Gloom ran away! {place} is colourful again!",
     toolNew: "{x} unlocked!", tipBubble: "🫧 Bubble wand: tap a critter to trap it in a bubble, then vacuum it up!", tipFlute: "🎵 Flute: hold it and critters come to you. Then switch to the vacuum!", bubbled: "Bubbled!", abHerd: "🐕 Herding!", abFreeze: "❄️ Freeze!", compJoin: "🐾 {name} joins your hunt!", compTip: "🐾 Tap a legend in the park to take it hunting with you!", compPick: "🐾 Companion",
@@ -46,6 +50,8 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Suction", "up.range": "Reach", "up.tank": "Jar", max: "MAX",
   },
   fr: {
+    nestT: "Nid", shopT: "Atelier", huntHere: "Chasser ici",
+    goalGiant: "☁️ Attrape le géant 👑 pour ramener les couleurs",
     lab: "🧪 Labo", labNeed: "🧪 Il faut 3× {a} et 3× {b}", labStart: "🧪 Fusion {a} + {b}… l'œuf éclot dans {n} min !", nestFull: "🥚 Le nid est plein",
     story: "Un nuage grognon nommé Gloom a volé les couleurs de Critter Land ! Attrape des bestioles et bats le géant de chaque lieu pour ramener les couleurs.", storyGo: "C'est parti !", restored: "🌈 Gloom s'est enfui ! {place} retrouve ses couleurs !",
     toolNew: "{x} débloqué !", tipBubble: "🫧 Baguette à bulles : touche une bestiole pour l'enfermer dans une bulle, puis aspire-la !", tipFlute: "🎵 Flûte : maintiens-la et les bestioles viennent à toi. Puis reprends l'aspirateur !", bubbled: "En bulle !", abHerd: "🐕 Rassemblement !", abFreeze: "❄️ Gel !", compJoin: "🐾 {name} t'accompagne !", compTip: "🐾 Touche une légende du parc pour l'emmener chasser !", compPick: "🐾 Compagnon",
@@ -60,6 +66,8 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Aspiration", "up.range": "Portée", "up.tank": "Bocal", max: "MAX",
   },
   de: {
+    nestT: "Nest", shopT: "Werkstatt", huntHere: "Hier fangen",
+    goalGiant: "☁️ Fang den Riesen 👑, um die Farben zurückzuholen",
     lab: "🧪 Labor", labNeed: "🧪 Du brauchst 3× {a} und 3× {b}", labStart: "🧪 {a} + {b} verschmelzen… das Ei schlüpft in {n} Min!", nestFull: "🥚 Das Nest ist voll",
     story: "Eine grummelige Wolke namens Gloom hat Critter Land die Farben gestohlen! Fang Tierchen und besiege den Riesen jedes Ortes, um die Farben zurückzuholen.", storyGo: "Los geht's!", restored: "🌈 Gloom ist geflohen! {place} ist wieder bunt!",
     toolNew: "{x} freigeschaltet!", tipBubble: "🫧 Blasenstab: Tippe ein Tierchen an, fang es in einer Blase und saug es ein!", tipFlute: "🎵 Flöte: Halte sie, dann kommen die Tierchen zu dir. Dann zurück zum Sauger!", bubbled: "Eingeblubbert!", abHerd: "🐕 Treiben!", abFreeze: "❄️ Einfrieren!", compJoin: "🐾 {name} jagt mit dir!", compTip: "🐾 Tippe eine Legende im Park an, um sie mitzunehmen!", compPick: "🐾 Begleiter",
@@ -74,6 +82,8 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Saugkraft", "up.range": "Reichweite", "up.tank": "Glas", max: "MAX",
   },
   es: {
+    nestT: "Nido", shopT: "Taller", huntHere: "Cazar aquí",
+    goalGiant: "☁️ Atrapa al gigante 👑 para traer el color",
     lab: "🧪 Labo", labNeed: "🧪 Necesitas 3× {a} y 3× {b}", labStart: "🧪 Fusionando {a} + {b}… ¡el huevo eclosiona en {n} min!", nestFull: "🥚 El nido está lleno",
     story: "¡Una nube gruñona llamada Gloom robó los colores de Critter Land! Atrapa bichitos y vence al gigante de cada lugar para traer el color de vuelta.", storyGo: "¡Vamos!", restored: "🌈 ¡Gloom huyó! ¡{place} vuelve a tener color!",
     toolNew: "¡{x} desbloqueado!", tipBubble: "🫧 Varita de burbujas: toca un bichito para atraparlo en una burbuja y luego aspíralo!", tipFlute: "🎵 Flauta: mantenla y los bichitos vienen a ti. ¡Luego cambia a la aspiradora!", bubbled: "¡Burbuja!", abHerd: "🐕 ¡Arreando!", abFreeze: "❄️ ¡Congelar!", compJoin: "🐾 ¡{name} se une a tu caza!", compTip: "🐾 ¡Toca una leyenda del parque para llevarla contigo!", compPick: "🐾 Compañero",
@@ -88,6 +98,8 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Succión", "up.range": "Alcance", "up.tank": "Frasco", max: "MÁX",
   },
   it: {
+    nestT: "Nido", shopT: "Officina", huntHere: "Caccia qui",
+    goalGiant: "☁️ Cattura il gigante 👑 per riportare i colori",
     lab: "🧪 Lab", labNeed: "🧪 Servono 3× {a} e 3× {b}", labStart: "🧪 Fusione {a} + {b}… l'uovo si schiude tra {n} min!", nestFull: "🥚 Il nido è pieno",
     story: "Una nuvola brontolona di nome Gloom ha rubato i colori di Critter Land! Cattura creaturine e sconfiggi il gigante di ogni luogo per riportare i colori.", storyGo: "Andiamo!", restored: "🌈 Gloom è scappato! {place} è di nuovo colorato!",
     toolNew: "{x} sbloccato!", tipBubble: "🫧 Bacchetta a bolle: tocca una creaturina per intrappolarla in una bolla, poi aspirala!", tipFlute: "🎵 Flauto: tienilo premuto e le creaturine vengono da te. Poi passa all'aspirapolvere!", bubbled: "In bolla!", abHerd: "🐕 Radunata!", abFreeze: "❄️ Gelo!", compJoin: "🐾 {name} caccia con te!", compTip: "🐾 Tocca una leggenda nel parco per portarla a caccia!", compPick: "🐾 Compagno",
@@ -102,6 +114,8 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Risucchio", "up.range": "Portata", "up.tank": "Barattolo", max: "MAX",
   },
   pt: {
+    nestT: "Ninho", shopT: "Oficina", huntHere: "Caçar aqui",
+    goalGiant: "☁️ Pegue o gigante 👑 para trazer as cores de volta",
     lab: "🧪 Lab", labNeed: "🧪 Precisa de 3× {a} e 3× {b}", labStart: "🧪 Fundindo {a} + {b}… o ovo choca em {n} min!", nestFull: "🥚 O ninho está cheio",
     story: "Uma nuvem rabugenta chamada Gloom roubou as cores de Critter Land! Pegue bichinhos e vença o gigante de cada lugar para trazer as cores de volta.", storyGo: "Vamos lá!", restored: "🌈 Gloom fugiu! {place} tem cores de novo!",
     toolNew: "{x} desbloqueado!", tipBubble: "🫧 Varinha de bolhas: toque num bichinho para prendê-lo numa bolha e depois aspire!", tipFlute: "🎵 Flauta: segure e os bichinhos vêm até você. Depois troque para o aspirador!", bubbled: "Na bolha!", abHerd: "🐕 Pastoreando!", abFreeze: "❄️ Congelar!", compJoin: "🐾 {name} caça com você!", compTip: "🐾 Toque numa lenda do parque para levá-la à caça!", compPick: "🐾 Companheiro",
@@ -116,6 +130,8 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Sucção", "up.range": "Alcance", "up.tank": "Pote", max: "MÁX",
   },
   tr: {
+    nestT: "Yuva", shopT: "Atölye", huntHere: "Burada yakala",
+    goalGiant: "☁️ Renkleri geri getirmek için devi 👑 yakala",
     lab: "🧪 Lab", labNeed: "🧪 3× {a} ve 3× {b} gerekli", labStart: "🧪 {a} + {b} birleşiyor… yumurta {n} dk sonra çatlar!", nestFull: "🥚 Yuva dolu",
     story: "Gloom adında huysuz bir bulut Critter Land'in renklerini çaldı! Hayvancıkları yakala, her yerin devini yen ve renkleri geri getir.", storyGo: "Haydi!", restored: "🌈 Gloom kaçtı! {place} yeniden renkli!",
     toolNew: "{x} açıldı!", tipBubble: "🫧 Baloncuk çubuğu: bir hayvancığa dokun, baloncuğa hapset, sonra çek!", tipFlute: "🎵 Flüt: basılı tut, hayvancıklar sana gelsin. Sonra süpürgeye geç!", bubbled: "Baloncukta!", abHerd: "🐕 Topluyor!", abFreeze: "❄️ Dondur!", compJoin: "🐾 {name} avına katıldı!", compTip: "🐾 Yanına almak için parktaki bir efsaneye dokun!", compPick: "🐾 Yoldaş",
@@ -130,6 +146,8 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "Emiş", "up.range": "Menzil", "up.tank": "Kavanoz", max: "MAKS",
   },
   hi: {
+    nestT: "घोंसला", shopT: "कार्यशाला", huntHere: "यहाँ पकड़ो",
+    goalGiant: "☁️ रंग वापस लाने के लिए दानव 👑 पकड़ो",
     lab: "🧪 लैब", labNeed: "🧪 3× {a} और 3× {b} चाहिए", labStart: "🧪 {a} + {b} मिल रहे हैं… अंडा {n} मिनट में फूटेगा!", nestFull: "🥚 घोंसला भरा है",
     story: "Gloom नाम के एक चिड़चिड़े बादल ने क्रिटर लैंड के रंग चुरा लिए! जीव पकड़ो और हर जगह के दानव को हराकर रंग वापस लाओ।", storyGo: "चलो!", restored: "🌈 Gloom भाग गया! {place} फिर से रंगीन है!",
     toolNew: "{x} खुल गया!", tipBubble: "🫧 बुलबुला छड़ी: किसी जीव पर टैप करो, उसे बुलबुले में फँसाओ, फिर खींच लो!", tipFlute: "🎵 बाँसुरी: दबाए रखो, जीव तुम्हारे पास आएँगे। फिर वैक्यूम पर जाओ!", bubbled: "बुलबुले में!", abHerd: "🐕 हाँक रहा है!", abFreeze: "❄️ जमाओ!", compJoin: "🐾 {name} तुम्हारे साथ शिकार पर!", compTip: "🐾 पार्क में किसी दिग्गज पर टैप करो, उसे साथ ले चलो!", compPick: "🐾 साथी",
@@ -144,6 +162,8 @@ const T: Record<Lang, Partial<Record<Key, string>>> = {
     "up.power": "खिंचाव", "up.range": "पहुँच", "up.tank": "जार", max: "मैक्स",
   },
   ja: {
+    nestT: "巣", shopT: "工房", huntHere: "ここで捕まえる",
+    goalGiant: "☁️ 巨大ボス👑をつかまえて色を取りもどそう",
     lab: "🧪 ラボ", labNeed: "🧪 {a}と{b}が3匹ずつ必要", labStart: "🧪 {a}+{b}を合体中…{n}分でラボのたまごがかえる!", nestFull: "🥚 巣がいっぱい",
     story: "ふきげんな雲「グルーム」がクリッターランドの色をうばった!いきものをつかまえて、各地の巨大ボスをたおし、色を取りもどそう!", storyGo: "いくぞ!", restored: "🌈 グルームがにげた!{place}に色がもどった!",
     toolNew: "{x}が使えるようになった!", tipBubble: "🫧 シャボン杖:いきものをタップしてシャボンに閉じこめ、すいこもう!", tipFlute: "🎵 笛:長押しするといきものが寄ってくる。そのあと掃除機に持ちかえよう!", bubbled: "シャボン!", abHerd: "🐕 追いこみ!", abFreeze: "❄️ こおらせ!", compJoin: "🐾 {name}がいっしょに来てくれた!", compTip: "🐾 パークの伝説をタップして、いっしょに連れて行こう!", compPick: "🐾 あいぼう",

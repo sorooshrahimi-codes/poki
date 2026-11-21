@@ -62,6 +62,8 @@ export interface Field {
   /** ground band: far edge and near edge (feet y) */
   farY: number; nearY: number;
   nozzle: { x: number; y: number };
+  /** the kid walks: x = steps from the left edge, d = depth on the ground (1 = nearest), walk = distance walked (for the stride) */
+  kid: { x: number; d: number; walk: number; face: 1 | -1 };
   critters: Critter[];
   beam: boolean; aim: { x: number; y: number };
   jar: number; cap: number;
@@ -95,7 +97,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.6, nearY: H * 0.88, nozzle: { x: 0, y: 0 }, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.6, nearY: H * 0.88, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -117,7 +119,7 @@ export function spawn(f: Field, rng: Rng, opt: { def?: CritterDef; mut?: Mutatio
   const mr = MUTATIONS.find((m) => m.id === mut)?.resist ?? 1;
   const c: Critter = {
     uid: uid++, def, mut,
-    x: opt.x ?? f.nozzle.x + 90 + rng() * (f.right - f.nozzle.x - 120),
+    x: opt.x ?? (() => { const x = f.left + 40 + rng() * (f.right - f.left - 70); return Math.abs(x - f.nozzle.x) < 80 ? Math.min(f.right - 30, f.nozzle.x + 110) : x; })(),
     y: opt.y ?? f.farY + rng() * (f.nearY - f.farY),
     dir: rng() < 0.5 ? 1 : -1, lift: 0, hopT: rng(), hopPer: 0.7 + rng() * 0.8,
     state: "roam", grip: 0, pullT: 0, resist: def.resist * mr, born: f.t,
@@ -168,6 +170,17 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
   }
   if (inp.on && f.jar >= f.cap && Math.floor(f.t * 2) !== Math.floor((f.t - dt) * 2)) f.ev.push({ kind: "full" });
   f.aim.x = inp.x; f.aim.y = inp.y;
+  // while aiming, the kid strides toward the action: along the ground and into the depth of the field
+  if (inp.on) {
+    // turn to face the aim (with a little dead zone so it does not flicker)
+    const mid = f.left + f.kid.x + 59;
+    if (inp.x < mid - 30) f.kid.face = -1; else if (inp.x > mid + 30) f.kid.face = 1;
+    const tx = Math.max(0, Math.min(f.right - f.left - 125, inp.x - f.left - 59 - 150 * f.kid.face));
+    const td = Math.max(0.35, Math.min(1, (inp.y - f.farY) / (f.nearY - f.farY) + 0.45));
+    const mx = Math.max(-110 * dt, Math.min(110 * dt, tx - f.kid.x)), md = Math.max(-0.7 * dt, Math.min(0.7 * dt, td - f.kid.d));
+    f.kid.x += mx; f.kid.d += md;
+    f.kid.walk += Math.abs(mx) + Math.abs(md) * 120;
+  }
 
   // keep the meadow lively: a new critter every couple of seconds, up to a crowd
   const want = 7;
@@ -225,7 +238,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
       c.hidden = false; c.fleeT = 0; c.herd = Math.max(c.herd, 0.2);
       if (c.def.behave === "fly") c.air = Math.max(30, c.air - 60 * dt);
     }
-    if (c.herd > 0 && c.state === "roam") { c.herd -= dt; c.dir = -1; c.x = Math.max(f.nozzle.x + 70, c.x - 70 * dt); }
+    if (c.herd > 0 && c.state === "roam") { c.herd -= dt; const s = Math.sign(f.nozzle.x - c.x); c.dir = s >= 0 ? 1 : -1; if (Math.abs(f.nozzle.x - c.x) > 70) c.x += s * 70 * dt; }
     // moonlight: shy ones stay calm, burrowers stay up
     if (f.companion === "moonfawn") { c.fleeT = 0; if (c.def.behave === "burrow") c.hidden = false; }
     // where its body is (feet minus lift), relative to the nozzle
@@ -258,7 +271,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
         f.ev.push({ kind: "flee", c });
       }
     }
-    if (c.fleeT > 0) { c.fleeT -= dt; c.x += c.dir * 150 * dt; c.x = Math.max(f.nozzle.x + 60, Math.min(f.right - 20, c.x)); }
+    if (c.fleeT > 0) { c.fleeT -= dt; c.x += c.dir * 150 * dt; c.x = Math.max(f.left + 20, Math.min(f.right - 20, c.x)); }
     if (c.hidden) { c.lift = 0; continue; }
     if (inCone && c.def.behave === "split" && !c.split && c.state === "roam" && c.boss === 0) {
       // pop! it becomes two smaller ones, each worth catching
@@ -279,7 +292,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
           if (c.grip >= 1) {
             if (c.boss > 1) {
               // the boss breaks free and leaps away: two more rounds
-              c.boss--; c.grip = 0; c.state = "roam"; c.x = f.nozzle.x + 120 + rng() * (f.right - f.nozzle.x - 160); c.lift = 60;
+              c.boss--; c.grip = 0; c.state = "roam"; c.x = f.left + 60 + rng() * (f.right - f.left - 100); c.lift = 60;
               f.ev.push({ kind: "bossPhase", c });
               for (let i = 0; i < 2; i++) spawn(f, rng, { def: pool[Math.floor(rng() * 4)], mut: null, x: c.x + (i ? 40 : -40), y: c.y });
             } else c.state = "pulled";
@@ -297,7 +310,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
       c.hopT += dt;
       c.lift = c.air + Math.sin(c.hopT * 1.6 + c.uid) * 26;
       c.x += c.dir * 46 * dt;
-      if (c.x < f.nozzle.x + 60) c.dir = 1;
+      if (c.x < f.left + 24) c.dir = 1;
       if (c.x > f.right - 24) c.dir = -1;
     } else if (c.state === "roam") {
       // hop about, turning at the edges
@@ -305,7 +318,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
       const ph = c.hopT % 1;
       c.lift = ph < 0.45 ? Math.sin((ph / 0.45) * Math.PI) * c.def.hop * depthK(f, c.y) * (c.boss ? 2 : 1) : 0;
       if (ph < 0.45) c.x += c.dir * 34 * dt;
-      if (c.x < f.nozzle.x + 60) c.dir = 1;
+      if (c.x < f.left + 24) c.dir = 1;
       if (c.x > f.right - 24) c.dir = -1;
       c.pullT = Math.max(0, c.pullT - dt);
     } else if (c.state === "pulled") {

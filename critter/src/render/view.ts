@@ -72,11 +72,13 @@ export class View {
 
   /** a background image covering the screen, anchored to the bottom so the ground lines up.
    *  On wide screens it is fitted to the height and continued sideways with mirrored copies, instead of zooming in. */
-  private cover(name: string) {
+  private cover(name: string, shift = 0) {
     const im = img(name), c = this.c;
     if (!im) { c.fillStyle = "#8fd36b"; c.fillRect(0, 0, this.W, this.H); return; }
     const k = Math.max(this.H / im.height, Math.min(this.W / im.width, (this.H * 1.25) / im.height));
-    const w = im.width * k, h = im.height * k, x0 = (this.W - w) / 2, y0 = this.H - h;
+    const w = im.width * k, h = im.height * k, y0 = this.H - h;
+    // a gentle sideways drift (parallax), never past the picture's edge when it is a single picture
+    const room = Math.max(0, (w - this.W) / 2), x0 = (this.W - w) / 2 + (room > 0 ? Math.max(-room, Math.min(room, shift)) : shift);
     c.drawImage(im, x0, y0, w, h);
     for (let i = 1; x0 - (i - 1) * w > 0 || x0 + i * w < this.W; i++) {
       for (const side of [-1, 1]) {
@@ -97,20 +99,44 @@ export class View {
     this.begin();
     const c = this.c;
     if (this.colour < 1) c.filter = `saturate(${0.25 + 0.75 * this.colour}) brightness(${0.85 + 0.15 * this.colour})`;
-    this.cover(BIOMES.find((b) => b.id === f.biome)!.bg);
+    // the camera leans in a little while the vacuum roars
+    this.zoom += ((f.beam ? 1.035 : 1) - this.zoom) * Math.min(1, dt * 3);
+    const zx = f.nozzle.x + 120, zy = f.nearY - 40;
+    c.translate(zx, zy); c.scale(this.zoom, this.zoom); c.translate(-zx, -zy);
+    this.cover(BIOMES.find((b) => b.id === f.biome)!.bg, -f.kid.x * 0.14);
     c.filter = "none";
     if (this.colour < 1 || this.gloomFlee > 0) this.gloom(t, dt);
     // the fisher... the catcher: a kid with a vacuum, on the left, standing on the near ground
     this.cheer = Math.max(0, this.cheer - dt);
     const kid = img(this.cheer > 0 && img("kid_cheer") ? "kid_cheer" : f.beam ? "kid_vac_suck" : "kid_vac");
-    const kw = 118, kh = kid ? (kw * kid.height) / kid.width : 130;
-    const kx = f.left, ky = f.nearY + 6 - kh + Math.sin(t * 2.4) * 1.5;
-    f.nozzle.x = kx + kw * (f.beam ? 0.97 : 0.95); f.nozzle.y = ky + kh * (f.beam ? 0.5 : 0.52);
-    // critters far to near, so near ones overlap far ones
+    // the kid stands where they walked to: smaller further back, bobbing with each stride
+    const gy = f.farY + (f.nearY - f.farY) * f.kid.d, kk = depthK(f, gy);
+    const moving = Math.abs(f.kid.walk - this.lastWalk) > 0.2;
+    this.stride = moving ? this.stride + dt : 0;
+    if (moving && Math.random() < dt * 8) this.dust(f.left + f.kid.x + 40 * kk, gy + 2);
+    this.lastWalk = f.kid.walk;
+    const step = moving ? Math.abs(Math.sin(f.kid.walk * 0.09)) * 5 : 0;
+    const kw = 118 * kk, kh = kid ? (kw * kid.height) / kid.width : 130 * kk;
+    const kx = f.left + f.kid.x, ky = gy + 6 * kk - kh - step + Math.sin(t * 2.4) * 1.5;
+    const face = f.kid.face;
+    f.nozzle.x = face > 0 ? kx + kw * (f.beam ? 0.97 : 0.95) : kx + kw * (f.beam ? 0.03 : 0.05); f.nozzle.y = ky + kh * (f.beam ? 0.5 : 0.52);
+    // critters far to near, so near ones overlap far ones; the kid takes their place in that order
     const list = [...f.critters].sort((a, b) => a.y - b.y);
     for (const cr of list) this.shadow(f, cr);
     if (f.beam) this.cone(f, up, t);
-    for (const cr of list) this.critter(f, cr, t);
+    const drawKid = () => {
+      c.fillStyle = "rgba(0,40,30,0.18)"; c.beginPath(); c.ellipse(kx + kw * 0.45, gy + 4, kw * 0.32, 6 * kk, 0, 0, Math.PI * 2); c.fill();
+      if (kid) {
+        // a little lean into the stride
+        c.save(); c.translate(kx + kw / 2, gy); c.scale(face, 1); c.rotate(moving ? Math.sin(f.kid.walk * 0.09) * 0.04 : 0); c.drawImage(kid, -kw / 2, ky - gy, kw, kh); c.restore();
+      }
+    };
+    let kidDone = false;
+    for (const cr of list) {
+      if (!kidDone && cr.y > gy) { drawKid(); kidDone = true; }
+      this.critter(f, cr, t);
+    }
+    if (!kidDone) drawKid();
     // bubbles flying from the wand
     for (const b of f.bubbles) this.bubble(b.x, b.y, 12, t);
     // the flute: notes drifting out over the meadow
@@ -122,19 +148,43 @@ export class View {
       }
       c.globalAlpha = 1;
     }
-    c.fillStyle = "rgba(0,40,30,0.18)"; c.beginPath(); c.ellipse(kx + kw * 0.45, f.nearY + 4, kw * 0.32, 6, 0, 0, Math.PI * 2); c.fill();
-    if (kid) c.drawImage(kid, kx, ky, kw, kh);
     // the companion trots beside the kid
     if (f.companion) {
       const im = img(f.companion);
       if (im) {
         const w = 52, h = (w * im.height) / im.width, hop = Math.abs(Math.sin(t * 4)) * 6;
-        c.fillStyle = "rgba(0,40,20,0.2)"; c.beginPath(); c.ellipse(f.left + 148, f.nearY + 6, 20, 5, 0, 0, Math.PI * 2); c.fill();
-        c.drawImage(im, f.left + 148 - w / 2, f.nearY + 8 - h - hop, w, h);
-        blink(c, f.companion, f.left + 148 - w / 2, f.nearY + 8 - h - hop, w, h, t, 77);
+        // it trots a step behind the kid, on the near side
+        const px = Math.max(f.left + 30, kx - 26), py = Math.min(f.nearY + 8, gy + 18);
+        c.fillStyle = "rgba(0,40,20,0.2)"; c.beginPath(); c.ellipse(px, py - 2, 20, 5, 0, 0, Math.PI * 2); c.fill();
+        c.drawImage(im, px - w / 2, py - h - hop, w, h);
+        blink(c, f.companion, px - w / 2, py - h - hop, w, h, t, 77);
       }
     }
     this.particles(dt);
+    this.foreground(f, t);
+  }
+  zoom = 1;
+  private lastWalk = 0;
+  private stride = 0;
+  private dust(x: number, y: number) {
+    this.parts.push({ x, y, vx: -20 - Math.random() * 30, vy: -10 - Math.random() * 20, life: 0, max: 0.5, col: "rgba(230,215,180,0.8)", size: 3 + Math.random() * 3 });
+  }
+  /** grass right in front of the camera, drifting faster than the field: depth without extra art */
+  private foreground(f: Field, t: number) {
+    const c = this.c, shift = -f.kid.x * 0.55;
+    const col = f.biome === "frost" ? ["#cfe6f7", "#a9c9e6"] : f.biome === "forest" ? ["#1f5a46", "#2d7a5c"] : ["#3f8f33", "#5fb44a"];
+    const base = this.H + 6;
+    for (let i = -2; i < this.W / 46 + 3; i++) {
+      const x = ((i * 46 + shift) % (46 * 40)) + ((i * 37) % 13), hgt = 22 + ((i * 53) % 17), sway = Math.sin(t * 1.3 + i) * 3;
+      c.fillStyle = col[i & 1];
+      c.beginPath();
+      c.moveTo(x - 14, base);
+      c.quadraticCurveTo(x - 8 + sway, base - hgt * 0.6, x - 4 + sway * 1.5, base - hgt);
+      c.quadraticCurveTo(x, base - hgt * 0.5, x + 2, base - hgt * 0.75 + sway);
+      c.quadraticCurveTo(x + 6, base - hgt * 0.4, x + 12 + sway, base - hgt * 0.85);
+      c.quadraticCurveTo(x + 10, base - hgt * 0.3, x + 16, base);
+      c.fill();
+    }
   }
 
   private shadow(f: Field, cr: Critter) {
@@ -322,59 +372,15 @@ export class View {
   fliers: { art: string; x0: number; y0: number; x1: number; y1: number; t: number }[] = [];
   fly(art: string, x0: number, y0: number, x1: number, y1: number, delay: number) { this.fliers.push({ art, x0, y0, x1, y1, t: -delay }); }
 
-  drawPark(save: SaveData, biome: BiomeId, t: number, dt: number) {
+  drawPark(_save: SaveData, _biome: BiomeId, _t: number, dt: number) {
+    // the park is a calm backdrop; the collection itself is a tidy card grid in the page
     this.begin();
-    const c = this.c;
     this.cover("bg_park");
-    const ped = img("pedestal");
-    for (const s of this.parkSlots(biome)) {
-      const e = save.index[s.def.id], star = starOf(e?.count ?? 0);
-      const pw = 84, ph = ped ? (pw * ped.height) / ped.width : 60;
-      if (ped) c.drawImage(ped, s.x - pw / 2, s.y - ph * 0.35, pw, ph);
-      const sp = img(s.def.art);
-      if (!sp) continue;
-      const w = 70, h = (w * sp.height) / sp.width;
-      const bob = Math.abs(Math.sin(t * 2.2 + s.x)) * 5;
-      if (e) {
-        c.drawImage(sp, s.x - w / 2, s.y - h - bob + 4, w, h);
-        blink(c, s.def.art, s.x - w / 2, s.y - h - bob + 4, w, h, t, s.x * 7 + s.y);
-        c.font = "bold 14px Fredoka, system-ui"; c.textAlign = "center"; c.fillStyle = "#ffe066"; c.strokeStyle = "#0d1e45"; c.lineWidth = 4;
-        const lbl = "★".repeat(star) + ` ${Math.round(s.def.income * STAR_MULT[star])}/s`;
-        c.strokeText(lbl, s.x, s.y + ph * 0.22); c.fillText(lbl, s.x, s.y + ph * 0.22);
-        // legends can come along on the hunt: a paw badge, ticked for the one that does
-        if (s.def.rarity === "legendary") {
-          const on = save.companion === s.def.id;
-          c.font = "bold 16px system-ui"; c.fillStyle = on ? "#7cf29a" : "#ffffff";
-          c.strokeText(on ? "✔🐾" : "🐾", s.x + 30, s.y - 52); c.fillText(on ? "✔🐾" : "🐾", s.x + 30, s.y - 52);
-        }
-      } else {
-        // not caught yet: a dark silhouette with a question mark, something to chase
-        c.save(); c.globalAlpha = 0.85; c.filter = "brightness(0) opacity(0.55)";
-        c.drawImage(sp, s.x - w / 2, s.y - h + 4, w, h); c.restore();
-        c.font = "bold 22px Fredoka, system-ui"; c.textAlign = "center"; c.fillStyle = "#fff"; c.fillText("?", s.x, s.y - h / 2 + 8);
-        // a lab recipe: its two parents and how many copies you have of each (3 needed)
-        const rc = RECIPES.find((r) => r.hybrid === s.def.id);
-        if (rc) {
-          [rc.a, rc.b].forEach((pid, k) => {
-            const pi = img(pid), have = save.index[pid]?.count ?? 0, px = s.x + (k ? 18 : -18), py = s.y + ph * 0.2;
-            if (pi) { c.save(); if (!have) c.filter = "brightness(0) opacity(0.5)"; c.drawImage(pi, px - 13, py - 22, 26, (26 * pi.height) / pi.width); c.restore(); }
-            c.font = "bold 11px Fredoka, system-ui"; c.fillStyle = have >= 3 ? "#7cf29a" : "#ffffff"; c.strokeStyle = "#0d1e45"; c.lineWidth = 3;
-            const lbl = `${Math.min(have, 3)}/3`; c.strokeText(lbl, px, py + 12); c.fillText(lbl, px, py + 12);
-          });
-        }
-      }
-    }
-    for (const fl of this.fliers) {
-      fl.t += dt;
-      if (fl.t < 0) continue;
-      const k = Math.min(1, fl.t / 0.7), e = 1 - Math.pow(1 - k, 3), im = img(fl.art);
-      const x = fl.x0 + (fl.x1 - fl.x0) * e, y = fl.y0 + (fl.y1 - fl.y0) * e - Math.sin(k * Math.PI) * 120;
-      if (im) { const w = 30 + 30 * k, h = (w * im.height) / im.width; c.save(); c.translate(x, y); c.rotate((1 - k) * 6); c.drawImage(im, -w / 2, -h / 2, w, h); c.restore(); }
-      if (k >= 1 && fl.t < 0.8) this.burst(fl.x1, fl.y1, "#ffe066", 10, 120);
-    }
-    this.fliers = this.fliers.filter((fl) => fl.t < 0.8);
+    const c = this.c;
+    c.fillStyle = "rgba(13,30,69,0.35)"; c.fillRect(0, 0, this.W, this.H);
     this.particles(dt);
   }
+
 }
 
 /** eyelids: blink now and then on each critter's own rhythm (eyes found by tools/art/eyes.py) */
