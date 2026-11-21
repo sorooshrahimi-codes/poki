@@ -137,7 +137,7 @@ uniform sampler2D uAtlas, uColor, uLight;
 uniform mat4 uVP;
 uniform vec4 uB[${NB}];
 uniform vec4 uS2[${NB}];
-uniform vec3 uCam, uSun;
+uniform vec3 uCam, uSun, uFocus;
 uniform float uWorld, uShadow;
 in vec3 vW;
 flat in int vB;
@@ -180,6 +180,17 @@ void main() {
   if (hit.r < 0.5) discard;
   vec3 hp = ro + rd * t;
   vec3 wp = lo + hp * vs;
+  // between the camera and the swarm? then it is see-through (screen-door, no sorting needed)
+  {
+    vec3 ctr = vec3(B.x, 0.0, B.y);
+    vec3 seg = uFocus - uCam;
+    float k = clamp(dot(ctr - uCam, seg) / dot(seg, seg), 0.0, 1.0);
+    float dd = length((uCam + seg * k - ctr).xz);
+    if (k < 0.92 && dd < 16.0 * vs + 2.5 && wp.y > 1.2) {
+      ivec2 q = ivec2(gl_FragCoord.xy) & 3;
+      if ((q.x + q.y * 2) % 3 != 0) discard;
+    }
+  }
   vec4 clip = uVP * vec4(wp, 1.0);
   gl_FragDepth = clip.z / clip.w * 0.5 + 0.5;
   // material, with a per-voxel variation and a soft bevel so it reads as many small pieces
@@ -528,6 +539,7 @@ void main() { o = vec4(uAmount); }`, "fill");
     this.bArr[b * 4] = x; this.bArr[b * 4 + 1] = z; this.s2Arr[b * 4 + 1] = yOff;
   }
 
+  focus = new Float32Array(3);
   draw(vp: Float32Array, cam: Float32Array, light: WebGLTexture) {
     const gl = this.gl, u = this.march.u;
     gl.bindVertexArray(this.vao);
@@ -537,7 +549,7 @@ void main() { o = vec4(uAmount); }`, "fill");
     bindTex(gl, 0, this.atlas.tex[0], u.uAtlas); bindTex(gl, 1, this.color.tex[0], u.uColor); bindTex(gl, 2, light, u.uLight);
     gl.uniformMatrix4fv(u.uVP, false, vp);
     gl.uniform4fv(u.uB, this.bArr); gl.uniform4fv(u.uS2, this.s2Arr);
-    gl.uniform3fv(u.uCam, cam); gl.uniform3f(u.uSun, -0.45, 0.78, 0.43); gl.uniform1f(u.uWorld, WORLD); gl.uniform1f(u.uShadow, this.shadows ? 1 : 0);
+    gl.uniform3fv(u.uCam, cam); gl.uniform3fv(u.uFocus, this.focus); gl.uniform3f(u.uSun, -0.45, 0.78, 0.43); gl.uniform1f(u.uWorld, WORLD); gl.uniform1f(u.uShadow, this.shadows ? 1 : 0);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 36, this.buildings.length);
     gl.disable(gl.CULL_FACE);
   }

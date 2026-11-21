@@ -77,7 +77,7 @@ const cam = new Float32Array(3), camR = new Float32Array(3), camU = new Float32A
 const leader = new Float32Array([0, 0, 0]), leaderVel = new Float32Array(3);
 const target = new Float32Array([0, 0, 0]);
 let hasTarget = false, lastInput = -99;
-let camD = 20, camX = 0, camZ = 0, shake = 0;
+let camD = 6, camX = 0, camZ = 0, shake = 0;
 
 // ---------------------------------------------------------------- input: the finger (or mouse) is where the seed goes
 const ndc = new Float32Array(4), tmp4 = new Float32Array(4);
@@ -99,6 +99,15 @@ function xform(out: Float32Array, m: Float32Array, v: Float32Array) {
 let down = false;
 countNInit();
 function countNInit() { const el = document.getElementById("countN"); if (el) el.textContent = String(Number(params.get("start") ?? 1500)); }
+document.getElementById("next")!.addEventListener("click", () => {
+  // the next village: a new seed, the swarm keeps everything it has
+  district++;
+  city.build(village(district * 101 + 7));
+  giant = -1; giantState = "sleep"; won = false; progress = 0; milestone = Math.min(milestone, MILESTONES.length);
+  leader[0] = leader[2] = 0; target[0] = target[2] = 0;
+  document.getElementById("win")!.classList.remove("show");
+  audio.chime(2);
+});
 const hand = document.getElementById("hand")!, countN = document.getElementById("countN")!, countBox = document.getElementById("count")!, goalFill = document.getElementById("goalFill")!;
 let touched = false;
 canvas.addEventListener("pointerdown", (e) => {
@@ -119,6 +128,7 @@ const CAP = Math.min(S * S, Number(params.get("n") ?? 200_000));
 const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? 1500);
 let meal = 0;
+let district = 1;
 // ---------------------------------------------------------------- the stone giant: wakes when the village is mostly colour again
 const GIANT_SCALE = 2.4, GIANT_H = 32 * 0.28 * GIANT_SCALE;
 let giant = -1, giantState: "sleep" | "rise" | "walk" | "fallen" = "sleep", giantT = 0, giantY = -GIANT_H, nextStomp = 0, won = false;
@@ -156,7 +166,7 @@ function frame(now: number) {
   // district progress (also drives the goal bar)
   { let tot = 0, eat = 0; for (let b = 0; b < city.buildings.length; b++) { if (b === giant) continue; const B = city.buildings[b]; tot += B.solid; eat += Math.min(B.solid, B.eaten); } progress = Math.min(1, (eat / Math.max(1, tot)) * 1.15); }
   swarm.shock[3] = 0;
-  if (giant < 0 && progress >= (params.get("giant") === "1" && time > 1.5 ? 0 : 0.55)) {
+  if (giant < 0 && progress >= (params.get("giant") === "1" && time > 1.5 ? 0 : 0.35)) {
     // it rises on the far side of the swarm from the camera, so the player sees it come up out of the ground
     const ang = Math.atan2(leader[2] - cam[2], leader[0] - cam[0]);
     const gx = Math.max(-60, Math.min(60, leader[0] + Math.cos(ang) * 38)), gz = Math.max(-60, Math.min(60, leader[2] + Math.sin(ang) * 38));
@@ -186,6 +196,7 @@ function frame(now: number) {
   }
   if (giant >= 0 && city.gone[giant] && !won) {
     won = true; shake = 1; city.bloom = 3.5;
+    setTimeout(() => document.getElementById("win")!.classList.add("show"), 2200);
     for (let i = 0; i < 6; i++) setTimeout(() => audio.chime(4 + i), i * 160);
   }
   while (milestone < MILESTONES.length && active >= MILESTONES[milestone]) audio.chime(milestone++);
@@ -208,7 +219,7 @@ function frame(now: number) {
 
   // camera: behind and above the seed, pulling back as the swarm grows
   const want = 15 + Math.sqrt(active) * 0.13 + (giant >= 0 && giantState !== "fallen" && !city.gone[giant] ? 14 : 0);
-  camD += (want - camD) * Math.min(1, dt * 1.5);
+  camD += (want - camD) * Math.min(1, dt * (time < 2.5 ? 0.9 : 1.5));
   camX += (leader[0] - camX) * Math.min(1, dt * 3); camZ += (leader[2] - camZ) * Math.min(1, dt * 3);
   // a slow orbit gives parallax: the swarm reads as a volume, not a decal
   const orb = Math.sin(time * 0.11) * 0.35;
@@ -225,6 +236,7 @@ function frame(now: number) {
 
   post.begin(tier.scale);
   world.draw(vp, inv, cam, swarm.light, city.color.tex[0]);
+  city.focus[0] = leader[0]; city.focus[1] = 1.5; city.focus[2] = leader[2];
   city.draw(vp, cam, swarm.light);
   grass.draw(vp, cam, camX, camZ - camD * 0.1, time, city.color.tex[0], swarm.light, swarm.light, 1);
   city.shadows = gov.tier <= 2;
