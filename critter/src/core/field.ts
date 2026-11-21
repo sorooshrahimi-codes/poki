@@ -1,4 +1,4 @@
-import { CONE, power, range, tankSize, type Upgrades } from "./economy.ts";
+import { cone, power, range, tankSize, type Upgrades } from "./economy.ts";
 import type { BiomeId, MutationId } from "./types.ts";
 import { MUTATIONS, RARITY_WEIGHT, critterOf, type CritterDef, CRITTER_BY_ID } from "../data/critters.ts";
 import type { Rng } from "./rng.ts";
@@ -249,7 +249,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
     }
   }
 
-  const P = power(up), R = range(up);
+  const P = power(up), R = range(up), CONE = cone(up);
   const ang = Math.atan2(f.aim.y - f.nozzle.y, f.aim.x - f.nozzle.x);
   for (const c of f.critters) {
     if (c.state === "caught") continue;

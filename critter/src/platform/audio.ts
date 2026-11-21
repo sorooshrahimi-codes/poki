@@ -10,7 +10,7 @@ let sfxBus: GainNode | null = null;
 let noiseBuf: AudioBuffer | null = null;
 let muted = false;
 /** the mix: music sits under everything, the catch sounds lead */
-const MUSIC_VOL = 0.22;
+const MUSIC_VOL = 0.26;
 let ducked = false;
 
 export function unlockAudio() {
@@ -267,9 +267,9 @@ export function setVacuum(on: boolean, strength: number, tug: boolean) {
     vac = { g, f, hum, hg, lfo, lg };
   }
   const t = ctx.currentTime, k = Math.max(0, Math.min(1, strength));
-  vac.g.gain.setTargetAtTime(on ? 0.09 + k * 0.05 : 0, t, on ? 0.03 : 0.08);
-  vac.hg.gain.setTargetAtTime(on ? 0.05 : 0, t, on ? 0.03 : 0.1);
+  vac.g.gain.setTargetAtTime(on ? 0.03 + k * 0.015 : 0, t, on ? 0.04 : 0.08);
+  vac.hg.gain.setTargetAtTime(on ? 0.015 : 0, t, on ? 0.04 : 0.1);
   vac.f.frequency.setTargetAtTime(on ? 800 + k * 900 : 600, t, 0.12);
   vac.hum.frequency.setTargetAtTime(80 + k * 50, t, 0.2);
-  vac.lg.gain.setTargetAtTime(on && tug ? 350 : 0, t, 0.05);
+  vac.lg.gain.setTargetAtTime(on && tug ? 250 : 0, t, 0.05);
 }

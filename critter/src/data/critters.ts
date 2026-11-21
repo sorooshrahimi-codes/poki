@@ -165,7 +165,7 @@ export const catchCoinsOf = (d: CritterDef, mult: number) => Math.max(1, Math.ro
  *  then it comes down to fight. Sucking it up brings the place's colour back and opens the next place. */
 export interface GiantDef { biome: BiomeId; id: string; need: number; resist: number }
 export const GIANTS: GiantDef[] = [
-  { biome: "meadow", id: "honeyblob", need: 12, resist: 2.4 },
+  { biome: "meadow", id: "honeyblob", need: 18, resist: 2.4 },
   { biome: "forest", id: "barkbear", need: 50, resist: 3.4 },
   { biome: "frost", id: "glacier", need: 76, resist: 4.4 },
   { biome: "candy", id: "cakeroar", need: 92, resist: 5.2 },

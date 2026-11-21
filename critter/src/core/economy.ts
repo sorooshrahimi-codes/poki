@@ -4,7 +4,7 @@ export type Upgrades = Record<UpgradeId, number>;
 
 export const UPGRADES: Record<UpgradeId, { max: number; cost: (l: number) => number; icon: string }> = {
   power: { max: 100, cost: (l) => Math.round(40 * Math.pow(1.32, l)), icon: "💨" },
-  range: { max: 80, cost: (l) => Math.round(60 * Math.pow(1.33, l)), icon: "📏" },
+  range: { max: 80, cost: (l) => Math.round(60 * Math.pow(1.33, l)), icon: "🌪️" },
   tank: { max: 80, cost: (l) => Math.round(90 * Math.pow(1.35, l)), icon: "💰" },
 };
 export const UPGRADE_ORDER: UpgradeId[] = ["power", "range", "tank"];
@@ -12,14 +12,16 @@ export const upgradeCost = (u: Upgrades, id: UpgradeId) => (u[id] >= UPGRADES[id
 
 /** pull strength: how fast a critter with resist 1 is drawn in (units per second) */
 export const power = (u: Upgrades) => 170 + 22 * u.power;
-/** suction cone length */
-export const range = (u: Upgrades) => 125 + 11 * u.range;
-/** half-angle of the cone (radians) */
-export const CONE = 0.42;
+/** suction cone length: fixed and generous (on a phone screen reach hardly matters) */
+export const range = (_u: Upgrades) => 210;
+/** half-angle of the cone (radians): the second upgrade opens the mouth wider, so it grabs more at once */
+export const MOUTH_FULL = 38;
+export const cone = (u: Upgrades) => 0.36 + 0.018 * Math.min(u.range, MOUTH_FULL);
 /** no jar any more: catches pay at once (kept so old callers still work) */
 export const tankSize = (_u: Upgrades) => 1e9;
 /** the third upgrade: every catch is worth more */
-export const valueMult = (u: Upgrades) => 1 + 0.15 * u.tank;
+/** ...and once the mouth is fully open, its further levels add coin value too */
+export const valueMult = (u: Upgrades) => 1 + 0.15 * u.tank + 0.12 * Math.max(0, u.range - MOUTH_FULL);
 /** coins for each critter caught, on top of park income */
 export const catchCoins = (income: number, mult: number) => Math.max(1, Math.round(income * 2 * mult));
 /** offline park income stops after this long */

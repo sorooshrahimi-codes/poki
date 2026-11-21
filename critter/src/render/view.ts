@@ -1,5 +1,5 @@
 import { depthK, type Critter, type Field } from "../core/field.ts";
-import { CONE, range, type Upgrades } from "../core/economy.ts";
+import { cone, range, type Upgrades } from "../core/economy.ts";
 import type { MutationId } from "../core/types.ts";
 import { BIOMES, CRITTERS, RARITY_COLOR, RECIPES, STAR_MULT, critterOf, starOf } from "../data/critters.ts";
 import type { BiomeId } from "../core/types.ts";
@@ -369,7 +369,7 @@ export class View {
   fluting = false;
 
   private cone(f: Field, up: Upgrades, t: number) {
-    const c = this.c, R = range(up), ang = Math.atan2(f.aim.y - f.nozzle.y, f.aim.x - f.nozzle.x);
+    const c = this.c, R = range(up), CONE = cone(up), ang = Math.atan2(f.aim.y - f.nozzle.y, f.aim.x - f.nozzle.x);
     c.save(); c.translate(f.nozzle.x, f.nozzle.y); c.rotate(ang);
     const g = c.createLinearGradient(0, 0, R, 0);
     g.addColorStop(0, "rgba(190,240,255,0.55)"); g.addColorStop(1, "rgba(190,240,255,0)");
