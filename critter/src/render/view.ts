@@ -1,13 +1,13 @@
 import { depthK, type Critter, type Field } from "../core/field.ts";
 import { CONE, range, type Upgrades } from "../core/economy.ts";
 import type { MutationId } from "../core/types.ts";
-import { BIOMES, CRITTERS, RARITY_COLOR, STAR_MULT, critterOf, starOf } from "../data/critters.ts";
+import { BIOMES, CRITTERS, RARITY_COLOR, RECIPES, STAR_MULT, critterOf, starOf } from "../data/critters.ts";
 import type { BiomeId } from "../core/types.ts";
 import { EYES } from "../data/eyes.ts";
 import type { SaveData } from "../core/save.ts";
 
 type Ctx = CanvasRenderingContext2D;
-const NAMES = [...CRITTERS.map((c) => c.art), "kid_vac", "kid_vac_suck", "kid_cheer", "egg_speckled", "egg_sky", "egg_star", "egg_golden", "bg_frost", "bg_meadow", "bg_forest", "bg_park", "pedestal", "jar", "coin", "nozzle"];
+const NAMES = [...CRITTERS.map((c) => c.art), "lab_egg", "kid_vac", "kid_vac_suck", "kid_cheer", "egg_speckled", "egg_sky", "egg_star", "egg_golden", "bg_frost", "bg_meadow", "bg_forest", "bg_park", "pedestal", "jar", "coin", "nozzle"];
 const imgs = new Map<string, HTMLImageElement>();
 export const img = (n: string) => imgs.get(n) ?? null;
 export function loadArt(onProgress: (k: number) => void) {
@@ -352,6 +352,16 @@ export class View {
         c.save(); c.globalAlpha = 0.85; c.filter = "brightness(0) opacity(0.55)";
         c.drawImage(sp, s.x - w / 2, s.y - h + 4, w, h); c.restore();
         c.font = "bold 22px Fredoka, system-ui"; c.textAlign = "center"; c.fillStyle = "#fff"; c.fillText("?", s.x, s.y - h / 2 + 8);
+        // a lab recipe: its two parents and how many copies you have of each (3 needed)
+        const rc = RECIPES.find((r) => r.hybrid === s.def.id);
+        if (rc) {
+          [rc.a, rc.b].forEach((pid, k) => {
+            const pi = img(pid), have = save.index[pid]?.count ?? 0, px = s.x + (k ? 18 : -18), py = s.y + ph * 0.2;
+            if (pi) { c.save(); if (!have) c.filter = "brightness(0) opacity(0.5)"; c.drawImage(pi, px - 13, py - 22, 26, (26 * pi.height) / pi.width); c.restore(); }
+            c.font = "bold 11px Fredoka, system-ui"; c.fillStyle = have >= 3 ? "#7cf29a" : "#ffffff"; c.strokeStyle = "#0d1e45"; c.lineWidth = 3;
+            const lbl = `${Math.min(have, 3)}/3`; c.strokeText(lbl, px, py + 12); c.fillText(lbl, px, py + 12);
+          });
+        }
       }
     }
     for (const fl of this.fliers) {

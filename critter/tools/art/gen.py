@@ -48,6 +48,13 @@ JOBS = {
      "bottom-left a purple egg with glowing star patterns, bottom-right a golden egg with gems and a soft glow. " + STYLE, "1:1", True),
   "kid_cheer": ("A single game sprite on a fully transparent background: the same cheerful kid explorer (red cap, blue overalls, sneakers, glossy vacuum backpack with a bubble-glass dome) "
      "jumping for joy, both arms up holding the vacuum nozzle high, eyes closed with a huge grin, side view facing right. Full body, no ground, no text. " + STYLE, "1:1", True, [dl.STYLE_REF, "https://media.base44.com/images/public/6aea41c732ebf572da66fc50/6ed63788d_generated_38770da9.png"]),
+  "hyb1": (SHEET + CRIT + "Each one is a cute HYBRID of two critters. Top-left: 'Buzzbun', a fluffy pink bunny ball with yellow-black bee stripes and tiny bee wings. "
+     "Top-right: 'Shroomslime', a translucent blue slime with a red white-spotted mushroom cap. Bottom-left: 'Leafowl', a round brown owl with a green sprout and two leaves on its head. "
+     "Bottom-right: 'Luckshell', a snail with a four-leaf-clover shell, glowing green. " + STYLE, "1:1", True),
+  "hyb2": (SHEET + CRIT + "Each one is a cute HYBRID of two critters. Top-left: 'Glowflake', a white snowball critter with a glowing firefly tail and tiny antennae. "
+     "Top-right: 'Fernfrost', a fox kit ball with a frosty white coat and a fern-leaf tail. Bottom-left: 'Pineseal', a baby seal with a pinecone-scale back. "
+     "Bottom-right: 'Aurospore', a purple mushroom puff glowing with green and pink aurora light. " + STYLE, "1:1", True),
+  "lab_egg": ("A single game sprite on a fully transparent background: a magical lab egg, glass-like and glowing with bubbling green and purple potion swirls inside, with a little brass cap. No text. " + STYLE, "1:1", True),
 }
 
 if __name__ == "__main__":

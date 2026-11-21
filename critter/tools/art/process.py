@@ -20,10 +20,12 @@ SHEETS = {
     "crit_frost2": ["frostbite", "sealio", "glacier", "flurry"],
     "crit_frost3": ["auroray", "crystowl", "frostking", "wyrmling"],
     "eggs": ["egg_speckled", "egg_sky", "egg_star", "egg_golden"],
+    "hyb1": ["buzzbun", "shroomslime", "leafowl", "luckshell"],
+    "hyb2": ["glowflake", "fernfrost", "pineseal", "aurospore"],
 }
-SINGLES = {"kid_vac": "kid_vac", "kid_vac_suck": "kid_vac_suck", "kid_cheer": "kid_cheer"}
+SINGLES = {"kid_vac": "kid_vac", "kid_vac_suck": "kid_vac_suck", "kid_cheer": "kid_cheer", "lab_egg": "lab_egg"}
 BGS = {"bg_meadow": "bg_meadow", "bg_park": "bg_park", "bg_forest": "bg_forest", "bg_frost": "bg_frost"}
-MAX = {"egg_": 120, "kid_": 360, "pedestal": 220, "jar": 200, "coin": 96, "nozzle": 128}
+MAX = {"egg_": 120, "lab_egg": 120, "kid_": 360, "pedestal": 220, "jar": 200, "coin": 96, "nozzle": 128}
 
 def save(im, name):
     m = next((v for k, v in MAX.items() if name.startswith(k)), 240)

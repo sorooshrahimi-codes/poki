@@ -6,7 +6,7 @@ import { newField, sizeField, stepField, spawn, type Field } from "./core/field.
 import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tankSize, upgradeCost, type UpgradeId } from "./core/economy.ts";
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
-import { BIOMES, CRITTERS, CRITTER_BY_ID, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
+import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
 import type { BiomeId } from "./core/types.ts";
 import { commercialBreak, gameplayStart, gameplayStop, initPoki, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
@@ -38,7 +38,7 @@ const aimAt = (e: PointerEvent) => { const p = view.toWorld(e.clientX, e.clientY
 canvas.addEventListener("pointerdown", (e) => {
   unlockAudio(); aimAt(e);
   if (mode === "field" || mode === "rush") { input.on = true; input.tap = true; firstTouch(); }
-  else if (mode === "park") pickCompanion();
+  else if (mode === "park") { if (parkBiome === "lab") pickHybrid(); else pickCompanion(); }
 });
 window.addEventListener("pointermove", (e) => { if (input.on || e.pointerType === "mouse") aimAt(e); });
 window.addEventListener("pointerup", () => { input.on = false; });
@@ -172,6 +172,22 @@ function renderTools() {
     b.innerHTML = TOOL_ICON[tl] + (tl === "bubble" ? `<small>${Math.floor(field.charges)}</small>` : "");
     b.onpointerdown = (ev) => { ev.stopPropagation(); field.tool = tl; sfx.tap(); toolsKey = ""; renderTools(); };
     box.appendChild(b);
+  }
+}
+/** the lab: tap a hybrid's silhouette when you have 3 of each parent; 2 of each go in, a lab egg comes out */
+function pickHybrid() {
+  for (const s2 of view.parkSlots("lab")) {
+    if (Math.hypot(input.x - s2.x, input.y - (s2.y - 30)) > 48) continue;
+    const rc = RECIPES.find((r) => r.hybrid === s2.def.id)!;
+    const A = CRITTER_BY_ID[rc.a], B = CRITTER_BY_ID[rc.b];
+    if ((save.index[rc.a]?.count ?? 0) < 3 || (save.index[rc.b]?.count ?? 0) < 3) { toast(tf("labNeed", { a: critterName(A), b: critterName(B) }), 2600); sfx.tap(); return; }
+    if (save.nest.length >= NEST_SLOTS) { toast(tr("nestFull"), 2200); return; }
+    save.index[rc.a].count -= 2; save.index[rc.b].count -= 2;
+    save.nest.push({ tier: "lab", biome: "lab", readyAt: Date.now() + EGG_MINUTES.lab * 60_000, hybrid: rc.hybrid });
+    toast(tf("labStart", { a: critterName(A), b: critterName(B), n: EGG_MINUTES.lab }), 3000);
+    sfx.reveal("epic"); view.burst(s2.x, s2.y - 40, "#c9a7ff", 30, 200);
+    writeSave(save); nestKey = ""; updateUi();
+    return;
   }
 }
 /** in the park, tapping a legend's pedestal takes it along on the hunt */
@@ -366,6 +382,14 @@ function renderBiomes() {
       if (!owned) { if (save.coins < b.price) return; save.coins -= b.price; save.biomes.push(b.id); sfx.reveal("legendary"); toast(`${b.icon} ${tf("unlocked", { name: biomeName(b) })}`, 2400); }
       parkBiome = b.id; save.biome = b.id; writeSave(save); biomesKey = ""; updateUi();
     };
+    box.appendChild(el);
+  }
+  // the lab appears once you have a little collection to experiment with
+  if (Object.keys(save.index).length >= 6) {
+    const el = document.createElement("button");
+    el.className = "btn bio lab" + (parkBiome === "lab" ? " on" : "");
+    el.textContent = tr("lab");
+    el.onclick = () => { parkBiome = "lab"; biomesKey = ""; updateUi(); };
     box.appendChild(el);
   }
 }

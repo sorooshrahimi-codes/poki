@@ -89,3 +89,5 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #2a6b3a; fon
 #story { position: absolute; inset: 0; pointer-events: auto; background: rgba(20,24,40,.72); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; z-index: 5; }
 #story .cloud { font-size: 64px; animation: pulse 1.6s ease-in-out infinite; }
 #storyText { font-size: 19px; line-height: 1.4; max-width: 340px; text-shadow: 0 2px 0 rgba(13,22,48,.6); }
+.btn.bio.lab { background: linear-gradient(#c9a7ff, #7a4ff0); }
+.btn.bio.lab.on { background: linear-gradient(#e6d6ff, #a77bff); }

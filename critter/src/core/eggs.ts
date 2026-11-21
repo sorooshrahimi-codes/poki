@@ -1,15 +1,15 @@
 import type { BiomeId, MutationId, Rarity } from "./types.ts";
-import { critterOf, type CritterDef } from "../data/critters.ts";
+import { CRITTER_BY_ID, critterOf, type CritterDef } from "../data/critters.ts";
 import type { Rng } from "./rng.ts";
 
 // Eggs: special catches sometimes leave an egg. It hatches after real minutes, a reason to come back,
 // and the surprise inside can be a critter you have never seen, or a golden one.
 
-export type EggTier = "speckled" | "sky" | "star" | "golden";
-export interface Egg { tier: EggTier; biome: BiomeId; readyAt: number }
+export type EggTier = "speckled" | "sky" | "star" | "golden" | "lab";
+export interface Egg { tier: EggTier; biome: BiomeId; readyAt: number; hybrid?: string }
 
-export const EGG_ART: Record<EggTier, string> = { speckled: "egg_speckled", sky: "egg_sky", star: "egg_star", golden: "egg_golden" };
-export const EGG_MINUTES: Record<EggTier, number> = { speckled: 3, sky: 10, star: 30, golden: 60 };
+export const EGG_ART: Record<EggTier, string> = { speckled: "egg_speckled", sky: "egg_sky", star: "egg_star", golden: "egg_golden", lab: "lab_egg" };
+export const EGG_MINUTES: Record<EggTier, number> = { speckled: 3, sky: 10, star: 30, golden: 60, lab: 10 };
 export const NEST_SLOTS = 4;
 
 /** what a catch may drop: rarer critters drop rarer eggs more often */
@@ -24,6 +24,7 @@ export function eggDrop(rarity: Rarity, mut: MutationId | null, rng: Rng): EggTi
 
 /** what hatches: each tier leans to its rarities; golden eggs always give a golden critter */
 export function hatch(e: Egg, rng: Rng): { def: CritterDef; mut: MutationId | null } {
+  if (e.tier === "lab" && e.hybrid) { const def = CRITTER_BY_ID[e.hybrid]; if (def) return { def, mut: rng() < 0.1 ? "gold" : null }; }
   const pool = critterOf(e.biome);
   const want: Rarity[] = e.tier === "speckled" ? ["common", "rare"] : e.tier === "sky" ? ["rare", "epic"] : e.tier === "star" ? ["epic", "legendary"] : ["common", "rare", "epic", "legendary"];
   const weights: Record<Rarity, number> = e.tier === "star" ? { common: 0, rare: 0, epic: 3, legendary: 1, secret: 0 } : { common: 3, rare: 2, epic: 1, legendary: 0.4, secret: 0 };

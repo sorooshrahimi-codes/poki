@@ -71,6 +71,16 @@ export const CRITTERS: CritterDef[] = [
   c("crystowl", "Crystowl", "epic", 60, 20, 4, 720, "#cfe8ff", "fly", { fr: "Hibou Cristal", de: "Kristalleule", es: "Búho Cristal", it: "Gufo Cristallo", pt: "Coruja Cristal", tr: "Kristal Baykuş", hi: "क्रिस्टल उल्लू", ja: "こおりふくろう" }),
   c("frostking", "Frostking", "legendary", 72, 22, 6.5, 2600, "#e0f4ff", "shy", { fr: "Roi du Givre", de: "Frostkönig", es: "Rey Escarcha", it: "Re del Gelo", pt: "Rei do Gelo", tr: "Ayaz Kral", hi: "हिमराजा", ja: "ふゆのおうさま" }),
   c("wyrmling", "Wyrmling", "legendary", 72, 20, 7.5, 3600, "#8fd3ff", "fly", { fr: "Dragonnet", de: "Drachling", es: "Dragoncito", it: "Draghetto", pt: "Dragãozinho", tr: "Ejderçik", hi: "नन्हा ड्रैगन", ja: "こドラゴン" }),
+  ...biome("lab"),
+  // hybrids: never in the wild, only made in the lab from two parents
+  c("buzzbun", "Buzzbun", "epic", 60, 20, 3, 70, "#ffd6e6", "fly"),
+  c("shroomslime", "Shroomslime", "epic", 58, 16, 3, 80, "#7fd3ff", "split"),
+  c("leafowl", "Leafowl", "epic", 60, 14, 3, 90, "#b07a4a", "fly"),
+  c("luckshell", "Luckshell", "epic", 58, 6, 3, 110, "#3ccf6a", "shell"),
+  c("glowflake", "Glowflake", "epic", 58, 24, 3.4, 420, "#fffbe0", "fly"),
+  c("fernfrost", "Fernfrost", "epic", 58, 26, 3.4, 480, "#e8f4ff", "shy"),
+  c("pineseal", "Pineseal", "epic", 60, 10, 3.6, 520, "#a8b4c4", "shell"),
+  c("aurospore", "Aurospore", "epic", 58, 18, 3.8, 900, "#c9a7ff", "split"),
 ];
 export interface BiomeDef { id: BiomeId; name: string; names?: Partial<Record<Lang, string>>; icon: string; bg: string; price: number }
 export const BIOMES: BiomeDef[] = [
@@ -81,6 +91,17 @@ export const BIOMES: BiomeDef[] = [
 /** the name to show, in the player's language */
 export const critterName = (d: CritterDef) => d.names?.[getLang()] ?? d.name;
 export const biomeName = (b: BiomeDef) => b.names?.[getLang()] ?? b.name;
+/** the lab's recipes: two parents (3 copies each needed, 2 each used) make one hybrid */
+export const RECIPES: { hybrid: string; a: string; b: string }[] = [
+  { hybrid: "buzzbun", a: "puffbun", b: "bumbo" },
+  { hybrid: "shroomslime", a: "mushi", b: "dewdrop" },
+  { hybrid: "leafowl", a: "sprig", b: "hootle" },
+  { hybrid: "luckshell", a: "snailo", b: "clovy" },
+  { hybrid: "glowflake", a: "glowbug", b: "snowpuff" },
+  { hybrid: "fernfrost", a: "fernfox", b: "mittens" },
+  { hybrid: "pineseal", a: "pinecub", b: "sealio" },
+  { hybrid: "aurospore", a: "spora", b: "auroray" },
+];
 export const critterOf = (b: BiomeId) => CRITTERS.filter((d) => d.biome === b);
 export const CRITTER_BY_ID: Record<string, CritterDef> = Object.fromEntries(CRITTERS.map((d) => [d.id, d]));
 
