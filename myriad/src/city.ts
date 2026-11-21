@@ -254,14 +254,17 @@ uniform sampler2D uPos, uVel;
 uniform float uS, uMode;
 uniform vec4 uB[${NB}];
 uniform vec4 uS2[${NB}];
+out float vK;
 ${ATLAS}
 void main() {
   int i = gl_VertexID;
+  vK = 1.0;
   vec4 p = texelFetch(uPos, ivec2(i % int(uS), i / int(uS)), 0);
   gl_PointSize = 1.0;
   if (p.w < 1.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   int b = int(floor(p.w - 2.0 + 0.01));
   bool ahead = fract(p.w) > 0.25;
+  vK = uS2[b].z > 0.0 ? uS2[b].z : 1.0;
   vec4 B = uB[b];
   vec3 lp = (p.xyz - vec3(B.x, uS2[b].y, B.y)) / (${VS.toFixed(3)} * uS2[b].x) + vec3(16.0, 0.0, 16.0);
   if (ahead) { vec3 vel = texelFetch(uVel, ivec2(i % int(uS), i / int(uS)), 0).xyz; lp += (length(vel) > 0.1 ? normalize(vel) : vec3(0.0, -1.0, 0.0)) * 1.2; }
@@ -272,8 +275,9 @@ void main() {
 const EAT_FS = `#version 300 es
 precision highp float;
 uniform float uAmount;
+in float vK;
 out vec4 o;
-void main() { o = vec4(uAmount, 0.0, 0.0, 0.0); }`;
+void main() { o = vec4(uAmount * vK, 0.0, 0.0, 0.0); }`;
 const PAINT_VS = `#version 300 es
 precision highp float;
 uniform sampler2D uPos;
@@ -355,7 +359,9 @@ void main() { o = vec4(uAmount); }`, "fill");
         solid++; top = Math.max(top, y);
       }
       this.buildings.push({ x: L.x, z: L.z, kind: L.kind, seed: L.seed, solid, eaten: 0, collapseAt: -1, h: top + 1 });
-      this.s2Arr[b * 4] = L.scale ?? 1; this.s2Arr[b * 4 + 1] = 0;
+      // how hard each thing is to eat: bushes are soft, trees firmer, houses and barns hard, towers hardest
+      const TOUGH = [0.35, 0.65, 0.22, 0.33, 0.25, 0.06, 1.0];
+      this.s2Arr[b * 4] = L.scale ?? 1; this.s2Arr[b * 4 + 1] = 0; this.s2Arr[b * 4 + 2] = TOUGH[L.kind];
       const half = (V * VS * (L.scale ?? 1)) / 2 + 1.0;
       for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) {
         const wx = (gx + 0.5) / GRID * WORLD - WORLD / 2, wz = (gz + 0.5) / GRID * WORLD - WORLD / 2;
@@ -430,11 +436,11 @@ void main() { o = vec4(uAmount); }`, "fill");
     gl.uniform1f(u.uS, S); gl.uniform4fv(u.uB, this.bArr); gl.uniform4fv(u.uS2, this.s2Arr);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.atlas.fb); gl.viewport(0, 0, AW, AH);
     gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT); gl.blendFunc(gl.ONE, gl.ONE);
-    gl.uniform1f(u.uMode, 0); gl.uniform1f(u.uAmount, dt * 7.5);
+    gl.uniform1f(u.uMode, 0); gl.uniform1f(u.uAmount, dt * 2.4);
     gl.drawArrays(gl.POINTS, 0, active);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.counter.fb); gl.viewport(0, 0, NB, 1);
     gl.blendEquation(gl.FUNC_ADD);
-    gl.uniform1f(u.uMode, 1); gl.uniform1f(u.uAmount, dt * 7.5);
+    gl.uniform1f(u.uMode, 1); gl.uniform1f(u.uAmount, dt * 2.4);
     gl.drawArrays(gl.POINTS, 0, active);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.color.fb); gl.viewport(0, 0, COLOR, COLOR);
     gl.useProgram(this.paint.p);
@@ -500,7 +506,7 @@ void main() { o = vec4(uAmount); }`, "fill");
   }
   remove(b: number) { this.gone[b] = 1; this.syncUniforms(); }
   /** add one more volume (the giant) into a free slot, uploading only its tile */
-  add(L: { x: number; z: number; kind: Kind; seed: number }, scale: number, yOff: number): number {
+  add(L: { x: number; z: number; kind: Kind; seed: number }, scale: number, yOff: number, tough = 1): number {
     const gl = this.gl, b = this.buildings.length;
     if (b >= NB) return -1;
     const vol = new Uint8Array(V * V * V), rnd = mulberry(L.seed);
@@ -517,7 +523,7 @@ void main() { o = vec4(uAmount); }`, "fill");
       gl.texSubImage2D(gl.TEXTURE_2D, 0, (b % 8) * 256, Math.floor(b / 8) * 128, 256, 128, gl.RGBA, gl.FLOAT, tile);
     }
     this.buildings.push({ x: L.x, z: L.z, kind: L.kind, seed: L.seed, solid, eaten: 0, collapseAt: -1, h: 32 });
-    this.s2Arr[b * 4] = scale; this.s2Arr[b * 4 + 1] = yOff;
+    this.s2Arr[b * 4] = scale; this.s2Arr[b * 4 + 1] = yOff; this.s2Arr[b * 4 + 2] = tough;
     this.syncUniforms();
     this.place(b, L.x, L.z, yOff);
     return b;

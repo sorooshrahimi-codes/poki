@@ -66,18 +66,18 @@ void main() {
   vec3 mill = tang * min(dist, uRadius) * (0.15 + 0.35 * calm);
   // 3. curl noise, small: shimmer inside the body of the swarm
   vec3 q = pos * 0.11;
-  float t = uTime * 0.45;
+  float t = uTime * 0.25;
   const vec3 k1 = vec3(1.0, 0.6, 0.3), k2 = vec3(-0.4, 1.1, 0.8), k3 = vec3(0.7, -0.3, 1.2), k4 = vec3(1.3, 0.9, -0.6);
   vec3 g1 = k1 * cos(dot(k1, q) + t) + k2 * cos(dot(k2, q) * 1.7 + 1.3 * t) * 0.6;
   vec3 g2 = k3 * cos(dot(k3, q) - 0.7 * t) + k4 * cos(dot(k4, q) * 1.9 + 0.5 * t) * 0.6;
-  vec3 flow = cross(g1, g2) * (1.4 + 0.06 * uRadius) * (0.6 + 0.6 * r.z);
+  vec3 flow = cross(g1, g2) * (0.9 + 0.04 * uRadius) * (0.6 + 0.6 * r.z);
   // 4. away from crowding: the density gradient
   vec2 e = uDenTexel * uWorld;
   float c0 = den(pos.xz);
   vec2 g = vec2(den(pos.xz + vec2(e.x, 0.0)) - den(pos.xz - vec2(e.x, 0.0)), den(pos.xz + vec2(0.0, e.y)) - den(pos.xz - vec2(0.0, e.y)));
   vec3 rep = -vec3(g.x, 0.0, g.y) * uRep;
   vec3 want = uLeaderVel + seek + mill + flow;
-  vel += ((want - vel) * 5.5 + rep) * uDt;
+  vel += ((want - vel) * 4.0 + rep) * uDt;
   // 5. height: a soft floor, a soft ceiling that grows with the swarm, and the flow lifts sheets into the air
   float cap = 1.5 + uRadius * 0.45 * uLift;
   vel.y += (max(0.0, 0.4 - pos.y) * 12.0 - max(0.0, pos.y - cap) * 4.0 - 0.6) * uDt;

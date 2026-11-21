@@ -98,7 +98,7 @@ function xform(out: Float32Array, m: Float32Array, v: Float32Array) {
 }
 let down = false;
 countNInit();
-function countNInit() { const el = document.getElementById("countN"); if (el) el.textContent = String(Number(params.get("start") ?? 1500)); }
+function countNInit() { const el = document.getElementById("countN"); if (el) el.textContent = String(Number(params.get("start") ?? 800)); }
 document.getElementById("next")!.addEventListener("click", () => {
   // the next village: a new seed, the swarm keeps everything it has
   district++;
@@ -126,7 +126,7 @@ addEventListener("keydown", (e) => {
 const CAP = Math.min(S * S, Number(params.get("n") ?? 200_000));
 // "grow=1" is the phase-1 stress demo (grows by itself); the game grows only by eating
 const grow = params.get("grow") === "1";
-let active = grow ? 100 : Number(params.get("start") ?? 1500);
+let active = grow ? 100 : Number(params.get("start") ?? 800);
 let meal = 0;
 let district = 1;
 // ---------------------------------------------------------------- the stone giant: wakes when the village is mostly colour again
@@ -141,7 +141,7 @@ city.onEat = (b, amount) => {
   if (!city.gone[b] && B.eaten > B.solid * 0.97) city.remove(b);
   // the first big bites of a building shake the camera a little (things are coming down)
   // structural failure: a fifth of a building gone and the rest comes down (trees a little later)
-  const failAt = B.kind === 1 ? 0.28 : B.kind === 6 ? 0.5 : B.kind === 5 ? 0.45 : 0.2;
+  const failAt = B.kind === 1 ? 0.3 : B.kind === 6 ? 0.5 : B.kind === 5 ? 0.45 : 0.3;
   if (B.eaten > B.solid * failAt && B.collapseAt < 0 && b !== giant) {
     B.collapseAt = time; city.fail(b);
     shake = B.kind === 6 ? 0.2 : 0.9; audio.thump(B.kind === 1 || B.kind === 6 ? 0.6 : 1.2);
@@ -166,11 +166,11 @@ function frame(now: number) {
   // district progress (also drives the goal bar)
   { let tot = 0, eat = 0; for (let b = 0; b < city.buildings.length; b++) { if (b === giant) continue; const B = city.buildings[b]; tot += B.solid; eat += Math.min(B.solid, B.eaten); } progress = Math.min(1, (eat / Math.max(1, tot)) * 1.15); }
   swarm.shock[3] = 0;
-  if (giant < 0 && progress >= (params.get("giant") === "1" && time > 1.5 ? 0 : 0.35)) {
+  if (giant < 0 && progress >= (params.get("giant") === "1" && time > 1.5 ? 0 : 0.5)) {
     // it rises on the far side of the swarm from the camera, so the player sees it come up out of the ground
     const ang = Math.atan2(leader[2] - cam[2], leader[0] - cam[0]);
     const gx = Math.max(-60, Math.min(60, leader[0] + Math.cos(ang) * 38)), gz = Math.max(-60, Math.min(60, leader[2] + Math.sin(ang) * 38));
-    giant = city.add({ x: gx, z: gz, kind: 5, seed: 4242 }, GIANT_SCALE, -GIANT_H);
+    giant = city.add({ x: gx, z: gz, kind: 5, seed: 4242 }, GIANT_SCALE, -GIANT_H, 0.06); // hard stone: a real fight
     giantState = "rise"; giantT = 0; audio.thump(1.4); shake = 1.2;
   }
   if (giant >= 0 && !city.gone[giant]) {
@@ -187,8 +187,10 @@ function frame(now: number) {
       const bob = -Math.abs(Math.sin(giantT * 3.9)) * 0.5;
       if (d > 4) city.place(giant, G.x + (dx / d) * step, G.z + (dz / d) * step, bob);
       if (giantT >= nextStomp) {
-        nextStomp = giantT + 1.7;
-        swarm.shock[0] = G.x; swarm.shock[1] = G.z; swarm.shock[2] = 16; swarm.shock[3] = 22;
+        // the more of it is gone, the angrier: faster and harder stomps
+        const hurt = Math.min(1, G.eaten / (G.solid * 0.55));
+        nextStomp = giantT + 1.7 - hurt * 0.8;
+        swarm.shock[0] = G.x; swarm.shock[1] = G.z; swarm.shock[2] = 16 + hurt * 8; swarm.shock[3] = 22 + hurt * 14;
         shake = Math.max(shake, 0.9); audio.thump(1.1);
       }
       if (G.eaten > G.solid * 0.55) { giantState = "fallen"; shake = 1.4; audio.thump(1.6); city.place(giant, G.x, G.z, 0); }
@@ -203,14 +205,14 @@ function frame(now: number) {
   audio.swarm(active, Math.hypot(leaderVel[0], leaderVel[2]));
   // the seed: to the finger, or a slow wander when nobody touches
   if (!hasTarget || time - lastInput > 4) {
-    const a = time * 0.32;
+    const a = time * 0.16;
     target[0] = Math.cos(a) * 34 + Math.sin(a * 2.3) * 12; target[2] = Math.sin(a * 1.3) * 28 + Math.cos(a * 3.1) * 6;
   }
-  const speed = 18 + Math.sqrt(active) * 0.05;
+  const speed = 8.5 + Math.sqrt(active) * 0.025;
   const dx = target[0] - leader[0], dz = target[2] - leader[2], d = Math.hypot(dx, dz);
   // the seed is the finger: it gets there fast, easing in at the end
-  const vx = d > 0.01 ? (dx / d) * Math.min(d * 6, speed * 1.6) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * 6, speed * 1.6) : 0;
-  leaderVel[0] += (vx - leaderVel[0]) * Math.min(1, dt * 12); leaderVel[2] += (vz - leaderVel[2]) * Math.min(1, dt * 12);
+  const vx = d > 0.01 ? (dx / d) * Math.min(d * 3.5, speed * 1.25) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * 3.5, speed * 1.25) : 0;
+  leaderVel[0] += (vx - leaderVel[0]) * Math.min(1, dt * 7); leaderVel[2] += (vz - leaderVel[2]) * Math.min(1, dt * 7);
   leader[0] += leaderVel[0] * dt; leader[2] += leaderVel[2] * dt;
 
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
@@ -220,7 +222,7 @@ function frame(now: number) {
   // camera: behind and above the seed, pulling back as the swarm grows
   const want = 15 + Math.sqrt(active) * 0.13 + (giant >= 0 && giantState !== "fallen" && !city.gone[giant] ? 14 : 0);
   camD += (want - camD) * Math.min(1, dt * (time < 2.5 ? 0.9 : 1.5));
-  camX += (leader[0] - camX) * Math.min(1, dt * 3); camZ += (leader[2] - camZ) * Math.min(1, dt * 3);
+  camX += (leader[0] - camX) * Math.min(1, dt * 2.2); camZ += (leader[2] - camZ) * Math.min(1, dt * 2.2);
   // a slow orbit gives parallax: the swarm reads as a volume, not a decal
   const orb = Math.sin(time * 0.11) * 0.35;
   cam[0] = camX + Math.sin(orb) * camD * 0.95; cam[1] = camD * 0.82; cam[2] = camZ + Math.cos(orb) * camD * 0.95;
