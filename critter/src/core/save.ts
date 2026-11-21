@@ -22,6 +22,8 @@ export interface SaveData {
   giantWins?: number;
   /** what catches have added to the giant bar since the last giant (on top of the vacuum level) */
   charge?: number;
+  /** book chests opened per place (0-3) */
+  bookChests?: Record<string, number>;
   /** perks picked after giants (an id may repeat: they stack) */
   perks?: string[];
   /** the daily gift: last day claimed (yyyy-mm-dd) and the streak */

@@ -153,7 +153,7 @@ function handleEvents() {
         sparkToBar(field.nozzle.x, field.nozzle.y, Math.floor(save.charge) > before);
       }
       // a new species gets its big moment, unless a giant fight is on (then it slips into the book quietly)
-      if (isNew && !field.critters.some((k) => k.boss > 0 && k.state !== "caught") && c.boss === 0) { celebrating.add(c.def.id); void celebrate([c.def.id]); }
+      if (isNew && !field.critters.some((k) => k.boss > 0 && k.state !== "caught") && c.boss === 0) { celebrating.add(c.def.id); void celebrate([c.def.id]).then(() => checkChests(c.def.biome)); }
       else if (isNew) { const bb = $("bookBtn"); bb.classList.remove("got"); void bb.offsetWidth; bb.classList.add("got"); }
       if (c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") { view.shake = 8; sfx.reveal(c.def.rarity === "legendary" ? "legendary" : "epic"); }
       if (isNew) sfx.newFish();
@@ -508,6 +508,26 @@ function flyUp(from: HTMLElement) {
   requestAnimationFrame(() => requestAnimationFrame(() => { s.style.transform = `translate(${b.left + b.width * 0.8 - a.left - a.width / 2}px, ${b.top - a.top}px) scale(.6)`; }));
   setTimeout(() => s.remove(), 700);
 }
+/** the book's chests: a place's species list (its giant is won, not collected here) and the three milestones */
+const bookList = (b: BiomeId) => CRITTERS.filter((d) => d.biome === b && d.rarity !== "secret");
+const bookGot = (b: BiomeId) => bookList(b).filter((d) => save.index[d.id]).length;
+const chestsAt = (b: BiomeId) => [4, 8, bookList(b).length];
+/** open any chest a place has earned: coins, then a perk card, then a big chest and a perk card */
+async function checkChests(b: BiomeId) {
+  const got = bookGot(b), at = chestsAt(b), done = ((save.bookChests ??= {})[b] ??= 0);
+  if (done >= 3 || got < at[done]) return;
+  save.bookChests[b] = done + 1; writeSave(save);
+  const k = placeIndex(b), base = Math.max(200, Math.round(incomePerSec() * 60 + 150 * (1 + k * 4)));
+  const prize = done === 0 ? base * 2 : done === 2 ? base * 8 : 0;
+  const box = $("gift");
+  box.innerHTML = `<div class="chest">${done === 2 ? "👑" : "🎁"}</div><div class="days">${bookList(b).slice(0, 12).map((d) => `<img class="${save.index[d.id] ? "" : "sil"}" src="./art/${d.art}.webp" alt="">`).join("")}</div>${prize ? `<div class="prize">${COIN} +${short(prize)}</div>` : ""}${done >= 1 ? `<div class="prize">🃏</div>` : ""}<button class="btn big go" id="giftGo">✔</button>`;
+  box.classList.remove("hidden"); sfx.reveal(done === 2 ? "legendary" : "epic"); input.on = false;
+  await new Promise<void>((r) => { $("giftGo").onclick = () => r(); });
+  box.classList.add("hidden");
+  if (prize) { save.coins += prize; flyCoins(view.W / 2, view.H / 2, 10); }
+  if (done >= 1) await pickPerk();
+  writeSave(save); updateUi();
+}
 /** the book: your collection by place, just to look at */
 function openBook(b: BiomeId = save.biome) {
   sheet = b as Plot; parkBiome = b; gridKey = "";
@@ -515,7 +535,9 @@ function openBook(b: BiomeId = save.biome) {
   // the styles you have won: one per giant beaten
   const won = Math.min(SKINS.length, 1 + (save.giantWins ?? 0));
   const skins = SKINS.map((k, i) => `<button class="skin${i >= won ? " locked" : ""}${(save.skin ?? "air") === k.id ? " on" : ""}" data-skin="${k.id}" style="--sk:rgb(${k.fill})">${i < won ? k.icon : "🔒"}</button>`).join("");
-  $("shTitle").innerHTML = `<div class="skins">${skins}</div><div class="tabs">${tabs}</div>`;
+  const at = chestsAt(b), got = bookGot(b), opened = (save.bookChests ?? {})[b] ?? 0, all = at[2];
+  const track = `<div class="ctrack"><i style="width:${Math.round((got / all) * 100)}%"></i>${at.map((n, i) => `<span class="ch${i < opened ? " open" : ""}" style="left:${(n / all) * 100}%">${i < opened ? "✔" : i === 2 ? "👑" : "🎁"}<small>${n}</small></span>`).join("")}</div>`;
+  $("shTitle").innerHTML = `<div class="skins">${skins}</div><div class="tabs">${tabs}</div>${track}`;
   for (const el of $("shTitle").querySelectorAll<HTMLElement>("[data-skin]")) el.onclick = () => { if (el.classList.contains("locked")) { sfx.nope(); return; } save.skin = el.dataset.skin; writeSave(save); sfx.tap(); openBook(b); };
   for (const el of $("shTitle").querySelectorAll<HTMLElement>("[data-b]")) el.onclick = () => openBook(el.dataset.b as BiomeId);
   $("shHunt").classList.add("hidden");

@@ -74,6 +74,7 @@ Jar and park trips, eggs, bubble wand, flute, companions, lab: each added a rule
 | Constant small wins | Dopamine every few seconds | Pops, combo pitch, coins flying, upgrade every ~10 s | done |
 | Each stage plays differently | Novelty keeps the session going | Ice: critters slide · Candy: sugar rush of golden ones · Volcano: eruptions throw critters up, ×2 in the air · Moon: low gravity | done |
 | A big shareable moment | Clips, word of mouth | Giant taffy-stretch, slow motion, POP, burp; Moon finale with share | done |
+| Collection goals | "Just one more species" | Each place's book has 3 chests (4 / 8 / all species): coins, a perk card, a crown chest | done |
 | Something to show off | Identity, pride | Suction styles won from each giant (honey, forest, ice, candy, lava, stars), chosen in the book | done |
 | Surprise + choice in the moment | Unpredictable runs | Event deck in levels (mystery box, bombs, treasure runner, gust, parade, frenzy); the map forks: the normal way or the risky way (lucky wheel + a hard level for 2.5x) | done |
 | Short varied levels | Variety + a sense of progress | Each place: 5 levels (catch N, a species, a combo, golden rain, fend off the rival), 1–3 stars, then the giant node | done |
