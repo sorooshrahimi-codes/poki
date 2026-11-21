@@ -77,7 +77,7 @@ const cam = new Float32Array(3), camR = new Float32Array(3), camU = new Float32A
 const leader = new Float32Array([0, 0, 0]), leaderVel = new Float32Array(3);
 const target = new Float32Array([0, 0, 0]);
 let hasTarget = false, lastInput = -99;
-let camD = 6, camX = 0, camZ = 0, shake = 0;
+let camD = 2.2, camX = 0, camZ = 0, shake = 0;
 
 // ---------------------------------------------------------------- input: the finger (or mouse) is where the seed goes
 const ndc = new Float32Array(4), tmp4 = new Float32Array(4);
@@ -110,15 +110,35 @@ document.getElementById("next")!.addEventListener("click", () => {
 });
 const hand = document.getElementById("hand")!, countN = document.getElementById("countN")!, countBox = document.getElementById("count")!, goalFill = document.getElementById("goalFill")!;
 let touched = false;
+// pointers: one finger (or the mouse) steers; two fingers pinch to zoom; the wheel zooms too
+const ptrs = new Map<number, { x: number; y: number }>();
+let pinch0 = 0, zoom0 = 1, userZoom = 1, aimX = 0, aimY = 0, aiming = false;
 canvas.addEventListener("pointerdown", (e) => {
-  audio.start(); down = true; pick(e.clientX, e.clientY);
+  audio.start();
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); zoom0 = userZoom; aiming = false; }
+  else { down = true; aiming = true; aimX = e.clientX; aimY = e.clientY; }
   if (!touched) { touched = true; hand.classList.add("gone"); }
 });
-addEventListener("pointermove", (e) => { if (down || e.pointerType === "mouse") pick(e.clientX, e.clientY); });
-addEventListener("pointerup", () => { down = false; });
+addEventListener("pointermove", (e) => {
+  const p = ptrs.get(e.pointerId);
+  if (p) { p.x = e.clientX; p.y = e.clientY; }
+  if (ptrs.size === 2 && pinch0 > 0) {
+    const [a, b] = [...ptrs.values()];
+    userZoom = Math.min(2.6, Math.max(0.4, zoom0 * pinch0 / Math.max(20, Math.hypot(a.x - b.x, a.y - b.y))));
+    return;
+  }
+  if (down || e.pointerType === "mouse") { aiming = true; aimX = e.clientX; aimY = e.clientY; }
+});
+const lift = (e: PointerEvent) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; if (ptrs.size === 0) down = false; };
+addEventListener("pointerup", lift);
+addEventListener("pointercancel", lift);
+canvas.addEventListener("wheel", (e) => { e.preventDefault(); userZoom = Math.min(2.6, Math.max(0.4, userZoom * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
 addEventListener("keydown", (e) => {
   audio.start();
   if (e.key === " " || e.key.startsWith("Arrow")) e.preventDefault();
+  if (e.key === "+" || e.key === "=") userZoom = Math.max(0.4, userZoom / 1.15);
+  if (e.key === "-" || e.key === "_") userZoom = Math.min(2.6, userZoom * 1.15);
   if (e.key === "h") hudCanvas.style.display = hudCanvas.style.display === "none" ? "block" : "none";
 });
 
@@ -203,6 +223,7 @@ function frame(now: number) {
   }
   while (milestone < MILESTONES.length && active >= MILESTONES[milestone]) audio.chime(milestone++);
   audio.swarm(active, Math.hypot(leaderVel[0], leaderVel[2]));
+  if (aiming && (down || !("ontouchstart" in window))) pick(aimX, aimY);
   // the seed: to the finger, or a slow wander when nobody touches
   if (!hasTarget || time - lastInput > 4) {
     const a = time * 0.16;
@@ -221,11 +242,14 @@ function frame(now: number) {
 
   // camera: behind and above the seed, pulling back as the swarm grows
   const want = 15 + Math.sqrt(active) * 0.13 + (giant >= 0 && giantState !== "fallen" && !city.gone[giant] ? 14 : 0);
-  camD += (want - camD) * Math.min(1, dt * (time < 2.5 ? 0.9 : 1.5));
+  // opening: close and low on the glowing seed, rising and pulling back over ~3 s
+  const open = Math.min(1, time / 3.2), ease = open * open * (3 - 2 * open);
+  const wantD = (2.2 + (want - 2.2) * ease) * userZoom;
+  camD += (wantD - camD) * Math.min(1, dt * (time < 3.2 ? 6 : 3));
   camX += (leader[0] - camX) * Math.min(1, dt * 2.2); camZ += (leader[2] - camZ) * Math.min(1, dt * 2.2);
   // a slow orbit gives parallax: the swarm reads as a volume, not a decal
-  const orb = Math.sin(time * 0.11) * 0.35;
-  cam[0] = camX + Math.sin(orb) * camD * 0.95; cam[1] = camD * 0.82; cam[2] = camZ + Math.cos(orb) * camD * 0.95;
+  const pitch = 0.3 + 0.52 * ease; // height / distance: low at first, then the overview
+  cam[0] = camX; cam[1] = 0.6 + camD * pitch; cam[2] = camZ + camD * 0.95;
   const aspect = cw / ch;
   perspective(proj, aspect < 1 ? 1.05 : 0.85, aspect, 0.3, 600);
   // a building coming down shakes the camera a little
