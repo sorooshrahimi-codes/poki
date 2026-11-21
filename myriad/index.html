@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Myriad</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #05060a; touch-action: none; user-select: none; -webkit-user-select: none; }
+      canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+      canvas#hud { position: fixed; left: 8px; top: 8px; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="gl"></canvas>
+    <canvas id="hud" width="300" height="120"></canvas>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
