@@ -99,6 +99,8 @@ export interface Field {
   /** the giant's next attack in this many seconds; how angry the giants are (0..) */
   attackT: number;
   fury: number;
+  /** the treasure room: only gifts and treasure runners, one after another */
+  bonus: boolean;
   /** a place's own level: bushes to blow open, sliders on the ice, sticky candy, falling into lava, floating away */
   mode2: "bush" | "slide" | "sticky" | "lava" | "float" | null;
   /** level tweaks: a species that shows up often, a rival who raids nonstop */
@@ -137,7 +139,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, mode2: null, special: 0, specialFx: 0, eventT: 12, eventsOn: false, stun: 0, frenzy: 0, attackT: 3.5, fury: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, bonus: false, mode2: null, special: 0, specialFx: 0, eventT: 12, eventsOn: false, stun: 0, frenzy: 0, attackT: 3.5, fury: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -520,8 +522,8 @@ function stepEvents(f: Field, dt: number, rng: Rng) {
   if (!f.eventsOn || f.script < 2 || f.critters.some((c) => c.boss > 0 && c.state !== "caught")) return;
   f.eventT -= dt;
   if (f.eventT > 0) return;
-  f.eventT = 12 + rng() * 6;
-  const e = EVENTS[Math.floor(rng() * EVENTS.length)];
+  f.eventT = f.bonus ? 2.2 + rng() * 1.2 : 12 + rng() * 6;
+  const e = f.bonus ? (rng() < 0.55 ? "treasure" : "box") : EVENTS[Math.floor(rng() * EVENTS.length)];
   const pool = critterOf(f.biome).filter((d) => d.rarity === "common");
   const y = () => f.farY + (f.nearY - f.farY) * (0.2 + rng() * 0.7);
   if (e === "box") {
