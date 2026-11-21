@@ -7,7 +7,8 @@ import { OFFLINE_CAP_MS, UPGRADES, UPGRADE_ORDER, catchCoins, power, range, tank
 import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
 import { GIANTS, SKINS, critterOf, giantOf, giantStep } from "./data/critters.ts";
-import { MOUTH_FULL, REACH_FULL, vacLevel, valueMult } from "./core/economy.ts";
+import { MOUTH_FULL, REACH_FULL, tierOf, vacLevel, valueMult } from "./core/economy.ts";
+import { fireSpecial } from "./core/field.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
 import type { BiomeId } from "./core/types.ts";
@@ -141,6 +142,7 @@ function handleEvents() {
         else if (lvl.task === "combo") lvl.count = Math.max(lvl.count, combo);
         if (lvl.count >= lvl.goal) { lvl.count = lvl.goal; setTimeout(() => endLevel(true), 400); }
       }
+      if (!rush && c.boss === 0 && tierOf(vacLevel(save.up)) > 0) field.special = Math.min(1, field.special + 0.09);
       // every catch also pushes the giant bar a little, right away
       if (!rush && c.boss === 0) {
         const add = ({ common: 0.06, rare: 0.12, epic: 0.25, legendary: 0.5, secret: 0.5 } as const)[c.def.rarity] * (c.mut ? 2 : 1);
@@ -395,6 +397,19 @@ async function showJourney(from: number, to: number) {
   box.classList.add("hidden");
 }
 
+/** the vacuum evolves: the old machine, a flash, the new one, and its special move */
+async function evolve(tier: number) {
+  const box = $("evolve");
+  const from = tier === 1 ? "kid_vac" : `kid_vac${tier}`, to = `kid_vac${tier + 1}`;
+  const move = ["", "🌪️", "🌪️❄️", "🌌"][tier];
+  box.innerHTML = `<div class="rays"></div><img class="old" src="./art/${from}.webp" alt=""><img class="new" src="./art/${to}.webp" alt=""><div class="mv">${move}</div><button class="btn big go" id="evoGo">▶</button>`;
+  box.classList.remove("hidden"); input.on = false;
+  sfx.reveal("legendary"); setTimeout(() => sfx.event(), 900);
+  await new Promise<void>((r) => { $("evoGo").onclick = () => r(); });
+  box.classList.add("hidden");
+  field.special = 1; // a first one to try right away
+}
+
 /** the end of the road: you sucked up the Moon. A trophy moment, a share button, then the giants come back stronger. */
 async function moonFinale() {
   const box = $("finale");
@@ -494,6 +509,7 @@ function openBook(b: BiomeId = save.biome) {
 }
 $("bookBtn").onclick = () => openBook();
 $("lureBtn2").onclick = () => void lure();
+$("specialBtn").onpointerdown = (e) => { e.stopPropagation(); if (fireSpecial(field, tierOf(vacLevel(save.up)))) { sfx.rumble(); view.shake = 12; } else sfx.nope(); };
 $("rushBtn2").onclick = () => void startRush(1 + Math.floor(Math.random() * 999_983), null);
 
 // ------------------------------------------------------------------ the park
@@ -557,7 +573,9 @@ function buy(id: UpgradeId) {
   const cost = upgradeCost(save.up, id);
   if (cost === null) return;
   if (cost > save.coins) { sfx.nope(); return; }
+  const tierBefore = tierOf(vacLevel(save.up));
   save.coins -= cost; save.up[id]++;
+  if (tierOf(vacLevel(save.up)) > tierBefore) setTimeout(() => void evolve(tierOf(vacLevel(save.up))), 300);
   sfx.buy(); writeSave(save); updateUi();
   { const m = document.querySelector("#fieldHead .me"); m?.classList.remove("plus"); void (m as HTMLElement | null)?.offsetWidth; m?.classList.add("plus"); }
 }
@@ -1097,6 +1115,11 @@ function frame(now: number) {
   const onMap = mode === "field" && !lvl && !$("levels").classList.contains("hidden");
   view.giant = gH && !teasing && !onMap ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need, k: Math.min(1, L / gH.need) } : null;
   view.vac = L;
+  view.tier = tierOf(vacLevel(save.up));
+  const sp = $("specialBtn");
+  sp.classList.toggle("hidden", view.tier === 0 || !lvl || lvl.done || mode !== "field");
+  sp.classList.toggle("ready", field.special >= 1);
+  sp.style.setProperty("--k", String(field.special));
   view.skin = SKINS.find((k) => k.id === save.skin) ?? SKINS[0];
   if (mode === "rush" && rush) {
     rush.left -= dt;

@@ -79,6 +79,10 @@ export interface Field {
   rivalT: number;
   /** set by the controller: rivals only show up once the player knows the basics */
   rivalOn: boolean;
+  /** the special move: fills with catches; the controller fires it */
+  special: number;
+  /** seconds the special's swirl is still showing (for the drawing) */
+  specialFx: number;
   /** level tweaks: a species that shows up often, a rival who raids nonstop */
   favor: string | null;
   rivalFast: boolean;
@@ -115,7 +119,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, special: 0, specialFx: 0, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -234,6 +238,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
   }
 
   bossClock -= dt;
+  f.specialFx = Math.max(0, f.specialFx - dt);
   stepRival(f, dt, inp, up, rng);
   if (f.biome === "volcano" && f.script >= 2) {
     f.eruptT -= dt;
@@ -449,4 +454,23 @@ function stepRival(f: Field, dt: number, inp: FieldInput, up: Upgrades, rng: Rng
     r.x += 380 * dt;
     if (r.x > f.right + 120) f.rival = null;
   }
+}
+
+/** the special move, stronger with every evolution of the vacuum:
+ *  tier 1 a tornado around the nozzle, tier 2 a bigger one that also freezes the rest, tier 3 a black hole that takes the whole field.
+ *  A giant in the way gets a big tug. */
+export function fireSpecial(f: Field, tier: number) {
+  if (tier < 1 || f.special < 1) return false;
+  f.special = 0; f.specialFx = 1.2;
+  const R = tier >= 3 ? 9999 : tier === 2 ? 330 : 230;
+  for (const c of f.critters) {
+    if (c.state === "caught" || c.leaving) continue;
+    const by = c.y - c.lift - c.def.size * c.scale * 0.4 * depthK(f, c.y);
+    const near = Math.hypot(c.x - f.nozzle.x, by - f.nozzle.y) < R;
+    if (c.boss > 0) { if (near || tier >= 3) { c.grip = Math.min(0.98, c.grip + (tier >= 3 ? 0.6 : 0.35)); c.state = "tug"; } continue; }
+    if (near) { c.hidden = false; c.state = "pulled"; c.bubbled = 0; }
+    else if (tier >= 2) c.frozen = 3;
+  }
+  if (f.rival && (f.rival.phase === "in" || f.rival.phase === "grab")) { f.rival.phase = "blown"; f.rival.t = 0; f.ev.push({ kind: "rivalBlown" }); }
+  return true;
 }

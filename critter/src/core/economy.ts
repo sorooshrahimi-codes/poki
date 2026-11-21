@@ -31,3 +31,7 @@ export const OFFLINE_CAP_MS = 2 * 3600_000;
 
 /** the vacuum's level: every upgrade counts, it is what the giants are measured against */
 export const vacLevel = (up: Upgrades) => up.power + up.range + up.tank;
+
+/** the vacuum evolves: a new machine at these levels (0 = the starter toy) */
+export const TIER_AT = [0, 8, 25, 60];
+export const tierOf = (level: number) => TIER_AT.filter((x) => level >= x).length - 1;

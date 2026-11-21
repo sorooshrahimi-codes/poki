@@ -536,3 +536,21 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
 #lvlEnd .fail { font-size: 64px; }
 @media (orientation: landscape) and (max-height: 600px) { #levels { top: 70px; bottom: 50px; } #levels .node { width: 56px; height: 56px; } #levels .node.giant { width: 78px; height: 78px; } #levels .node.giant img.gi { width: 60px; height: 60px; } }
 #levels::before { content: ""; position: fixed; inset: 0; z-index: -1; background: radial-gradient(ellipse at 50% 55%, rgba(13,30,69,.35), rgba(13,30,69,.7)); pointer-events: none; }
+/* the special move */
+#specialBtn { position: absolute; left: 50%; translate: -50% 0; bottom: 64px; width: 64px; height: 64px; border: 0; border-radius: 50%; pointer-events: auto; cursor: pointer; z-index: 5;
+  background: conic-gradient(#7be495 calc(var(--k, 0) * 360deg), rgba(13,30,69,.45) 0); padding: 5px; }
+#specialBtn i { position: absolute; inset: 5px; border-radius: 50%; background: rgba(13,30,69,.75); }
+#specialBtn span { position: relative; font-size: 28px; filter: grayscale(.8) opacity(.6); }
+#specialBtn.ready { animation: pulse .8s infinite; box-shadow: 0 0 22px 6px rgba(123,228,149,.8); }
+#specialBtn.ready span { filter: none; }
+@media (orientation: landscape) and (max-height: 600px) { #specialBtn { left: auto; right: 64px; translate: none; bottom: 6px; width: 52px; height: 52px; } }
+/* evolution moment */
+#evolve { position: absolute; inset: 0; z-index: 9; pointer-events: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: radial-gradient(circle, #2d5aa0, #0d1e45); animation: fadeIn .3s; overflow: hidden; }
+#evolve .rays { position: absolute; width: 560px; height: 560px; border-radius: 50%; background: repeating-conic-gradient(rgba(255,240,180,.3) 0 10deg, transparent 10deg 24deg); mask: radial-gradient(circle, #000 15%, transparent 65%); -webkit-mask: radial-gradient(circle, #000 15%, transparent 65%); animation: spin 8s linear infinite; }
+#evolve img { position: relative; width: min(56vw, 240px); }
+#evolve .old { position: absolute; animation: evoOut 1.1s forwards; }
+#evolve .new { animation: evoIn 1.4s both; filter: drop-shadow(0 0 24px rgba(255,240,180,.8)); }
+#evolve .mv { position: relative; font-size: 46px; animation: popIn .5s 1.4s both cubic-bezier(.3,1.6,.5,1); }
+#evolve .btn { position: relative; animation: popIn .4s 1.8s both; }
+@keyframes evoOut { 0% { opacity: 1; filter: brightness(1); } 60% { opacity: 1; filter: brightness(4); transform: scale(1.1); } 100% { opacity: 0; filter: brightness(6); transform: scale(1.3); } }
+@keyframes evoIn { 0%, 55% { opacity: 0; transform: scale(.6); filter: brightness(5); } 100% { opacity: 1; transform: scale(1); filter: brightness(1) drop-shadow(0 0 24px rgba(255,240,180,.8)); } }

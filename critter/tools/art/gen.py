@@ -89,6 +89,12 @@ JOBS["kid_rival"] = ("A single game sprite on a fully transparent background: a 
     "black shorts, sneakers, wearing a sleek green-and-black vacuum tank backpack with a glowing green dome, holding a chunky vacuum nozzle pointing forward to the right, side view facing right. "
     "Full body, no ground, no text. Same art style and proportions as the reference kid. " + STYLE, "1:1", True, [dl.STYLE_REF, "https://media.base44.com/images/public/6aea41c732ebf572da66fc50/6ed63788d_generated_38770da9.png"])
 
+_KID = "A single game sprite on a fully transparent background: the same cheerful kid explorer (red cap, blue overalls, sneakers) in side view facing right, holding a vacuum nozzle pointing forward to the right. Full body, no ground, no text. Same art style and proportions as the reference kid. "
+_REF = [dl.STYLE_REF, "https://media.base44.com/images/public/6aea41c732ebf572da66fc50/6ed63788d_generated_38770da9.png"]
+JOBS["kid_vac2"] = (_KID + "The vacuum is UPGRADED: a bigger turbo backpack with two glass domes swirling with blue wind, chrome pipes, and a wider double-barrel nozzle with a blue glow. " + STYLE, "1:1", True, _REF)
+JOBS["kid_vac3"] = (_KID + "The vacuum is a MEGA machine: a huge golden backpack with spinning turbines and a big glass tank full of a tiny tornado, a long golden nozzle with glowing rings and sparks. " + STYLE, "1:1", True, _REF)
+JOBS["kid_vac4"] = (_KID + "The vacuum is COSMIC: a backpack holding a swirling purple galaxy in a crystal sphere, floating star particles around it, a sleek crystal nozzle glowing with starlight. " + STYLE, "1:1", True, _REF)
+
 if __name__ == "__main__":
     out = sys.argv[1]; os.makedirs(out, exist_ok=True)
     names = sys.argv[2:] or [n for n in JOBS if not os.path.exists(os.path.join(out, n + ".png"))]

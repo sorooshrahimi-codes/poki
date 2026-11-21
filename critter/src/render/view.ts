@@ -8,7 +8,7 @@ import type { SaveData } from "../core/save.ts";
 
 type Ctx = CanvasRenderingContext2D;
 // the place you are in loads before play starts; the next places follow in road order, so the art is ready before you get there
-const COMMON = ["kid_vac", "kid_vac_suck", "kid_cheer", "kid_rival", "jar", "coin", "nozzle"];
+const COMMON = ["kid_vac", "kid_vac_suck", "kid_cheer", "kid_rival", "kid_vac2", "kid_vac3", "kid_vac4", "jar", "coin", "nozzle"];
 const placeArt = (b: string) => [`bg_${b}`, ...CRITTERS.filter((c) => c.biome === b).map((c) => c.art)];
 const ROAD = ["meadow", "forest", "frost", "candy", "volcano", "moon"];
 const imgs = new Map<string, HTMLImageElement>();
@@ -121,7 +121,9 @@ export class View {
     if (!f.critters.some((k) => k.boss > 0)) this.gloom(t, dt);
     // the fisher... the catcher: a kid with a vacuum, on the left, standing on the near ground
     this.cheer = Math.max(0, this.cheer - dt);
-    const kid = img(this.cheer > 0 && img("kid_cheer") ? "kid_cheer" : f.beam ? "kid_vac_suck" : "kid_vac");
+    // the starter kid has three poses; an evolved vacuum shows its own machine
+    const evolved = this.tier > 0 ? img(`kid_vac${this.tier + 1}`) : null;
+    const kid = evolved ?? img(this.cheer > 0 && img("kid_cheer") ? "kid_cheer" : f.beam ? "kid_vac_suck" : "kid_vac");
     // the kid stands where they walked to: smaller further back, bobbing with each stride
     const gy = f.farY + (f.nearY - f.farY) * f.kid.d, kk = depthK(f, gy);
     const moving = Math.abs(f.kid.walk - this.lastWalk) > 0.2;
@@ -172,6 +174,7 @@ export class View {
       }
     }
     this.drawRival(f, t);
+    if (f.specialFx > 0) this.drawSpecial(f, t);
     this.particles(dt);
     this.foreground(f, t);
   }
@@ -194,6 +197,19 @@ export class View {
       c.save(); c.globalAlpha = 0.5; c.fillStyle = "#9cff6a";
       c.beginPath(); c.moveTo(r.x - w * 0.42, r.y - h * 0.5); c.lineTo(r.x - w * 0.42 - 70, r.y - h * 0.5 - 30); c.lineTo(r.x - w * 0.42 - 70, r.y - h * 0.5 + 30); c.fill(); c.restore();
     }
+  }
+  tier = 0;
+  /** the special: a spinning swirl that grows out of the nozzle */
+  private drawSpecial(f: Field, t: number) {
+    const c = this.c, k = 1 - f.specialFx / 1.2, R = (this.tier >= 3 ? 700 : this.tier === 2 ? 330 : 230) * Math.min(1, k * 2.2);
+    c.save(); c.translate(f.nozzle.x, f.nozzle.y); c.globalAlpha = Math.min(1, f.specialFx * 1.5);
+    const col = this.tier >= 3 ? ["#a77bff", "#ffffff", "#5a4aff"] : this.tier === 2 ? ["#ffe066", "#ffffff", "#ffb347"] : ["#9fe0ff", "#ffffff", "#5bc8ff"];
+    for (let i = 0; i < 26; i++) {
+      const a = t * 9 + i * 0.7, r = R * ((i * 0.37) % 1);
+      c.strokeStyle = col[i % 3]; c.lineWidth = 3 + (i % 3); c.lineCap = "round";
+      c.beginPath(); c.arc(0, 0, Math.max(4, r), a, a + 0.9); c.stroke();
+    }
+    c.restore();
   }
   zoom = 1;
   skin: Skin = SKINS[0];
