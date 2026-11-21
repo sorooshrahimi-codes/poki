@@ -311,7 +311,7 @@ export class View {
 
   /** the place's giant, far away on the horizon: asleep (breathing, Zzz) while the vacuum is too weak,
    *  awake and bouncing with a "!" once it is strong enough. Set by the controller; null when there is none to show. */
-  giant: { art: string; ready: boolean } | null = null;
+  giant: { art: string; ready: boolean; k: number } | null = null;
   private gloom(t: number, _dt: number) {
     const g = this.giant, f = this.lastField;
     if (!g || !f) return;
@@ -320,14 +320,18 @@ export class View {
     const c = this.c;
     const h = Math.min(this.H * 0.27, 230), w = (h * im.width) / im.height;
     const x = Math.min(f.right, this.W) - w * 0.6, base = f.farY - 18;
-    const breathe = g.ready ? 1 + Math.abs(Math.sin(t * 5)) * 0.06 : 1 + Math.sin(t * 1.3) * 0.025;
-    const hop = g.ready ? Math.abs(Math.sin(t * 5)) * 14 : 0;
+    // it stirs as your bar fills: sound asleep, then awake, then restless, then ready to come down
+    const restless = !g.ready && g.k >= 0.85;
+    const breathe = g.ready ? 1 + Math.abs(Math.sin(t * 5)) * 0.06 : restless ? 1 + Math.sin(t * 9) * 0.03 : 1 + Math.sin(t * 1.3) * 0.025;
+    const hop = g.ready ? Math.abs(Math.sin(t * 5)) * 14 : restless ? Math.abs(Math.sin(t * 4.5)) * 5 : 0;
+    const sway = restless ? Math.sin(t * 7) * 0.06 : 0;
     c.save();
     // far away: a little hazy and blue, sitting behind the hills
     c.globalAlpha = g.ready ? 0.95 : 0.78;
-    c.filter = g.ready ? "none" : "saturate(.5) brightness(1.05) blur(.6px)";
+    c.filter = g.ready || g.k >= 0.6 ? "none" : "saturate(.5) brightness(1.05) blur(.6px)";
     c.translate(x, base - hop);
-    c.scale(1 / breathe * (g.ready ? 1 : 1), breathe);
+    c.rotate(sway);
+    c.scale(1 / breathe, breathe);
     c.drawImage(im, -w / 2, -h, w, h);
     c.restore();
     c.filter = "none";
@@ -337,7 +341,10 @@ export class View {
       c.fillStyle = "#ff4d6d"; c.strokeStyle = "#fff"; c.lineWidth = 5;
       const y = base - h - 18 - hop + Math.sin(t * 8) * 4;
       c.strokeText("❗", x, y); c.fillText("❗", x, y);
-    } else {
+    } else if (restless) {
+      c.font = "bold 26px Fredoka, system-ui";
+      c.fillText("💢", x + w * 0.3 + Math.sin(t * 6) * 3, base - h * 0.85 - hop);
+    } else if (g.k < 0.6) {
       // sleeping: Z's drifting up
       for (let i = 0; i < 3; i++) {
         const p = (t * 0.35 + i / 3) % 1;

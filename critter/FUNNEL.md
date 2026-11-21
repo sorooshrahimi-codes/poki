@@ -21,6 +21,35 @@ Scale is the wow: a little kid, a little nozzle, and a giant cute monster stretc
 | 9. Competing | "I'm better" | Rush best on the button; after a giant, show the giant ladder rank | later |
 | 10. Long term | "There's always more" | Six places on the road to the Moon (a giant every 3-4 min, the Moon at ~18 min), then the giant ladder (★2, ★3...) | done |
 
+## Second by second: what the player meets, and what makes them stay
+
+| Time | What happens on screen | What the player feels / learns | Pull to keep going |
+|---|---|---|---|
+| 0:00 | Loading bar (meadow art only, ~0.5 MB) | — | Fast: no menu, no title screen |
+| 0:01 | The road picture: 🌼━🍄━❄️━🍭━🌋━🌙, the kid steps onto the first stop, the Moon glows at the end | "There is a journey, and the end is the Moon" | A destination from second one |
+| 0:03 | Meadow. A huge golden giant sleeps on the horizon (Zzz). Bar at the top: 🌀0 ━━ giant 12 | "That thing is the goal" | Curiosity about the giant |
+| 0:04 | A hand slides to the nearest critter and presses | "Hold and aim" | No reading needed |
+| 0:06 | First catch: fwoomp-pop, coins fly to the counter, the critter pops up big with 🆕 and flies into the 📖 | "Catching = coins + collection" | Instant reward |
+| 0:10–0:30 | Catches in a row: 🔥×3 combo, the pop climbs higher | "Fast = more" | Rhythm, sound |
+| ~0:25 | First upgrade button glows gold, an arrow points at it | "Coins are for this" | First choice |
+| 0:30 | Tap: a 🌀 spark flies up into the bar, it grows; the kid grows a little | "Upgrades fill the giant bar" | The link is visible |
+| 0:30–1:30 | An upgrade every ~10 s; surprises (golden rain, stampede, rare visitor) | "I'm getting stronger fast" | Steady small wins |
+| ~1:00 | Bar half full: the giant stops snoring | "It noticed me" | Tension starts |
+| ~1:40 | Bar 85%: the giant wiggles, 💢 | "Almost!" | One more upgrade |
+| ~1:50 | Bar full: ❗, the music speeds up, rumble, the giant stomps down HUGE | "WOW" | The big moment |
+| 1:50–2:05 | Tug fight, 3 rounds, slow motion when it breaks free | "I can do this" | Skill + power |
+| ~2:05 | Slow-mo taffy stretch → POP, coin rain, burp 💨 | Laugh, pride | The clip people share |
+| 2:10 | Ad break (natural pause), then the road picture: the kid walks to 🍄 | "Next place, bigger giant" | The journey moves |
+| 2:15–5:00 | Mushroom Forest: new critters, giant #2 at ~4:50 | Same loop, new things | Collection + variety |
+| ~8:30 | Frost giant | | |
+| ~11:30 | Candy Hills: the cake giant | Surprise: a candy world | Fresh art keeps it new |
+| ~15:00 | Lava Mountain: the lava golem | | |
+| ~17:45 | The Moon itself comes down and is sucked in | Big finish | |
+| ~18:00 | Finale screen: the Moon, the cheering kid, 🏆, share 📤🌙, ★2 ▶ | "I did it" — and "tell a friend" | Share moment |
+| 18:00+ | ★2 giants: same road, bigger and heavier | "Do it again, stronger" | Endless ladder |
+| any time | 🏁 Rush: 60 s, same field for a friend, two bars side by side | "Beat me" | Competition |
+| next day | Offline coins (up to 2 h) waiting | "My coins grew" | Return |
+
 ## Fixed principles (for the whole game)
 - **Almost no words.** None on the playing field; the bare minimum in menus. Everything is understood from pictures, icons, colour and motion.
 - **The screen belongs to the player.** No messages popping up over the field; tips are shown once by a moving hand, a few gestures, then never again.
@@ -38,8 +67,8 @@ Jar and park trips, eggs, bubble wand, flute, companions, lab: each added a rule
 **catch critters → coins → stronger vacuum → giant → next place.**
 
 ## Next steps, in order
-1. The giant moment: slow motion, taffy stretch, POP, coin rain, burp (the trailer shot).
-2. New thumbnail and promo text for the giant hook.
-3. Rush polish: a clear "send to a friend" moment right after a good run.
-4. **Sound pass:** one consistent sound palette (soft, toy-like); clear roles: suction loop that follows the wind strength, a "pop" per catch rising in pitch with the combo, coin sparkles, a deep rumble when a giant wakes, the finale pop and burp; music that steps up during a giant fight and calms afterwards; a mix check so nothing is louder than the catch sounds; mute remembered.
-5. More giants and places (needs the art key).
+Done: giant moment, giant thumbnail, promo text, sound pass, road to the Moon (6 places), giant that stirs as the bar fills, Moon finale with share.
+1. Second-by-second check in a real playthrough (timings above are from the pacing simulator).
+2. Rush: a visible best-score ribbon and a "beat my score" link right after a good run.
+3. (done) **Sound pass:** one consistent sound palette (soft, toy-like); clear roles: suction loop that follows the wind strength, a "pop" per catch rising in pitch with the combo, coin sparkles, a deep rumble when a giant wakes, the finale pop and burp; music that steps up during a giant fight and calms afterwards; a mix check so nothing is louder than the catch sounds; mute remembered.
+4. Trailer: a 20-second capture of the giant moment for the Poki page.

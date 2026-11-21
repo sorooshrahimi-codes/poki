@@ -110,8 +110,11 @@ function handleEvents() {
         flyCoins(field.nozzle.x, field.nozzle.y, 14);
         setTimeout(() => { sfx.burp(); view.cheer = 1.6; view.shake = 6; view.text(field.nozzle.x - 40 * field.kid.face, field.nozzle.y - 70, "💨", "#ffffff", 34); }, 900);
         setTimeout(() => sfx.reveal("legendary"), 1400);
-        // after the celebration: on to where the next giant waits (a natural moment for a break)
-        setTimeout(() => void nextPlace(), 4200);
+        // after the celebration: on to where the next giant waits (a natural moment for a break);
+        // the Moon itself is the end of the road and gets its own big moment first
+        const theEnd = field.biome === "moon" && !save.tips.includes("moonDone");
+        if (theEnd) { save.tips.push("moonDone"); setTimeout(() => void moonFinale(), 3600); }
+        else setTimeout(() => void nextPlace(), 4200);
       }
       if (c.boss > 0 || c.mut || c.def.rarity === "epic" || c.def.rarity === "legendary") view.cheer = 1.2;
       sfx.catchPop(combo, c.def.rarity);
@@ -338,6 +341,23 @@ async function showJourney(from: number, to: number) {
   sfx.event();
   await new Promise((r) => setTimeout(r, 1900));
   box.classList.add("hidden");
+}
+
+/** the end of the road: you sucked up the Moon. A trophy moment, a share button, then the giants come back stronger. */
+async function moonFinale() {
+  const box = $("finale");
+  box.innerHTML = `<div class="rays"></div><img class="moon" src="./art/bigmoon.webp" alt=""><img class="kid" src="./art/kid_cheer.webp" alt=""><div class="trophy">🏆</div><div class="row"><button class="btn big rush" id="finShare">📤 🌙</button><button class="btn big go" id="finGo">★2 ▶</button></div>`;
+  box.classList.remove("hidden");
+  sfx.reveal("legendary"); setTimeout(() => sfx.event(), 600);
+  for (let i = 0; i < 30; i++) setTimeout(() => { const s = document.createElement("i"); s.className = "confetti"; s.style.left = `${Math.random() * 100}%`; s.style.background = ["#ffe066", "#ff7ad1", "#7be495", "#5bc8ff"][i % 4]; box.appendChild(s); setTimeout(() => s.remove(), 2600); }, i * 60);
+  $("finShare").onclick = async () => {
+    const url = await shareURL({});
+    try { if (navigator.share) { await navigator.share({ text: "🫙🌙 I vacuumed up the MOON in Critter Vac! Can you?", url }); return; } } catch { /* cancelled */ }
+    try { await navigator.clipboard.writeText(`🫙🌙 I vacuumed up the MOON in Critter Vac! ${url}`); toast("📋 ✔", 2000); } catch { /* nothing */ }
+  };
+  await new Promise<void>((r) => { $("finGo").onclick = () => r(); });
+  box.classList.add("hidden");
+  await nextPlace();
 }
 
 /** coins fly from the nozzle up to the coin counter: you see where the money goes */
@@ -874,7 +894,7 @@ function frame(now: number) {
   field.companion = null; // companions were cut
   const gH = mode === "rush" ? null : giantLeft(field.biome), L = vacLevel(save.up);
   field.giant = gH ? { id: gH.id, ready: L >= gH.need, resist: gH.resist, scale: gH.scale } : null;
-  view.giant = gH ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need } : null;
+  view.giant = gH ? { art: CRITTER_BY_ID[gH.id].art, ready: L >= gH.need, k: Math.min(1, L / gH.need) } : null;
   view.vac = L;
   if (mode === "rush" && rush) {
     rush.left -= dt;

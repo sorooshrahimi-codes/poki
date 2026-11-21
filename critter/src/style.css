@@ -459,3 +459,13 @@ img.gi.big { height: 64px; width: 64px; filter: brightness(.25) drop-shadow(0 0 
   #journey .dots { width: 12px; }
 }
 #journey .gg { filter: brightness(0) invert(1) opacity(.35); }
+/* the end of the road */
+#finale { position: absolute; inset: 0; z-index: 9; pointer-events: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; overflow: hidden;
+  background: radial-gradient(circle at 50% 40%, #3a2a7a, #120c30); animation: fadeIn .4s; }
+#finale .rays { position: absolute; top: 18%; width: 520px; height: 520px; border-radius: 50%; background: repeating-conic-gradient(rgba(255,240,180,.35) 0 10deg, transparent 10deg 24deg); mask: radial-gradient(circle, #000 15%, transparent 65%); -webkit-mask: radial-gradient(circle, #000 15%, transparent 65%); animation: spin 8s linear infinite; }
+#finale .moon { position: relative; width: min(56vw, 260px); filter: drop-shadow(0 0 30px rgba(255,250,210,.8)); animation: popIn .6s cubic-bezier(.3,1.6,.5,1); }
+#finale .kid { position: relative; width: min(30vw, 140px); margin-top: -30px; animation: hop .5s infinite; }
+#finale .trophy { position: relative; font-size: 54px; animation: popIn .6s .3s both cubic-bezier(.3,1.6,.5,1); }
+#finale .row { position: relative; }
+#finale .confetti { position: absolute; top: -10px; width: 9px; height: 14px; border-radius: 2px; animation: fall 2.6s linear forwards; }
+@keyframes fall { to { transform: translateY(110vh) rotate(720deg); } }
