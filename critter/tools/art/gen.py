@@ -99,8 +99,9 @@ JOBS["world_map"] = ("Vertical game world map illustration, portrait composition
     "then climbs upward through clearly separated areas, from bottom to top: a sunny flower meadow, a mushroom forest, snowy ice peaks, pink candy hills with lollipops, a volcano with lava, "
     "then the road becomes a glowing rainbow bridge rising through fluffy clouds into a starry night sky, ending at a big glowing full Moon at the very TOP. Each area is a distinct band across the map, "
     "with a little round clearing on the road in each area as a stop. Bright, cheerful, readable, no characters, no creatures, no text, no labels. " + STYLE, "2:3", False)
-JOBS["intro_dream"] = ("Vertical game illustration, portrait composition: a cozy kid's bedroom at night, the same cheerful kid explorer (red cap, blue overalls) kneeling on his bed looking out of a big round window, "
-    "hugging his toy vacuum cleaner backpack, a HUGE glowing full Moon fills the window, stars in the night sky, warm lamp light in the room, toys on the shelf, dreamy and magical. No text. " + STYLE, "2:3", False, _REF)
+JOBS["intro_dream"] = ("Vertical game illustration, portrait composition: a cozy kid's bedroom at night. The same cheerful kid explorer (red cap, blue overalls, red sneakers) SITS on his bed in side view, "
+    "his whole body, head and eyes turned to the RIGHT toward a big round window. He wears his toy vacuum backpack on his back and holds the vacuum nozzle with both hands, pointing it UP and to the right at a HUGE glowing full Moon "
+    "that fills the window. Clear simple pose: head, arms and nozzle all point the same direction (right, toward the Moon). Stars in the sky, warm lamp light, toys on a shelf on the left. Dreamy and magical. No text. " + STYLE, "2:3", False, _REF)
 
 _ROCK = "Each panel shows the SAME cute cartoon toy rocket under construction on the same little round launch pad, front view, centered, on a plain transparent background, no characters, no text. "
 JOBS["rocket1"] = (SHEET + _ROCK + "Top-left: only the round launch pad with a small scaffold and a toolbox. Top-right: the pad with the rocket's lower body, red and white, with bolts. "
