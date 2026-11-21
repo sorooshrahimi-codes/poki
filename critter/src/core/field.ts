@@ -49,7 +49,7 @@ export interface Critter {
   /** volcano: seconds left flying after an eruption threw it up */
   launch?: number;
   /** event critters: a bomb (short-circuits the vacuum), a treasure runner, a mystery box */
-  kind?: "bomb" | "treasure" | "box";
+  kind?: "bomb" | "treasure" | "box" | "bush" | "bushed" | "slider" | "sticky" | "faller" | "floater";
 }
 export type ToolId = "vac" | "bubble" | "flute";
 /** companions: legends that come along and help */
@@ -57,7 +57,7 @@ export type CompanionId = "sunpup" | "prismane" | "elderoak" | "moonfawn" | "fro
 export const COMPANIONS: CompanionId[] = ["sunpup", "prismane", "elderoak", "moonfawn", "frostking", "wyrmling"];
 
 export type Surprise = "visitor" | "golden_rain" | "stampede" | "boss";
-export type FieldEv = { kind: "attack"; a: "stomp" | "spit" | "roar"; c: Critter } | { kind: "event"; e: EventId } | { kind: "boom"; c: Critter } | { kind: "rivalIn" } | { kind: "stolen"; c: Critter } | { kind: "rivalBlown" } | { kind: "rivalMiss" } | { kind: "tease"; c: Critter } | { kind: "erupt" } | { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter } | { kind: "split"; c: Critter } | { kind: "hide"; c: Critter } | { kind: "flee"; c: Critter } | { kind: "bossPhase"; c: Critter } | { kind: "bubbled"; c: Critter } | { kind: "ability"; id: CompanionId };
+export type FieldEv = { kind: "lost"; c: Critter } | { kind: "attack"; a: "stomp" | "spit" | "roar"; c: Critter } | { kind: "event"; e: EventId } | { kind: "boom"; c: Critter } | { kind: "rivalIn" } | { kind: "stolen"; c: Critter } | { kind: "rivalBlown" } | { kind: "rivalMiss" } | { kind: "tease"; c: Critter } | { kind: "erupt" } | { kind: "surprise"; s: Surprise; c?: Critter } | { kind: "caught"; c: Critter } | { kind: "tug"; c: Critter } | { kind: "escape"; c: Critter } | { kind: "full" } | { kind: "spawn"; c: Critter } | { kind: "split"; c: Critter } | { kind: "hide"; c: Critter } | { kind: "flee"; c: Critter } | { kind: "bossPhase"; c: Critter } | { kind: "bubbled"; c: Critter } | { kind: "ability"; id: CompanionId };
 
 export interface Field {
   biome: BiomeId;
@@ -99,6 +99,8 @@ export interface Field {
   /** the giant's next attack in this many seconds; how angry the giants are (0..) */
   attackT: number;
   fury: number;
+  /** a place's own level: bushes to blow open, sliders on the ice, sticky candy, falling into lava, floating away */
+  mode2: "bush" | "slide" | "sticky" | "lava" | "float" | null;
   /** level tweaks: a species that shows up often, a rival who raids nonstop */
   favor: string | null;
   rivalFast: boolean;
@@ -135,7 +137,7 @@ export function sizeField(f: Field, W: number, H: number) {
 }
 export function newField(W: number, H: number, up: Upgrades, biome: BiomeId = "meadow"): Field {
   const left = Math.max(6, (W - PLAY_W) / 2);
-  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, special: 0, specialFx: 0, eventT: 12, eventsOn: false, stun: 0, frenzy: 0, attackT: 3.5, fury: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
+  return { tool: "vac", bubbles: [], charges: 3, companion: null, abilityT: 6, biome, nextSurprise: 22, W, H, left, right: Math.min(W, left + PLAY_W), farY: H * 0.56, nearY: H * 0.8, nozzle: { x: 0, y: 0 }, kid: { x: 0, d: 1, walk: 0, face: 1 }, giant: null, giantT: 4, eruptT: 9, mode2: null, special: 0, specialFx: 0, eventT: 12, eventsOn: false, stun: 0, frenzy: 0, attackT: 3.5, fury: 0, goldK: 1, magnet: 0, rivalSlow: 1, rival: null, rivalT: 25, rivalOn: false, favor: null, rivalFast: false, critters: [], beam: false, aim: { x: W * 0.6, y: H * 0.7 }, jar: 0, cap: tankSize(up), t: 0, spawnT: 0, script: 0, lure: 0, ev: [] };
 }
 
 function pick(f: Field, rng: Rng): CritterDef {
@@ -243,7 +245,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
   // keep the meadow lively: a new critter every couple of seconds, up to a crowd
   const want = 7;
   f.spawnT -= dt;
-  if (f.spawnT <= 0 && f.critters.filter((c) => c.state !== "caught").length < want) { spawn(f, rng); f.spawnT = 1.4 + rng() * 1.6; }
+  if (f.spawnT <= 0 && f.critters.filter((c) => c.state !== "caught").length < want) { const c = spawn(f, rng); if (f.mode2 && rng() < 0.85) makeSpecial(f, c, rng); f.spawnT = (f.mode2 ? 1.0 : 1.4) + rng() * 1.6; }
   // the first minute is scripted: easy catches close by, then a golden one that fights back
   const pool = critterOf(f.biome);
   if (f.script === 0) {
@@ -328,7 +330,7 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
     // behaviours that react to the cone before it catches them
     const nearCone = f.beam && dist < reach * 1.35 && Math.abs(da) < spread * 1.8;
     const busyFx = c.bubbled > 0 || c.frozen > 0 || flute;
-    if (c.state === "roam" && !busyFx) {
+    if (c.state === "roam" && !busyFx && c.kind !== "bush" && c.kind !== "slider" && c.kind !== "faller" && c.kind !== "floater") {
       const b = c.def.behave;
       if (b === "burrow") {
         // up for a while, then down under the ground: catch it while its head is out
@@ -349,6 +351,12 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
     }
     if (c.kind === "treasure" && c.state === "roam") { c.fleeT = Math.max(c.fleeT, 0.2); if (c.x < f.left + 30) c.dir = 1; if (c.x > f.right - 30) c.dir = -1; }
     if (c.fleeT > 0) { c.fleeT -= dt; c.x += c.dir * 150 * dt; c.x = Math.max(f.left + 20, Math.min(f.right - 20, c.x)); }
+    if (c.kind === "bush" && c.hidden) {
+      // blow on the bush for a moment and the critter tumbles out
+      if (inCone) { c.cycleT += dt; if (c.cycleT > 0.45) { c.hidden = false; c.kind = "bushed"; c.lift = 40; c.fleeT = 0; f.ev.push({ kind: "hide", c }); } }
+      else c.cycleT = Math.max(0, c.cycleT - dt * 0.5);
+      c.lift = 0; continue;
+    }
     if (c.hidden) { c.lift = 0; continue; }
     if (inCone && c.def.behave === "split" && !c.split && c.state === "roam" && c.boss === 0) {
       // pop! it becomes two smaller ones, each worth catching
@@ -388,6 +396,12 @@ export function stepField(f: Field, dt: number, inp: FieldInput, up: Upgrades, r
       }
     }
     if (c.kind === "box" && c.state === "roam") { c.lift = Math.max(0, c.lift - 90 * dt); c.hopT = 0; continue; }
+    if (c.state === "roam" && (c.kind === "slider" || c.kind === "faller" || c.kind === "floater" || c.kind === "sticky")) {
+      if (c.kind === "slider") { c.x += c.dir * 95 * dt; c.lift = 0; if (c.x < f.left - 40 || c.x > f.right + 40) { c.state = "caught"; f.ev.push({ kind: "lost", c }); } }
+      else if (c.kind === "faller") { c.lift -= 70 * dt; if (c.lift <= 0) { c.state = "caught"; f.ev.push({ kind: "lost", c }); } }
+      else if (c.kind === "floater") { c.lift += 34 * dt; c.x += Math.sin(f.t * 1.5 + c.uid) * 12 * dt; if (c.lift > f.nearY + 40) { c.state = "caught"; f.ev.push({ kind: "lost", c }); } }
+      continue; // sticky ones stay stuck where they are
+    }
     if (c.leaving) {
       // the teasing giant stomps away over the hill
       c.hopT += dt * 2.2; c.lift = Math.abs(Math.sin(c.hopT * Math.PI)) * 30; c.x += 160 * dt;
@@ -552,3 +566,14 @@ function stepAttacks(f: Field, dt: number, rng: Rng) {
   }
   f.ev.push({ kind: "attack", a, c: g });
 }
+
+/** turn a fresh critter into the place's special kind */
+function makeSpecial(f: Field, c: Critter, rng: Rng) {
+  if (c.boss > 0) return;
+  if (f.mode2 === "bush") { c.kind = "bush"; c.hidden = true; c.cycleT = 0; }
+  else if (f.mode2 === "slide") { c.kind = "slider"; c.dir = rng() < 0.5 ? -1 : 1; c.x = c.dir < 0 ? f.right + 20 : f.left - 20; }
+  else if (f.mode2 === "sticky") { c.kind = "sticky"; c.resist = 2.6; }
+  else if (f.mode2 === "lava") { c.kind = "faller"; c.lift = 260 + rng() * 80; c.x = f.left + 60 + rng() * (f.right - f.left - 100); }
+  else if (f.mode2 === "float") { c.kind = "floater"; c.lift = 0; }
+}
+export { makeSpecial };

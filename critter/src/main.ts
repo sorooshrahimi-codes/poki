@@ -8,7 +8,7 @@ import { makeRng } from "./core/rng.ts";
 import { loadSave, writeSave } from "./core/save.ts";
 import { GIANTS, SKINS, critterOf, giantOf, giantStep } from "./data/critters.ts";
 import { MOUTH_FULL, REACH_FULL, tierOf, vacLevel, valueMult } from "./core/economy.ts";
-import { fireSpecial } from "./core/field.ts";
+import { fireSpecial, makeSpecial } from "./core/field.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
 import type { BiomeId } from "./core/types.ts";
@@ -140,7 +140,9 @@ function handleEvents() {
       view.text(field.nozzle.x + 40 * field.kid.face, field.nozzle.y - 34 - (save.catches % 2) * 22, `+🪙${short(coins)}`, "#ffe066", 17);
       if (!rush) flyCoins(field.nozzle.x, field.nozzle.y, Math.min(4, 1 + Math.floor(Math.log10(coins + 1))));
       if (lvl && !lvl.done && c.boss === 0) {
-        if (lvl.task === "any" || lvl.task === "rival" || (lvl.task === "species" && c.def.id === lvl.target) || (lvl.task === "golden" && c.mut === "gold")) lvl.count++;
+        const special: Record<string, string> = { bush: "bushed", slide: "slider", sticky: "sticky", lava: "faller", float: "floater" };
+        if (special[lvl.task]) { if (c.kind === special[lvl.task]) lvl.count++; }
+        else if (lvl.task === "any" || lvl.task === "rival" || (lvl.task === "species" && c.def.id === lvl.target) || (lvl.task === "golden" && c.mut === "gold")) lvl.count++;
         else if (lvl.task === "combo") lvl.count = Math.max(lvl.count, combo);
         if (lvl.count >= lvl.goal) { lvl.count = lvl.goal; setTimeout(() => endLevel(true), 400); }
       }
@@ -182,6 +184,13 @@ function handleEvents() {
       // (no tip messages: the critter's behaviour shows on the field)
     } else if (e.kind === "flee") {
       // (no tip message)
+    } else if (e.kind === "lost") {
+      // one got away (slid off the ice, fell into the lava, floated off into space)
+      if (lvl && !lvl.done && MISS_TASKS.includes(lvl.task)) {
+        lvl.stolen++; sfx.nope();
+        view.text(Math.max(30, Math.min(view.W - 30, e.c.x)), Math.max(80, e.c.y - e.c.lift - 30), lvl.task === "lava" ? "💥" : lvl.task === "float" ? "👋" : "💨", "#ffffff", 26);
+        if (lvl.stolen >= 5) setTimeout(() => endLevel(false), 500);
+      }
     } else if (e.kind === "attack") {
       // the giant fights back: a big icon over it, a hit of the camera, a sound
       const icon = { stomp: "🦶💥", spit: "💣💣", roar: "😱" }[e.a];
@@ -1020,7 +1029,10 @@ async function dailyGift() {
 
 // ------------------------------------------------------------------ levels
 /** every place: five short levels, each with its own task, then the giant */
-type Task = "any" | "species" | "combo" | "golden" | "rival" | "giant";
+type Task = "any" | "species" | "combo" | "golden" | "rival" | "giant" | "bush" | "slide" | "sticky" | "lava" | "float" | "bonus";
+/** each place's own level: what makes it play differently from every other place */
+const PLACE_TASK: Record<string, Task> = { meadow: "combo", forest: "bush", frost: "slide", candy: "sticky", volcano: "lava", moon: "float" };
+const MISS_TASKS: Task[] = ["slide", "lava", "float"];
 const LEVEL_TASKS: Task[] = ["any", "species", "combo", "golden", "rival"];
 interface Level { biome: BiomeId; idx: number; task: Task; goal: number; count: number; left: number; total: number; stolen: number; target: string | null; done: boolean; hard: boolean }
 let lvl: Level | null = null;
@@ -1040,14 +1052,16 @@ function nodeOpen(b: BiomeId, i: number) {
   return false;
 }
 const levelsDone = (b: BiomeId) => { const st = starsOf(b); return st[0] > 0 && st[1] > 0 && st[4] > 0 && ((st[2] > 0 && st[3] > 0) || (st[5] > 0 && st[6] > 0)); };
-const TASK_ICON: Record<Task, string> = { any: "🎯", species: "", combo: "🔥", golden: "✨", rival: "🛡️", giant: "👑" };
+const TASK_ICON: Record<Task, string> = { any: "🎯", species: "", combo: "🔥", golden: "✨", rival: "🛡️", giant: "👑", bush: "🌳", slide: "⛸️", sticky: "🍬", lava: "🔥", float: "🫧", bonus: "🎁" };
 function makeLevel(b: BiomeId, idx: number): Level {
   const k = placeIndex(b), hard = idx === 6;
-  const task: Task = idx === 7 ? "giant" : hard ? (["any", "species", "golden"] as Task[])[k % 3] : LEVEL_TASKS[Math.min(4, idx)];
+  // node 2 is the place's own level, node 3 the other classic (combo or golden)
+  const own = PLACE_TASK[b] ?? "combo";
+  const task: Task = idx === 7 ? "giant" : hard ? (["any", "species", "golden"] as Task[])[k % 3] : idx === 2 ? own : idx === 3 ? (own === "combo" ? "golden" : k % 2 ? "combo" : "golden") : LEVEL_TASKS[Math.min(4, idx)];
   const commons = critterOf(b).filter((d) => d.rarity === "common");
   const target = task === "species" ? commons[(k + idx) % commons.length].id : null;
-  const goal0 = task === "any" ? (k ? 11 + k * 3 : 8) : task === "species" ? 7 + k : task === "combo" ? 6 + (k >= 2 ? 1 : 0) : task === "golden" ? 7 + k : task === "rival" ? 18 + k * 3 : 1;
-  const total = task === "giant" ? 0 : task === "golden" ? 35 : task === "rival" ? 55 : idx === 0 ? 60 : 45;
+  const goal0 = task === "bush" ? 8 + k : task === "slide" ? 10 + k : task === "sticky" ? 6 + k : task === "lava" ? 10 + k : task === "float" ? 10 + k : task === "any" ? (k ? 11 + k * 3 : 8) : task === "species" ? 7 + k : task === "combo" ? 6 + (k >= 2 ? 1 : 0) : task === "golden" ? 7 + k : task === "rival" ? 18 + k * 3 : 1;
+  const total = task === "giant" ? 0 : task === "golden" ? 35 : task === "rival" ? 55 : MISS_TASKS.includes(task) || task === "bush" || task === "sticky" ? 55 : idx === 0 ? 60 : 45;
   const goal = hard ? Math.round(goal0 * 1.6) : goal0;
   const more = task === "giant" ? 0 : 8 * perkN("time");
   return { biome: b, idx, task, goal, count: 0, left: total + more, total: total + more, stolen: 0, target, done: false, hard };
@@ -1055,7 +1069,7 @@ function makeLevel(b: BiomeId, idx: number): Level {
 /** what the level asks for, as a picture: the icon (or the critter), the count and the goal */
 function taskHtml(l: Level) {
   const icon = l.task === "species" && l.target ? ic(l.target) : l.task === "rival" ? `<img src="./art/kid_rival.webp" alt="">🛡️` : TASK_ICON[l.task];
-  const extra = l.task === "rival" ? ` <span class="lives">${"😏".repeat(l.stolen)}${"·".repeat(Math.max(0, 3 - l.stolen))}</span>` : "";
+  const extra = l.task === "rival" ? ` <span class="lives">${"😏".repeat(l.stolen)}${"·".repeat(Math.max(0, 3 - l.stolen))}</span>` : MISS_TASKS.includes(l.task) ? ` <span class="lives">${"❤️".repeat(Math.max(0, 5 - l.stolen))}${"🖤".repeat(Math.min(5, l.stolen))}</span>` : "";
   return `<div class="task"><span class="ti">${icon}</span><b>${l.count}/${l.goal}</b>${extra}<span class="tt">⏱${Math.ceil(l.left)}</span></div>`;
 }
 async function startLevel(b: BiomeId, idx: number) {
@@ -1069,10 +1083,22 @@ async function startLevel(b: BiomeId, idx: number) {
   lvl = makeLevel(b, idx);
   field = newField(view.W, view.H, save.up, b); field.script = 2;
   field.favor = lvl.target; field.rivalFast = lvl.task === "rival"; applyPerks(field);
+  const m2: Record<string, Field["mode2"]> = { bush: "bush", slide: "slide", sticky: "sticky", lava: "lava", float: "float" };
+  field.mode2 = m2[lvl.task] ?? null;
+
   if (lvl.task === "golden") field.lure = 999;
   for (let i = 0; i < 6; i++) spawn(field, rng);
+  if (field.mode2) { for (const c of field.critters) if (Math.random() < 0.75) makeSpecial(field, c, rng); showHowTo(lvl.task); }
   if (lvl.task === "giant") { field.giantT = 1.5; field.fury = Math.min(4, Math.floor((save.giantWins ?? 0) / 1.5)); field.attackT = 2.5; }
   mode = "field"; gameplayStart(); updateUi();
+}
+/** first time a level type is played: a short picture of what to do */
+function showHowTo(task: Task) {
+  const key = "how_" + task;
+  if (save.tips.includes(key)) return;
+  save.tips.push(key); writeSave(save);
+  const how: Record<string, string> = { bush: "🌳 ➜ 🌀🌀 ➜ 🐰", slide: "⛸️🐧 ➜ 🌀 · 💨 = 🖤", sticky: "🍬🐻 ➜ 🌀🌀🌀 ➜ ✔", lava: "🔥🐣 ➜ 🌀 · 🌋 = 🖤", float: "🫧🐰 ➜ 🌀 · 🚀 = 🖤" };
+  if (how[task]) toast(how[task], 3600);
 }
 /** the level is over: stars by time left, coins, then back to the map */
 function endLevel(win: boolean) {

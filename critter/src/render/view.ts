@@ -207,13 +207,15 @@ export class View {
   private signs(f: Field, t: number) {
     const c = this.c;
     for (const cr of f.critters) {
-      if (!cr.kind || cr.kind === "box" || cr.state === "caught" || cr.state === "pulled") continue;
+      if (!cr.kind || cr.kind === "box" || cr.kind === "bush" || cr.kind === "bushed" || cr.kind === "slider" || cr.state === "caught" || cr.state === "pulled") continue;
       const s = cr.def.size * depthK(f, cr.y) * cr.scale, bx = cr.x, by = cr.y - cr.lift - s * 0.5;
       c.save();
       if (cr.kind === "bomb") { c.globalAlpha = 0.3 + 0.25 * Math.sin(t * 10); c.fillStyle = "#ff3030"; c.beginPath(); c.arc(bx, by, s * 0.62, 0, Math.PI * 2); c.fill(); c.globalAlpha = 1; }
       c.font = `${Math.max(28, Math.round(s * 0.7))}px system-ui`; c.textAlign = "center"; c.textBaseline = "bottom";
       c.shadowColor = cr.kind === "bomb" ? "#ff3030" : "#ffe066"; c.shadowBlur = 14;
-      c.fillText(cr.kind === "bomb" ? "💣" : "💰", bx, by - s * 0.42 + Math.sin(t * 6 + cr.uid) * 4);
+      const sign = { bomb: "💣", treasure: "💰", sticky: "🍬", faller: "🔥", floater: "🫧" }[cr.kind as "bomb"] ?? "";
+      if (cr.kind === "faller") { c.globalAlpha = 0.35; c.fillStyle = "#ff3a00"; c.beginPath(); c.ellipse(bx, cr.y, s * 0.5, s * 0.14, 0, 0, Math.PI * 2); c.fill(); c.globalAlpha = 1; }
+      c.fillText(sign, bx, by - s * 0.42 + Math.sin(t * 6 + cr.uid) * 4);
       c.restore();
     }
   }
@@ -301,6 +303,13 @@ export class View {
       return;
     }
     const bx = cr.x, by = cr.y - cr.lift - s * 0.5;
+    if (cr.kind === "bush" && cr.hidden) {
+      // a bush that shakes when the wind hits it
+      const sh = cr.cycleT > 0 ? Math.sin(t * 40) * 4 * Math.min(1, cr.cycleT * 3) : 0;
+      c.save(); c.font = `${Math.round(s * 1.25)}px system-ui`; c.textAlign = "center"; c.textBaseline = "bottom";
+      c.fillText("🌳", cr.x + sh, cr.y + 6); c.restore();
+      return;
+    }
     if (cr.kind === "box") {
       // a mystery gift floating down
       c.save(); c.translate(bx, by); c.rotate(Math.sin(t * 3 + cr.uid) * 0.15);
