@@ -131,6 +131,7 @@ void main() {
 const WATER_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uColor, uHeight, uLight;
+uniform vec4 uPond;
 uniform float uWorld, uTime, uLiquid; // 0 water, 1 ice, 2 lava
 uniform vec3 uCam, uFog, uSkyLow;
 in vec3 vW;
@@ -142,7 +143,7 @@ float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
 float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += vn(p) * a; p = p * 2.03 + 7.1; a *= 0.5; } return s; }
 void main() {
   float depth = WATER - groundH(vW.xz);
-  if (depth < 0.0) discard;
+  if (depth < 0.0 || length(vW.xz - uPond.xy) > uPond.z * 0.8) discard;
   vec2 uv = vW.xz / uWorld + 0.5;
   float rest = clamp(texture(uColor, uv).r * 1.3, 0.0, 1.0);
   float glow = 1.0 - exp(-texture(uLight, uv).r * 0.012);

@@ -30,7 +30,7 @@ export class Terrain {
     const r = Math.hypot(x, z);
     y *= this.amp * smooth(6, 16, r) * (1 - smooth(RIM - 10, RIM, r)); // the seed's square and the rim stay level
     const p = this.pond;
-    if (p.r > 0) { const d = Math.hypot(x - p.x, z - p.z) / p.r; y = y * smooth(0.7, 1.5, d) - 3.4 * Math.exp(-d * d * 1.3); }
+    if (p.r > 0) { const d = Math.hypot(x - p.x, z - p.z) / p.r; y = Math.max(y, WATER + 0.35) * smooth(0.7, 1.5, d) - 3.4 * Math.exp(-d * d * 1.3); } // only the pond holds water
     return y;
   }
   /** a new land: hills, a pond, and level pads (x, z, half size) under the buildings; returns each pad's height */
