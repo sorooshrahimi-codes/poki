@@ -159,7 +159,7 @@ function renderPath() {
 }
 const hand = document.getElementById("hand")!, countN = document.getElementById("countN")!, countBox = document.getElementById("count")!, goalFill = document.getElementById("goalFill")!;
 // test builds only: five quick taps on the swarm counter skip to the next land
-const SKIP_TEST = true;
+const SKIP_TEST = import.meta.env.MODE !== "poki";
 let taps = 0, tapT = 0;
 countBox.style.pointerEvents = "auto";
 countBox.addEventListener("pointerdown", () => { if (!SKIP_TEST) return; const n = performance.now(); taps = n - tapT < 600 ? taps + 1 : 1; tapT = n; if (taps >= 5) { taps = 0; nextLand(); } });

@@ -203,7 +203,7 @@ void main() {
   vec3 sunC = mix(vec3(0.85, 0.72, 0.65), vec3(1.25, 1.12, 0.95), rest);
   vec3 c = base * (sky * (0.55 + 0.45 * nrm.y) * ao + sunC * diff * 0.9) * bevel + base * glow * 1.4 + vec3(1.0, 0.5, 0.15) * glow * 0.25;
   if (int(hit.b + 0.5) == 18) c = vec3(3.0, 1.6, 0.4); // the giant's eyes burn
-  if (int(hit.b + 0.5) == 25) c += col * (0.4 + 0.6 * rest) * 0.9; // crystals glow
+  if (int(hit.b + 0.5) == 25) c += col * (0.12 + 0.9 * rest) * 0.9; // crystals glow
   float dist = length(wp - uCam);
   c = mix(c, vec3(0.20, 0.16, 0.22), smoothstep(80.0, 240.0, dist));
   o = vec4(c, 1.0);
