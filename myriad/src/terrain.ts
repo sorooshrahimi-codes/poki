@@ -12,6 +12,7 @@ export class Terrain {
   h = new Float32Array(HN * HN);
   tex: WebGLTexture;
   pond = { x: 0, z: 0, r: 0 };
+  amp = 2;
   gl: GL;
   constructor(gl: GL) {
     this.gl = gl;
@@ -27,9 +28,9 @@ export class Terrain {
     let y = 1.7 * Math.sin(x * 0.065 + s) * Math.sin(z * 0.058 + s * 1.7)
       + 0.9 * Math.sin(x * 0.12 - z * 0.1 + s * 2.3) + 0.45 * Math.sin(x * 0.23 + z * 0.19 + s);
     const r = Math.hypot(x, z);
-    y *= smooth(6, 16, r) * (1 - smooth(RIM - 10, RIM, r)); // the seed's square and the rim stay level
+    y *= this.amp * smooth(6, 16, r) * (1 - smooth(RIM - 10, RIM, r)); // the seed's square and the rim stay level
     const p = this.pond;
-    if (p.r > 0) { const d = Math.hypot(x - p.x, z - p.z) / p.r; y = y * smooth(0.6, 1.4, d) - 2.4 * Math.exp(-d * d * 1.6); }
+    if (p.r > 0) { const d = Math.hypot(x - p.x, z - p.z) / p.r; y = y * smooth(0.6, 1.4, d) - 2.6 * Math.exp(-d * d * 1.6); }
     return y;
   }
   /** a new land: hills, a pond, and level pads (x, z, half size) under the buildings; returns each pad's height */
@@ -38,7 +39,7 @@ export class Terrain {
     let a = seed * 7919 + 13;
     const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
     const ang = rnd() * Math.PI * 2, rr = 24 + rnd() * 14;
-    this.pond = { x: Math.cos(ang) * rr, z: Math.sin(ang) * rr, r: 8 + rnd() * 4 };
+    this.pond = { x: Math.cos(ang) * rr, z: Math.sin(ang) * rr, r: 11 + rnd() * 4 };
     return this.pond;
   }
   build(seed: number, pads: { x: number; z: number; half: number }[]) {

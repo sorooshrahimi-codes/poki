@@ -283,7 +283,7 @@ void main() { vec2 q = gl_PointCoord * 2.0 - 1.0; o = vec4(vW * uDt * 1.6 * max(
 export class City {
   gl: GL;
   atlas: Target; atlasB: Target; counter: Target; color: Target;
-  grid: WebGLTexture; gridData = new Uint8Array(GRID * GRID);
+  grid: WebGLTexture; gridData = new Uint8Array(GRID * GRID * 4); // up to four volumes per cell (a giant's parts stack)
   march: Program; sim: Program; eat: Program; paint: Program; fillP: Program; failP: Program;
   private pass = 0;
   private static DIRS = [[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1]];
@@ -304,7 +304,7 @@ export class City {
     this.atlasB = target(gl, AW, AH, [rgba16]);
     this.counter = target(gl, NB, 1, [{ internal: gl.RGBA32F, format: gl.RGBA, type: gl.FLOAT, filter: gl.NEAREST }]);
     this.color = target(gl, COLOR, COLOR, [{ internal: gl.R16F, format: gl.RED, type: gl.HALF_FLOAT, filter: gl.LINEAR }]);
-    this.grid = texture(gl, GRID, GRID, gl.R8, gl.RED, gl.UNSIGNED_BYTE, gl.NEAREST);
+    this.grid = texture(gl, GRID, GRID, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, gl.NEAREST);
     this.march = program(gl, MARCH_VS, MARCH_FS, "march");
     this.sim = program(gl, FULLSCREEN_VS, SIM_FS, "sim");
     this.failP = program(gl, FULLSCREEN_VS, FAIL_FS, "fail");
@@ -347,7 +347,7 @@ void main() { o = vec4(uAmount); }`, "fill");
       const half = (V * VS * (L.scale ?? 1)) / 2 + 1.0;
       for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) {
         const wx = (gx + 0.5) / GRID * WORLD - WORLD / 2, wz = (gz + 0.5) / GRID * WORLD - WORLD / 2;
-        if (Math.abs(wx - L.x) <= half && Math.abs(wz - L.z) <= half) this.gridData[gz * GRID + gx] = b + 1;
+        if (Math.abs(wx - L.x) <= half && Math.abs(wz - L.z) <= half) this.gridData[(gz * GRID + gx) * 4] = b + 1;
       }
     });
     for (const t of [this.atlas, this.atlasB]) {
@@ -355,7 +355,7 @@ void main() { o = vec4(uAmount); }`, "fill");
       gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, AW, AH, gl.RGBA, gl.FLOAT, data);
     }
     gl.bindTexture(gl.TEXTURE_2D, this.grid);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GRID, GRID, gl.RED, gl.UNSIGNED_BYTE, this.gridData);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GRID, GRID, gl.RGBA, gl.UNSIGNED_BYTE, this.gridData);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.color.fb); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.counter.fb); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -519,14 +519,15 @@ void main() { o = vec4(uAmount); }`, "fill");
     const sc = this.s2Arr[b * 4] || 1;
     const half = (V * VS * sc) / 2 + 1.0;
     for (let i = 0; i < this.gridData.length; i++) if (this.gridData[i] === b + 1) this.gridData[i] = 0;
+    const put = (c: number) => { for (let k = 0; k < 4; k++) if (this.gridData[c * 4 + k] === 0) { this.gridData[c * 4 + k] = b + 1; return; } };
     B.x = x; B.z = z;
     for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) {
       const wx = (gx + 0.5) / GRID * WORLD - WORLD / 2, wz = (gz + 0.5) / GRID * WORLD - WORLD / 2;
-      if (Math.abs(wx - x) <= half && Math.abs(wz - z) <= half) this.gridData[gz * GRID + gx] = b + 1;
+      if (Math.abs(wx - x) <= half && Math.abs(wz - z) <= half) put(gz * GRID + gx);
     }
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.grid);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GRID, GRID, gl.RED, gl.UNSIGNED_BYTE, this.gridData);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, GRID, GRID, gl.RGBA, gl.UNSIGNED_BYTE, this.gridData);
     this.bArr[b * 4] = x; this.bArr[b * 4 + 1] = z; this.s2Arr[b * 4 + 1] = yOff;
   }
 
@@ -547,7 +548,7 @@ void main() { o = vec4(uAmount); }`, "fill");
 }
 
 // ---------------------------------------------------------------- procedural shapes at 32^3, with real materials
-export const theme = { snow: false, giant: 0 };
+export const theme = { snow: false, giant: 0, part: 0 };
 function generate(kind: Kind, vol: Uint8Array, rnd: () => number) {
   const ROOF = theme.snow ? 23 : 3;
   const set = (x: number, y: number, z: number, m: number) => { if (x >= 0 && y >= 0 && z >= 0 && x < V && y < V && z < V) vol[(z * V + y) * V + x] = m; };
@@ -632,92 +633,110 @@ function generate(kind: Kind, vol: Uint8Array, rnd: () => number) {
       }
     }
     for (let y = 1; y <= 5; y++) for (let z = 24; z <= 30; z++) for (let x = 20; x <= 29; x++) if (rnd() < 0.85 && (x - 24.5) ** 2 + (y * 1.6) ** 2 + (z - 27) ** 2 < 30) set(x, y, z, 11); // a hay pile
-  } else if (kind === 5) { // the giant of this land (theme.giant): each one is its own creature; the face looks at the camera (+z)
-    const fill = (f: (x: number, y: number, z: number) => number) => { for (let y = 0; y < V; y++) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) { const m = f(x, y, z); if (m) set(x, y, z, m); } };
+  } else if (kind === 5) { // a part of this land's giant (theme.giant, theme.part): each part is its own volume, so it can walk
     const ell = (x: number, y: number, z: number, cx: number, cy: number, cz: number, rx: number, ry: number, rz: number) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 + ((z - cz) / rz) ** 2 <= 1;
-    const inBox = (x: number, y: number, z: number, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number) => x >= x0 && x <= x1 && y >= y0 && y <= y1 && z >= z0 && z <= z1;
     const cap = (x: number, y: number, z: number, ax: number, ay: number, az: number, bx: number, by: number, bz: number, r: number) => {
       const dx = bx - ax, dy = by - ay, dz = bz - az, l2 = dx * dx + dy * dy + dz * dz;
       const t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy + (z - az) * dz) / l2));
       return (x - ax - dx * t) ** 2 + (y - ay - dy * t) ** 2 + (z - az - dz * t) ** 2 <= r * r;
     };
-    const g = theme.giant % 5;
-    if (g === 0) { // the meadow golem: boulders of granite, moss and wild flowers growing on it
+    const g = theme.giant % 5, part = theme.part;
+    const noise = (x: number, y: number, z: number) => Math.sin(x * 1.7 + y * 0.9) * Math.sin(z * 1.3 - y * 1.1) + Math.sin(x * 0.5 + z * 0.7 + y * 0.3) * 0.5;
+    // the skin of each giant
+    const skin = (x: number, y: number, z: number): number => {
+      if (g === 0) return noise(x, y, z) > 0.55 ? 6 : rnd() < 0.1 ? 19 : 17;
+      if (g === 1) return 22;
+      if (g === 2) return (y % 6 === 0) ? 16 : 27;
+      if (g === 3) return rnd() < 0.15 ? 16 : 23;
+      return noise(x, y, z) > 0.95 ? 18 : 26;
+    };
+    const fill = (f: (x: number, y: number, z: number) => number) => { for (let y = 0; y < V; y++) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) { const m = f(x, y, z); if (m) set(x, y, z, m); } };
+    const fur = g === 3 ? 1.2 : g === 0 ? 0.6 : 0;
+    const j = () => (rnd() - 0.5) * fur;
+    if (part === 4 || part === 5) { // a leg: thigh, knee, shin, a broad foot (toes to the front)
+      const stub = g === 1 ? 0.8 : 1;
       fill((x, y, z) => {
-        const body = cap(x, y, z, 11, 0, 15, 11, 10, 15, 3.2) || cap(x, y, z, 20, 0, 15, 20, 10, 15, 3.2) // legs
-          || ell(x, y, z, 15.5, 16, 15, 8.5, 6.5, 5.5)                                                       // torso
-          || cap(x, y, z, 7, 20, 15, 4, 6, 16, 2.6) || cap(x, y, z, 24, 20, 15, 27, 6, 16, 2.6)             // arms
-          || ell(x, y, z, 4, 4.5, 16, 3, 3, 3) || ell(x, y, z, 27, 4.5, 16, 3, 3, 3)                         // fists
-          || ell(x, y, z, 15.5, 25, 16, 4.5, 4, 4);                                                         // head
-        if (!body) return 0;
-        if (z >= 19 && y >= 25 && y <= 26 && (x === 13 || x === 14 || x === 17 || x === 18)) return 18;   // burning eyes
-        return rnd() < 0.5 ? 17 : 6;
+        if (ell(x, y, z, 15.5, 2.6, 18.5, 7.5, 2.8 + (g === 2 ? 0.3 : 0), 10)) return g === 2 ? 26 : g === 4 ? 26 : skin(x, y, z); // foot
+        if (g !== 1 && y <= 3 && z >= 26 && (x === 11 || x === 15 || x === 19) && ell(x, y, z, 15.5, 2.6, 18.5, 8, 3, 11)) return g === 3 || g === 4 ? 16 : 6; // toes / claws
+        if (cap(x, y, z, 15.5, 31, 15.5, 15.5, 14, 15.5, (7.2 + j()) * stub)) return skin(x, y, z);         // thigh
+        if (ell(x, y, z, 15.5, 13, 16.5, 6.2, 3.8, 6.2)) return g === 2 ? 16 : g === 4 ? 25 : skin(x, y, z);  // knee
+        if (cap(x, y, z, 15.5, 13, 15.5, 15.5, 3, 16.5, (5.8 + j()) * stub)) return skin(x, y, z);          // shin
+        return 0;
       });
-      // moss and flowers on everything that faces the sky
-      for (let y = V - 2; y >= 0; y--) for (let z = 0; z < V; z++) for (let x = 0; x < V; x++) {
-        const k = (z * V + y) * V + x;
-        if (vol[k] && vol[k] !== 18 && !vol[k + V]) { const r = rnd(); if (r < 0.55) vol[k] = 19; else if (r < 0.66) vol[k] = r < 0.6 ? 10 : 13; }
-      }
-    } else if (g === 1) { // the mushroom king: a soft stem body, stubby legs, a vast spotted cap for a crown
+    } else if (part === 1) { // the body
       fill((x, y, z) => {
-        if (y >= 18 && ell(x, y, z, 15.5, 22, 15.5, 15, 9.5, 15) && y >= 19) return y < 21 ? 22 : (rnd() < 0.14 ? 21 : 20);
-        if (ell(x, y, z, 15.5, 11, 15.5, 6.5, 9, 6)) {
-          if (z >= 20 && y >= 13 && y <= 14 && (x === 13 || x === 18)) return 18;
-          if (z >= 20 && y === 10 && x >= 14 && x <= 17) return 26; // a little smile
+        const r = ell(x, y, z, 15.5, 15, 15.5, 14 + j(), 15.5, 10 + j());
+        if (!r) {
+          if (g === 4 && cap(x, y, z, 15.5, 6, 6, 15.5, 30, 2, 2.2) && ((y >> 2) & 1) === 0) return 25; // crystal ridge down the back
+          return 0;
+        }
+        const front = z >= 22;
+        if (g === 2 && front) { const cx = x - 15.5, cy = y - 18; const d = cx * cx + cy * cy;
+          if (d <= 30) return (Math.abs(cx) < 0.7 && cy > 0 && cy < 5) || (Math.abs(cy) < 0.7 && cx > 0 && cx < 4) ? 26 : d > 24 ? 13 : 16; // a clock on its chest
+          if (y >= 6 && y <= 8) return 12; // a brick belt
+          if ((x + y) % 7 === 0) return 13; }  // gold rivets
+        if (g === 1 && y >= 27) return rnd() < 0.3 ? 21 : 22;                     // gills under the king's collar
+        if (g === 1 && front && y >= 10 && y <= 12 && Math.abs(x - 15.5) < 5) return 15; // a red sash
+        if (g === 3 && front && ell(x, y, z, 15.5, 14, 24, 8, 9, 3)) return 16;   // a pale chest
+        if (g === 0 && y >= 26 && rnd() < 0.5) return rnd() < 0.2 ? 10 : 19;       // moss and flowers on the shoulders
+        return skin(x, y, z);
+      });
+    } else if (part === 2 || part === 3) { // an arm: shoulder, upper arm, elbow, forearm, a big fist
+      fill((x, y, z) => {
+        if (ell(x, y, z, 15.5, 27, 15.5, 8.5, 5, 8.5)) return g === 2 ? 14 : g === 4 && rnd() < 0.35 ? 25 : g === 0 && rnd() < 0.4 ? 19 : skin(x, y, z); // shoulder
+        if (g === 4 && cap(x, y, z, 15.5, 29, 15.5, 15.5, 31, 13, 1.6)) return 25;
+        if (cap(x, y, z, 15.5, 26, 15.5, 15.5, 15, 15.5, 4.6 + j())) return skin(x, y, z);
+        if (cap(x, y, z, 15.5, 15, 15.5, 15.5, 7, 17.5, 5 + j())) return g === 2 ? 27 : skin(x, y, z);
+        if (ell(x, y, z, 15.5, 4.5, 18, 6.2, 4.5, 6.2)) return (z >= 23 && y >= 6 && (x % 3) === 0) ? (g === 3 || g === 4 ? 16 : 6) : g === 2 ? 26 : skin(x, y, z); // fist with knuckles
+        return 0;
+      });
+    } else { // the head: its own face for every giant
+      fill((x, y, z) => {
+        const fx = x - 15.5;
+        if (g === 0) { // the golem: a rough boulder with a heavy brow, deep burning eyes, a cracked mouth, moss hair with flowers
+          if (!ell(x, y, z, 15.5, 13, 15.5, 11 + j(), 11, 10 + j())) return 0;
+          if (z >= 23 && y >= 13 && y <= 15 && Math.abs(Math.abs(fx) - 4.5) <= 1.6) return 18;
+          if (z >= 24 && y >= 16 && y <= 17 && Math.abs(fx) <= 8) return 6;    // brow
+          if (z >= 23 && y === 8 && Math.abs(fx) <= 4 + (x % 2)) return 26;    // mouth
+          if (y >= 20 && rnd() < 0.65) return rnd() < 0.15 ? (rnd() < 0.5 ? 10 : 13) : 19;
+          return skin(x, y, z);
+        }
+        if (g === 1) { // the mushroom king: a vast spotted cap, a round face with big eyes and a smile
+          if (y >= 13 && ell(x, y, z, 15.5, 16, 15.5, 15.5, 15, 15.5)) { if (y <= 14) return 21; const sp = Math.sin(x * 0.9) * Math.sin(z * 0.9 + 1) * Math.sin(y * 0.8); return sp > 0.55 ? 21 : 20; }
+          if (!ell(x, y, z, 15.5, 7.5, 16, 9, 7.5, 8.5)) return 0;
+          if (z >= 22 && ell(x, y, z, 15.5 + (fx < 0 ? -3.5 : 3.5), 9, 24, 2.2, 2.6, 2)) return (Math.abs(x - (fx < 0 ? 12 : 19)) <= 0.6 && y >= 8 && y <= 9) ? 26 : 16;
+          if (z >= 23 && y === 4 && Math.abs(fx) <= 3) return 26;
+          if (z >= 23 && y === 5 && Math.abs(fx) >= 3 && Math.abs(fx) <= 4) return 26;
+          if (z >= 22 && y === 6 && Math.abs(Math.abs(fx) - 6) <= 1) return 10; // rosy cheeks
           return 22;
         }
-        if (cap(x, y, z, 12, 0, 15.5, 13, 5, 15.5, 2.6) || cap(x, y, z, 19, 0, 15.5, 18, 5, 15.5, 2.6)) return 22;
-        if (cap(x, y, z, 9, 12, 15.5, 4, 5, 18, 1.9) || cap(x, y, z, 22, 12, 15.5, 27, 5, 18, 1.9)) return 22;
-        return 0;
-      });
-    } else if (g === 2) { // the clockwork knight: slate armour, a brick chest with a clock face, a gold visor, a great sword
-      fill((x, y, z) => {
-        if (cap(x, y, z, 26, 0, 21, 26, 22, 21, 1.1)) return y > 13 ? 26 : 6;                   // the sword, point down
-        if (inBox(x, y, z, 23, 29, 13, 14, 20, 22)) return 13;                                   // its golden guard
-        if (inBox(x, y, z, 10, 13, 0, 10, 12, 18) || inBox(x, y, z, 18, 21, 0, 10, 12, 18)) return y < 2 ? 26 : 27; // armoured legs
-        if (inBox(x, y, z, 8, 23, 11, 22, 10, 20)) {                                               // chest
-          const cx = x - 15.5, cy = y - 16.5;
-          if (z === 20 && cx * cx + cy * cy <= 16) return (Math.abs(cx) < 0.6 && cy > 0) || (Math.abs(cy) < 0.6 && cx > 0) ? 26 : 16; // clock
-          return (y + (x % 2)) % 3 === 0 ? 16 : 12;
+        if (g === 2) { // the clockwork knight: a great helm, a glowing visor, a red crest, gold rivets
+          const inHelm = Math.abs(fx) <= 9.5 && y <= 22 && z >= 6 && z <= 25 && (Math.abs(fx) <= 8.5 || y <= 20) && (fx * fx + (y - 14) * (y - 14) * 0.4) < 120;
+          if (inHelm) {
+            if (z >= 24 && y >= 12 && y <= 13 && Math.abs(fx) <= 7) return 18;
+            if (z >= 24 && Math.abs(fx) <= 0.6 && y < 12 && y > 3) return 13;
+            if ((y === 3 || y === 21) && (x % 3 === 0)) return 13;
+            return 27;
+          }
+          if (Math.abs(fx) <= 1.2 && z >= 4 && z <= 26 && y >= 22 && y <= 22 + 6 * Math.sin(((z - 4) / 22) * Math.PI)) return 15;
+          return 0;
         }
-        if (ell(x, y, z, 6, 21, 15, 3.2, 2.2, 3.2) || ell(x, y, z, 25, 21, 15, 3.2, 2.2, 3.2)) return 14; // pauldrons
-        if (cap(x, y, z, 6, 19, 15, 6, 9, 16, 1.9) || cap(x, y, z, 25, 19, 15, 26, 14, 20, 1.9)) return 27; // arms (the right one holds the sword)
-        if (inBox(x, y, z, 11, 20, 23, 30, 11, 20)) {                                                // helmet
-          if (z === 20 && y === 26 && x >= 12 && x <= 19) return 18;                                 // the glowing visor
-          if (y === 30 && x >= 14 && x <= 17) return 15;                                             // a red crest
-          return 27;
-        }
-        return 0;
-      });
-    } else if (g === 3) { // the yeti: shaggy snow fur, a stone face, curled horns, long arms down to the ground
-      fill((x, y, z) => {
-        const shag = (rnd() - 0.5) * 1.4;
-        if (ell(x, y, z, 15.5, 14, 15, 9 + shag, 10 + shag, 7 + shag)) {
-          if (z >= 20 && ell(x, y, z, 15.5, 19, 21, 4, 3.5, 2)) return (y === 20 && (x === 13 || x === 18)) ? 18 : y === 17 && x >= 14 && x <= 17 ? 26 : 17;
+        if (g === 3) { // the yeti: shaggy, a grey face, small fierce eyes, fangs, curled horns
+          if (cap(x, y, z, 7, 18, 15, 2, 25, 13, 2.2) || cap(x, y, z, 2, 25, 13, 4, 30, 17, 1.6) || cap(x, y, z, 24, 18, 15, 29, 25, 13, 2.2) || cap(x, y, z, 29, 25, 13, 27, 30, 17, 1.6)) return 6;
+          if (!ell(x, y, z, 15.5, 13, 15.5, 11 + j(), 12 + j(), 10 + j())) return 0;
+          if (z >= 21 && ell(x, y, z, 15.5, 11, 25, 7, 7, 3)) {
+            if (y >= 13 && y <= 14 && Math.abs(Math.abs(fx) - 3.5) <= 1) return 18;
+            if (y >= 6 && y <= 7 && Math.abs(fx) <= 4) return y === 6 && Math.abs(fx) >= 2.5 ? 16 : 26;
+            return 17;
+          }
           return 23;
         }
-        if (ell(x, y, z, 15.5, 24, 15, 6 + shag, 5.5, 5.5)) return 23;
-        if (cap(x, y, z, 10, 27, 15, 6, 30, 13, 1.2) || cap(x, y, z, 21, 27, 15, 25, 30, 13, 1.2)) return 6; // horns
-        if (cap(x, y, z, 7, 18, 15, 3, 2, 17, 2.8 + shag * 0.5) || cap(x, y, z, 24, 18, 15, 28, 2, 17, 2.8 + shag * 0.5)) return 23;
-        if (cap(x, y, z, 12, 0, 15, 12, 6, 15, 3) || cap(x, y, z, 19, 0, 15, 19, 6, 15, 3)) return 23;
-        if (ell(x, y, z, 15.5, 16, 8, 3, 6, 1.6) && rnd() < 0.5) return 25; // ice crystals grown on its back
-        return 0;
-      });
-    } else { // the crystal titan, where the grey began: obsidian with glowing veins, a crown and back of crystal
-      fill((x, y, z) => {
-        const vein = (Math.sin(x * 1.3 + y * 0.7) + Math.sin(z * 1.1 - y * 0.9)) > 1.55;
-        const body = cap(x, y, z, 11, 0, 15, 12, 11, 15, 3) || cap(x, y, z, 20, 0, 15, 19, 11, 15, 3)
-          || ell(x, y, z, 15.5, 17, 15, 8, 7, 5.5) || ell(x, y, z, 15.5, 25, 16, 4, 4, 4)
-          || cap(x, y, z, 7, 21, 15, 3, 8, 18, 2.4) || cap(x, y, z, 24, 21, 15, 28, 8, 18, 2.4);
-        if (body) {
-          if (z >= 19 && y >= 25 && y <= 26 && (x === 13 || x === 14 || x === 17 || x === 18)) return 18;
-          return vein ? 18 : 26;
-        }
-        // crystal spikes: a crown and shoulders and a ridge down the back
-        for (const [ax, ay, az, bx, by, bz, r] of [[13, 28, 16, 11, 31, 16, 1.0], [15.5, 28, 16, 15.5, 31, 15, 1.1], [18, 28, 16, 20, 31, 16, 1.0],
-          [8, 23, 15, 5, 30, 14, 1.4], [23, 23, 15, 26, 30, 14, 1.4], [15.5, 20, 10, 15.5, 27, 6, 1.6], [15.5, 14, 10, 15.5, 19, 5, 1.3]] as number[][])
-          if (cap(x, y, z, ax, ay, az, bx, by, bz, r)) return 25;
-        return 0;
+        // the crystal titan: an angular obsidian head, slanted burning eyes, a crown of crystal
+        const crown = [[-7, 3], [-3.5, 6], [0, 8], [3.5, 6], [7, 3]].some(([cx, h]) => cap(x, y, z, 15.5 + cx, 18, 15.5, 15.5 + cx * 1.25, 19 + h + 4, 14, 1.5));
+        if (crown) return 25;
+        if (!(Math.abs(fx) + Math.abs(y - 11) * 0.6 <= 10 && Math.abs(z - 15.5) <= 9 && y <= 19)) return 0;
+        if (z >= 24 && y >= 11 && y <= 12 + (Math.abs(fx) > 4 ? 1 : 0) && Math.abs(fx) >= 2 && Math.abs(fx) <= 6) return 18;
+        return skin(x, y, z);
       });
     }
   } else if (kind === 7) { // a giant mushroom: a creamy stem and a red cap with white spots

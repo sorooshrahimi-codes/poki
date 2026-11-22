@@ -14,7 +14,7 @@ export class Audio {
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!Ctx) return;
     const ctx = (this.ctx = new Ctx());
-    this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : 0.9; this.master.connect(ctx.destination);
+    this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : 0.45; this.master.connect(ctx.destination);
     const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 4;
     comp.connect(this.master);
     // one second of noise, reused by everything
@@ -32,23 +32,23 @@ export class Audio {
     this.out = comp;
   }
   out!: AudioNode;
-  setMuted(m: boolean) { this.muted = m; if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.05); }
+  setMuted(m: boolean) { this.muted = m; if (this.ctx) this.master.gain.setTargetAtTime(m ? 0 : 0.45, this.ctx.currentTime, 0.05); }
   /** every frame: the swarm's size (count) and speed shape its sound */
   swarm(count: number, speed: number) {
     const c = this.ctx; if (!c) return;
     const k = Math.min(1, Math.log10(Math.max(10, count)) / 5.3); // 200k ~ 1
     const now = c.currentTime;
-    this.hum.gain.setTargetAtTime(0.05 + 0.32 * k * (0.7 + Math.min(speed, 25) / 60), now, 0.2);
+    this.hum.gain.setTargetAtTime(0.03 + 0.16 * k * (0.7 + Math.min(speed, 25) / 60), now, 0.3);
     this.bandA.frequency.setTargetAtTime(180 + 260 * k + speed * 6, now, 0.3);
     this.bandB.frequency.setTargetAtTime(1500 + 900 * k + speed * 25, now, 0.3);
   }
   /** called with how much was eaten since the last call: crunches, spread over the next moments */
   eat(amount: number) {
     const c = this.ctx; if (!c) return;
-    this.crunchDebt += Math.min(amount, 40) * 0.6;
-    const n = Math.min(8, Math.floor(this.crunchDebt));
+    this.crunchDebt += Math.min(amount, 40) * 0.25;
+    const n = Math.min(4, Math.floor(this.crunchDebt));
     this.crunchDebt -= n;
-    for (let i = 0; i < n; i++) this.click(c.currentTime + Math.random() * 0.15, 0.04 + Math.random() * 0.05);
+    for (let i = 0; i < n; i++) this.click(c.currentTime + Math.random() * 0.2, 0.02 + Math.random() * 0.03);
   }
   private click(t: number, vol: number) {
     const c = this.ctx!;
@@ -78,9 +78,9 @@ export class Audio {
     const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
     const t = c.currentTime;
     [0, 4, 7].forEach((iv, i) => {
-      const o = c.createOscillator(); o.type = "triangle";
+      const o = c.createOscillator(); o.type = "sine";
       o.frequency.value = 440 * Math.pow(2, (scale[step % scale.length] + iv - 9) / 12);
-      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t + i * 0.06); g.gain.exponentialRampToValueAtTime(0.12, t + i * 0.06 + 0.01); g.gain.exponentialRampToValueAtTime(0.0005, t + i * 0.06 + 1.2);
+      const g = c.createGain(); g.gain.setValueAtTime(0.0001, t + i * 0.06); g.gain.exponentialRampToValueAtTime(0.05, t + i * 0.06 + 0.01); g.gain.exponentialRampToValueAtTime(0.0005, t + i * 0.06 + 1.2);
       o.connect(g); g.connect(this.out); o.start(t + i * 0.06); o.stop(t + i * 0.06 + 1.3);
     });
   }

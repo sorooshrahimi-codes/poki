@@ -30,7 +30,7 @@ void main() {
   vec2 uv = world / uWorld + 0.5;
   float rest = clamp(texture(uColor, uv).r * 1.6 - (r3 * 0.5), 0.0, 1.0);
   float gy = groundH(world);
-  float h = rest < 0.04 || gy < WATER + 0.05 ? 0.0 : mix(0.05, 0.42 + 0.55 * r2, rest);
+  float h = rest < 0.04 || gy < WATER + 0.05 || length(world) > 63.5 ? 0.0 : mix(0.05, 0.42 + 0.55 * r2, rest);
   // the blade: 5 vertices (a tapering strip), bent by wind and pushed by the swarm
   int k = gl_VertexID;
   float t = float(k / 2) / 2.0;

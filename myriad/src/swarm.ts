@@ -21,7 +21,7 @@ const UPDATE_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uPos, uVel, uDen, uGrid, uAtlas, uHeight;
 uniform vec4 uBirth; // the materials new mites are born with (what the swarm has been eating)
-uniform float uShape, uShapeScale; // 0..1: the swarm gathers into a shape when left alone
+uniform float uShape, uShapeScale, uReset, uOpen; // uOpen: the north gate is open (leaving the land) // 0..1: the swarm gathers into a shape when left alone
 uniform vec3 uShapePos;
 uniform vec4 uPa[16], uPb[16];
 uniform float uPw[16];
@@ -79,7 +79,7 @@ void main() {
   }
   vec3 pos = p.xyz, vel = v.xyz;
   float mat = floor(v.w), phase = fract(v.w);
-  if (p.w < 0.5) {
+  if (p.w < 0.5 || uReset > 0.5) {
     // born of what was eaten: it carries that colour
     float pick = h11(id * 0.77 + floor(uTime));
     mat = pick < 0.25 ? uBirth.x : pick < 0.5 ? uBirth.y : pick < 0.75 ? uBirth.z : uBirth.w;
@@ -134,7 +134,17 @@ void main() {
   }
   // 6. stone: mites bore into buildings like termites, eating the voxel they are in
   float w = 1.0;
-  float gi = texture(uGrid, pos.xz / uWorld + 0.5).r * 255.0;
+  // which volume is here: up to four share a cell (a giant's legs, body and head stack); take the one at this height
+  vec4 ids = texture(uGrid, pos.xz / uWorld + 0.5) * 255.0;
+  float gi = 0.0;
+  for (int k = 0; k < 4; k++) {
+    float id4 = ids[k];
+    if (id4 > 0.5 && gi < 0.5) {
+      int bb = int(id4 + 0.5) - 1;
+      float y0 = uS2[bb].y, y1 = y0 + 32.0 * ${VS_W.toFixed(3)} * uS2[bb].x;
+      if (pos.y > y0 - 0.6 && pos.y < y1 + 0.6) gi = id4;
+    }
+  }
   if (gi > 0.5) {
     int b = int(gi + 0.5) - 1;
     vec4 B = uB[b], B2 = uB2[b];
@@ -146,14 +156,14 @@ void main() {
       float ahead = solidAt(b, ivec3(floor(lp + hd * 1.2)));
       if (here > 0.5) {
         w = 2.0 + float(b);
-        if (h11(id * 0.31 + uTime * 7.0) < 0.04) { float m = matAt(b, ivec3(floor(lp))); if (m > 0.5) mat = m; }
+        if (h11(id * 0.31 + uTime * 7.0) < 0.3) { float m = matAt(b, ivec3(floor(lp))); if (m > 0.5) mat = m; }
         // chewing through stone slows a mite down; the swarm behind keeps pushing, so tunnels open up
         vel *= exp(-3.5 * uDt);
         vel.y += (above > 0.5 ? 2.0 : 4.0) * uDt;
       } else if (ahead > 0.5) {
         // stone right in front: bite it (w + 0.5 tells the eat pass to take the voxel ahead) and climb
         w = 2.5 + float(b);
-        if (h11(id * 0.31 + uTime * 7.0) < 0.04) { float m = matAt(b, ivec3(floor(lp + hd * 1.2))); if (m > 0.5) mat = m; }
+        if (h11(id * 0.31 + uTime * 7.0) < 0.3) { float m = matAt(b, ivec3(floor(lp + hd * 1.2))); if (m > 0.5) mat = m; }
         vel.xz *= exp(-2.0 * uDt);
         vel.y += 3.5 * uDt;
       } else {
@@ -163,11 +173,14 @@ void main() {
   }
   // the mist at the edge of the land: nobody gets through
   float rw = length(pos.xz);
-  if (rw > 62.0) vel.xz -= pos.xz / rw * (rw - 62.0) * 14.0 * uDt;
+  bool gateway = uOpen > 0.5 && abs(pos.x) < 4.5 && pos.z < 0.0;
+  if (rw > 61.0 && !gateway) vel.xz -= pos.xz / rw * (rw - 61.0) * 30.0 * uDt;
   float sp = length(vel);
   float vmax = uSpeed * 1.8 + 6.0;
   if (sp > vmax) vel *= vmax / sp;
   pos += vel * uDt;
+  float rw2 = length(pos.xz);
+  if (rw2 > 63.5 && !gateway) { pos.xz *= 63.5 / rw2; vel.xz *= 0.3; } // the wall is solid
   float fy = max(groundH(pos.xz), WATER) + 0.08;
   if (pos.y < fy) { pos.y = fy; vel.y = abs(vel.y) * 0.3; }
   oPos = vec4(pos, w);
@@ -240,7 +253,7 @@ void main() {
   vCol = r.z < 0.12 ? vec3(0.45, 1.0, 1.0) : mix(vec3(1.0, 0.62, 0.18), vec3(1.0, 0.92, 0.6), r.y);
   // a mite that ate something carries its colour (brightened to a glowing pastel, a touch of gold left)
   int m = int(floor(v.w));
-  if (m > 0 && m < ${MATS_N}) { vec3 mc = MAT[m]; mc = mc / max(max(mc.r, mc.g), max(mc.b, 0.05)); vCol = mix(mc * 0.85 + 0.12, vCol, 0.22); }
+  if (m > 0 && m < ${MATS_N}) { vec3 mc = MAT[m]; mc = mc / max(max(mc.r, mc.g), max(mc.b, 0.05)); vCol = mc * 0.92 + 0.06; }
   vBright = 0.7 + 0.6 * flap;
 }`;
 const MITE_FS = `#version 300 es
@@ -357,6 +370,8 @@ export class Swarm {
 
   shock = new Float32Array(4);
   birth = new Float32Array([0, 0, 0, 0]);
+  open = false;
+  reset = false; // next step: every mite bursts out of the seed again (entering a new land)
   shape = { blend: 0, scale: 1, pos: new Float32Array(3), pa: new Float32Array(64), pb: new Float32Array(64), pw: new Float32Array(16), n: 1 };
   step(dt: number, t: number, leader: Float32Array, leaderVel: Float32Array, active: number, speed: number, world: { grid: WebGLTexture; atlas: WebGLTexture; height: WebGLTexture; b: Float32Array; b2: Float32Array; s2: Float32Array }) {
     const gl = this.gl, src = this.pos[this.cur], dst = this.pos[1 - this.cur];
@@ -371,9 +386,9 @@ export class Swarm {
     gl.uniform3fv(u.uLeader, leader); gl.uniform3fv(u.uLeaderVel, leaderVel);
     gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uActive, active); gl.uniform1f(u.uS, S); gl.uniform1f(u.uWorld, WORLD);
     gl.uniform1f(u.uSpeed, speed); gl.uniform1f(u.uRep, 1.0); gl.uniform1f(u.uLift, 1.7);
-    gl.uniform1f(u.uRadius, 2.2 + Math.sqrt(active) * 0.05);
+    gl.uniform1f(u.uRadius, 2.0 + Math.sqrt(active) * 0.031); // a dense head, even at 200k
     bindTex(gl, 5, world.height, u.uHeight);
-    gl.uniform4fv(u.uBirth, this.birth);
+    gl.uniform4fv(u.uBirth, this.birth); gl.uniform1f(u.uReset, this.reset ? 1 : 0); gl.uniform1f(u.uOpen, this.open ? 1 : 0); this.reset = false;
     const sh = this.shape;
     gl.uniform1f(u.uShape, sh.blend); gl.uniform1f(u.uShapeScale, sh.scale); gl.uniform3fv(u.uShapePos, sh.pos);
     gl.uniform4fv(u.uPa, sh.pa); gl.uniform4fv(u.uPb, sh.pb); gl.uniform1fv(u.uPw, sh.pw); gl.uniform1i(u.uNP, sh.n);

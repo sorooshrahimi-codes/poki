@@ -52,18 +52,21 @@ void main() {
 const GROUND_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uLight, uColor;
-uniform float uWorld;
+uniform float uWorld, uGrid;
 uniform vec3 uCam;
 uniform vec3 uStoneA, uStoneB, uFog, uGrassA, uGrassB;
 uniform vec4 uHint; // x, z, radius, strength: a pulsing ring that says "eat this" (onboarding)
 uniform float uTime, uWall;
 in vec3 vW;
+in vec3 vN;
 out vec4 o;
+const float WATER = ${WATER.toFixed(2)};
 float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
 void main() {
   vec2 p = vW.xz;
+  if (uGrid < 0.5 && abs(p.x) < uWorld * 0.5 - 0.3 && abs(p.y) < uWorld * 0.5 - 0.3) discard; // the hill grid covers this
   // petrified ground: irregular stone slabs (voronoi) with dark cracks and grit
   vec2 gp = p / 2.2, gi = floor(gp), gf = fract(gp);
   float d1 = 9.0, d2 = 9.0; vec2 cell = gi;
@@ -101,11 +104,15 @@ void main() {
     float ring = exp(-pow((dh - uHint.z * (0.7 + ph * 0.6)) * 2.2, 2.0)) * (1.0 - ph);
     lit += vec3(1.0, 0.8, 0.35) * ring * uHint.w * 1.4;
   }
-  // distance fog into the dusk, and the grey mist that walls the land in
-  float dist = length(vW - uCam);
-  lit = mix(lit, uFog, smoothstep(60.0, 220.0, dist));
+  // hills catch the light (strong, so the land reads as land); the pond's floor is dark silt
+  float sun = max(0.0, dot(normalize(vN), normalize(vec3(0.4, 1.0, 0.3))));
+  lit *= 0.38 + 0.8 * sun;
+  if (vW.y < WATER) lit *= mix(0.45, 0.85, smoothstep(WATER - 2.0, WATER, vW.y));
+  // beyond the wall the land is still grey: the next land waits out there
   float rr = length(p);
-  lit = mix(lit, uFog * 1.2, smoothstep(uWall - 4.0, uWall + 6.0, rr + vn(p * 0.2 + uTime * 0.05) * 4.0));
+  lit = mix(lit, stone * (0.35 + 0.6 * sun), smoothstep(uWall + 1.0, uWall + 3.0, rr));
+  float dist = length(vW - uCam);
+  lit = mix(lit, uFog, smoothstep(70.0, 230.0, dist));
   o = vec4(lit, 1.0);
 }`;
 
@@ -124,7 +131,7 @@ void main() {
 const WATER_FS = `#version 300 es
 precision highp float;
 uniform sampler2D uColor, uHeight, uLight;
-uniform float uWorld, uTime;
+uniform float uWorld, uTime, uLiquid; // 0 water, 1 ice, 2 lava
 uniform vec3 uCam, uFog, uSkyLow;
 in vec3 vW;
 out vec4 o;
@@ -144,8 +151,17 @@ void main() {
   vec3 c = mix(deep, sky, fres * 0.8) + vec3(1.0, 0.6, 0.25) * glow * 0.6;
   float spark = pow(max(0.0, sin(w.x * 3.1) * sin(w.y * 2.7)), 40.0) * rest;
   c += spark * 0.8;
-  c = mix(c, uFog, smoothstep(70.0, 230.0, length(vW - uCam)));
   float a = clamp(0.55 + depth * 0.4, 0.0, 0.92) * smoothstep(0.0, 0.12, depth);
+  if (uLiquid > 1.5) { // lava: a glowing crust that cracks open, bright whatever the colour
+    float crust = smoothstep(0.35, 0.6, sin(vW.x * 1.3 + uTime * 0.3) * sin(vW.z * 1.1 - uTime * 0.2) * 0.5 + 0.5 + sin(vW.x * 3.7 + vW.z * 2.9) * 0.2);
+    c = mix(vec3(3.2, 1.1, 0.25), vec3(0.18, 0.08, 0.06), crust) * mix(0.8, 1.2, rest);
+    a = smoothstep(0.0, 0.08, depth);
+  } else if (uLiquid > 0.5) { // ice: pale, opaque, with white cracks
+    float crack = smoothstep(0.96, 1.0, abs(sin(vW.x * 0.9 + sin(vW.z * 0.7) * 2.0)));
+    c = mix(vec3(0.55, 0.60, 0.66), vec3(0.75, 0.90, 1.0), rest) * (0.85 + 0.25 * fres) + crack * 0.4 + vec3(1.0, 0.6, 0.25) * glow * 0.5;
+    a = smoothstep(0.0, 0.08, depth);
+  }
+  c = mix(c, uFog, smoothstep(70.0, 230.0, length(vW - uCam)));
   o = vec4(c * a, a);
 }`;
 
@@ -168,7 +184,7 @@ void main() {
   vec3 p = n + t1 * q.x + t2 * q.y;
   // roofs are wedges, trees and mountains taper to a point
   if (aB.w > 1.5 && aB.w < 2.5 && p.y > 0.0) p.z *= 0.04;
-  if ((aB.w > 2.5 && aB.w < 3.5 || aB.w > 5.5) && p.y > 0.0) p.xz *= 0.06;
+  if ((aB.w > 2.5 && aB.w < 3.5 || aB.w > 5.5 && aB.w < 6.5 || aB.w > 7.5) && p.y > 0.0) p.xz *= 0.06;
   vY = p.y * 0.5 + 0.5;
   vec3 lp = p * aB.xyz;
   float cs = cos(aA.w), sn = sin(aA.w);
@@ -202,6 +218,10 @@ void main() {
   if (k == 3) base *= 0.8 + 0.2 * vY;       // grey petrified trees
   if (k == 4) base *= 0.6;                  // trunks
   if (k == 6) base = mix(base * 0.7, base * 1.4, smoothstep(0.65, 0.9, vY)); // far mountains with pale tops
+  // the next land shows beyond the wall (still grey, but its shapes and a hint of its colours)
+  if (k == 7) base = mix(base, vec3(0.62, 0.30, 0.28), 0.45);             // mushroom caps
+  if (k == 8) base = mix(base, vec3(0.85, 0.88, 0.95), 0.6 * smoothstep(0.3, 0.8, vY)); // snowy pines
+  if (k == 9) base = mix(base, vec3(0.55, 0.42, 0.80), 0.5) * (1.0 + 0.6 * vY); // crystals
   float sun = max(0.0, dot(normalize(vN), normalize(vec3(0.4, 1.0, 0.3))));
   vec3 c = base * (0.45 + 0.6 * sun);
   c = mix(c, uFog, smoothstep(70.0, 240.0, length(vW - uCam)));
@@ -232,7 +252,8 @@ export class World {
     gl.bindVertexArray(null);
   }
   /** the wall and the grey country beyond it (different for every land) */
-  scenery(seed: number) {
+  liquid = 0;
+  scenery(seed: number, next: number) {
     let a = seed * 48271 + 11;
     const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
     const out: number[] = [];
@@ -240,8 +261,10 @@ export class World {
     const R = WALL + 2.2;
     // the wall: a ring of stone with battlements, and round-ish towers with pointed roofs
     const SEG = 112;
+    const gate = (an: number) => Math.abs(Math.cos(an)) < 0.06; // north and south gates
     for (let i = 0; i < SEG; i++) {
       const an = (i / SEG) * Math.PI * 2, x = Math.cos(an) * R, z = Math.sin(an) * R, yaw = -an + Math.PI / 2;
+      if (gate(an)) continue;
       box(x, 0, z, yaw, (Math.PI * R) / SEG + 0.05, 2.6, 1.0, 0);
       const ox = Math.cos(an) * 0.75, oz = Math.sin(an) * 0.75;
       box(x - ox, 5.2, z - oz, yaw, 0.7, 0.45, 0.25, 5);
@@ -250,10 +273,17 @@ export class World {
       const an = ((i + 0.5) / 16) * Math.PI * 2, x = Math.cos(an) * R, z = Math.sin(an) * R;
       box(x, 0, z, an, 2.2, 4.2, 2.2, 5); box(x, 8.4, z, an + 0.785, 2.7, 0.35, 2.7, 5); box(x, 9.1, z, an, 2.4, 2.6, 2.4, 3);
     }
-    // beyond: villages, woods and far mountains, all still grey
+    // gatehouses: two big towers either side of each gate
+    for (const sz of [-1, 1]) for (const sx of [-1, 1]) { const x = sx * 6.2, z = sz * Math.sqrt(R * R - 38); box(x, 0, z, 0, 2.4, 5.2, 2.4, 5); box(x, 10.4, z, 0.785, 2.9, 0.4, 2.9, 5); box(x, 11.2, z, 0, 2.6, 3.2, 2.6, 3); }
+    // beyond: the next land, still grey (its shapes show what is coming), and far mountains
     for (let k = 0; k < 900; k++) {
       const an = rnd() * Math.PI * 2, r = R + 5 + Math.pow(rnd(), 0.8) * 120, x = Math.cos(an) * r, z = Math.sin(an) * r;
       const yaw = rnd() * Math.PI;
+      if (Math.abs(x) < 7 && Math.abs(z) > R - 2 && Math.abs(z) < R + 40) continue; // the road out of each gate stays open
+      if (next === 1 && rnd() < 0.55) { const hgt = 1.5 + rnd() * 3; box(x, 0, z, yaw, 0.45, hgt, 0.45, 4); box(x, hgt * 2, z, yaw, 1.6 + rnd() * 1.6, 0.5, 1.6 + rnd() * 1.6, 7); continue; }
+      if (next === 3 && rnd() < 0.6) { const hgt = 2 + rnd() * 3; box(x, 0, z, yaw, 0.25, 0.7, 0.25, 4); box(x, 1.0, z, yaw, 1.2 + rnd() * 0.6, hgt, 1.2 + rnd() * 0.6, 8); continue; }
+      if (next === 4 && rnd() < 0.5) { const hgt = 3 + rnd() * 6; box(x, 0, z, yaw, 0.7 + rnd() * 0.6, hgt, 0.7 + rnd() * 0.6, 9); continue; }
+      if (next === 2 && rnd() < 0.5) { const w = 1.6 + rnd(), hgt = 3 + rnd() * 3; box(x, 0, z, yaw, w, hgt, w, 1); box(x, hgt * 2, z, yaw, w + 0.2, 1.2, w + 0.2, 2); continue; }
       if (rnd() < 0.42) {
         const w = 1.4 + rnd() * 1.4, d = 1.2 + rnd() * 1.2, hgt = 1.2 + rnd() * (r > 110 ? 3.5 : 1.6);
         box(x, 0, z, yaw, w, hgt, d, 1); box(x, hgt * 2, z, yaw, w + 0.2, 0.9 + rnd() * 0.6, d + 0.25, 2);
@@ -306,7 +336,7 @@ export class World {
     gl.bindVertexArray(this.vao);
     gl.useProgram(this.water.p);
     gl.uniformMatrix4fv(w.uVP, false, vp); gl.uniform4f(w.uPond, pd.x, pd.z, pd.r * 1.5, 0);
-    gl.uniform1f(w.uWorld, WORLD); gl.uniform1f(w.uTime, t); gl.uniform3fv(w.uCam, cam); gl.uniform3fv(w.uFog, this.pal.fog); gl.uniform3fv(w.uSkyLow, this.pal.skyLow);
+    gl.uniform1f(w.uWorld, WORLD); gl.uniform1f(w.uTime, t); gl.uniform1f(w.uLiquid, this.liquid); gl.uniform3fv(w.uCam, cam); gl.uniform3fv(w.uFog, this.pal.fog); gl.uniform3fv(w.uSkyLow, this.pal.skyLow);
     bindTex(gl, 0, color, w.uColor); bindTex(gl, 1, this.terrain.tex, w.uHeight); bindTex(gl, 2, light, w.uLight);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
