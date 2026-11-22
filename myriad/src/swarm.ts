@@ -23,8 +23,8 @@ uniform sampler2D uPos, uVel, uDen, uGrid, uAtlas, uHeight;
 uniform vec4 uBirth; // the materials new mites are born with (what the swarm has been eating)
 uniform float uShape, uShapeScale, uReset, uOpen; // uOpen: the north gate is open (leaving the land) // 0..1: the swarm gathers into a shape when left alone
 uniform vec3 uShapePos;
-uniform vec4 uPa[16], uPb[16];
-uniform float uPw[16];
+uniform vec4 uPa[24], uPb[24];
+uniform float uPw[24];
 uniform int uNP;
 uniform vec4 uB[64];
 uniform vec4 uB2[64];
@@ -42,7 +42,7 @@ ${HEIGHT_GLSL}
 vec3 shapePoint(float id) {
   vec3 r1 = h31(id * 1.37 + 5.0), r2 = h31(id * 2.71 + 9.0);
   int k = 0;
-  for (int i = 0; i < 16; i++) if (i < uNP - 1 && r1.x > uPw[i]) k = i + 1;
+  for (int i = 0; i < 24; i++) if (i < uNP - 1 && r1.x > uPw[i]) k = i + 1;
   vec4 A = uPa[k], B = uPb[k];
   vec3 dir = normalize(r2 - 0.5 + 1e-4), p;
   if (A.w < 0.5) p = A.xyz + dir * B.xyz * (0.82 + 0.18 * r1.y);
@@ -372,7 +372,7 @@ export class Swarm {
   birth = new Float32Array([0, 0, 0, 0]);
   open = false;
   reset = false; // next step: every mite bursts out of the seed again (entering a new land)
-  shape = { blend: 0, scale: 1, pos: new Float32Array(3), pa: new Float32Array(64), pb: new Float32Array(64), pw: new Float32Array(16), n: 1 };
+  shape = { blend: 0, scale: 1, pos: new Float32Array(3), pa: new Float32Array(96), pb: new Float32Array(96), pw: new Float32Array(24), n: 1 };
   step(dt: number, t: number, leader: Float32Array, leaderVel: Float32Array, active: number, speed: number, world: { grid: WebGLTexture; atlas: WebGLTexture; height: WebGLTexture; b: Float32Array; b2: Float32Array; s2: Float32Array }) {
     const gl = this.gl, src = this.pos[this.cur], dst = this.pos[1 - this.cur];
     gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST);

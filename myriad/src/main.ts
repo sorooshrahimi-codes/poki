@@ -9,7 +9,7 @@ import { poki } from "./poki.ts";
 import { Grass } from "./grass.ts";
 import { Audio } from "./audio.ts";
 import { Terrain } from "./terrain.ts";
-import { loadShape, SHAPES } from "./shapes.ts";
+import { loadShape, nextShape } from "./shapes.ts";
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
 const hudCanvas = document.getElementById("hud") as HTMLCanvasElement;
@@ -44,15 +44,15 @@ let milestone = 0;
 // one by one, from the meadow at the edge to the crystal heart. Then the lands come round again, harder.
 type Land = { icon: string; amp: number; liquid: number; pal: Palette; snow: boolean; mix: [Kind, number][]; starter: [Kind, number, number]; gap: number; skip: number; giant: number };
 const LANDS: Land[] = [
-  { icon: "🌼", amp: 2.0, liquid: 0, snow: false, gap: 17, skip: 0.25, giant: 2.4, starter: [6, 0.38, 0.15], mix: [[1, 0.42], [0, 0.33], [3, 0.15], [2, 0.1]],
+  { icon: "🌼", amp: 3.4, liquid: 0, snow: false, gap: 17, skip: 0.25, giant: 2.4, starter: [6, 0.38, 0.15], mix: [[1, 0.42], [0, 0.33], [3, 0.15], [2, 0.1]],
     pal: { skyLow: [0.20, 0.13, 0.22], skyTop: [0.03, 0.04, 0.10], horizon: [0.55, 0.28, 0.20], stoneA: [0.20, 0.19, 0.23], stoneB: [0.38, 0.36, 0.40], fog: [0.12, 0.08, 0.13], grassA: [0.20, 0.48, 0.16], grassB: [0.42, 0.70, 0.22] } },
-  { icon: "🍄", amp: 2.2, liquid: 0, snow: false, gap: 16, skip: 0.2, giant: 2.5, starter: [7, 0.35, 0.12], mix: [[7, 0.42], [1, 0.3], [0, 0.18], [4, 0.1]],
+  { icon: "🍄", amp: 3.6, liquid: 0, snow: false, gap: 16, skip: 0.2, giant: 2.5, starter: [7, 0.35, 0.12], mix: [[7, 0.42], [1, 0.3], [0, 0.18], [4, 0.1]],
     pal: { skyLow: [0.16, 0.10, 0.26], skyTop: [0.02, 0.03, 0.09], horizon: [0.25, 0.45, 0.50], stoneA: [0.17, 0.18, 0.22], stoneB: [0.33, 0.34, 0.40], fog: [0.09, 0.08, 0.15], grassA: [0.10, 0.42, 0.30], grassB: [0.30, 0.66, 0.38] } },
-  { icon: "🏰", amp: 1.1, liquid: 0, snow: false, gap: 15, skip: 0.15, giant: 2.6, starter: [6, 0.4, 0.15], mix: [[9, 0.5], [2, 0.16], [1, 0.2], [0, 0.14]],
+  { icon: "🏰", amp: 2.0, liquid: 0, snow: false, gap: 15, skip: 0.15, giant: 2.6, starter: [6, 0.4, 0.15], mix: [[9, 0.5], [2, 0.16], [1, 0.2], [0, 0.14]],
     pal: { skyLow: [0.28, 0.15, 0.12], skyTop: [0.05, 0.04, 0.10], horizon: [0.75, 0.40, 0.16], stoneA: [0.22, 0.20, 0.20], stoneB: [0.40, 0.37, 0.36], fog: [0.14, 0.09, 0.09], grassA: [0.26, 0.50, 0.16], grassB: [0.50, 0.72, 0.24] } },
-  { icon: "❄️", amp: 3.0, liquid: 1, snow: true, gap: 16, skip: 0.2, giant: 2.7, starter: [8, 0.35, 0.12], mix: [[8, 0.45], [0, 0.25], [9, 0.15], [2, 0.15]],
+  { icon: "❄️", amp: 4.8, liquid: 1, snow: true, gap: 16, skip: 0.2, giant: 2.7, starter: [8, 0.35, 0.12], mix: [[8, 0.45], [0, 0.25], [9, 0.15], [2, 0.15]],
     pal: { skyLow: [0.20, 0.24, 0.34], skyTop: [0.04, 0.06, 0.14], horizon: [0.50, 0.60, 0.75], stoneA: [0.30, 0.32, 0.38], stoneB: [0.55, 0.57, 0.63], fog: [0.16, 0.18, 0.24], grassA: [0.22, 0.50, 0.30], grassB: [0.50, 0.75, 0.45] } },
-  { icon: "🌋", amp: 2.4, liquid: 2, snow: false, gap: 16, skip: 0.2, giant: 3.0, starter: [10, 0.32, 0.12], mix: [[10, 0.45], [4, 0.25], [2, 0.15], [7, 0.15]],
+  { icon: "🌋", amp: 3.8, liquid: 2, snow: false, gap: 16, skip: 0.2, giant: 3.0, starter: [10, 0.32, 0.12], mix: [[10, 0.45], [4, 0.25], [2, 0.15], [7, 0.15]],
     pal: { skyLow: [0.30, 0.08, 0.06], skyTop: [0.05, 0.02, 0.05], horizon: [1.00, 0.30, 0.08], stoneA: [0.13, 0.11, 0.12], stoneB: [0.28, 0.24, 0.25], fog: [0.16, 0.06, 0.05], grassA: [0.24, 0.46, 0.14], grassB: [0.55, 0.72, 0.20] } },
 ];
 function landOf(d: number) { return LANDS[(d - 1) % LANDS.length]; }
@@ -118,7 +118,7 @@ const leader = new Float32Array([0, 0, 0]), leaderVel = new Float32Array(3);
 const target = new Float32Array([0, 0, 0]);
 let hasTarget = false, lastInput = -99, lastMove = 0;
 // left alone, the swarm builds something: a heart, a dinosaur, a tower, a rocket, a whale, a star
-let shapeK = 0, shapeOn = false;
+let shapeK = Math.floor(Math.random() * 3), shapeOn = false;
 let camD = 2.2, camX = 0, camZ = 0, camY = 0, shake = 0;
 
 // ---------------------------------------------------------------- input: the finger (or mouse) is where the seed goes
@@ -367,7 +367,7 @@ function frame(now: number) {
   }
   const sh = swarm.shape;
   if (idle && !shapeOn) { shapeOn = true; loadShape(shapeK, sh); sh.pos[0] = leader[0]; sh.pos[2] = leader[2]; sh.pos[1] = terrain.floor(leader[0], leader[2]); }
-  if (!idle && shapeOn && sh.blend < 0.05) { shapeOn = false; shapeK = (shapeK + 1) % SHAPES.length; }
+  if (!idle && shapeOn && sh.blend < 0.05) { shapeOn = false; shapeK = nextShape(shapeK); }
   sh.blend = shapeOn && idle ? Math.min(1, sh.blend + dt * 0.6) : Math.max(0, sh.blend - dt * 3);
   sh.scale = 2.4 + Math.sqrt(active) * 0.07;
   if (shapeOn && idle) { target[0] = leader[0]; target[2] = leader[2]; }
@@ -438,4 +438,4 @@ function frame(now: number) {
 requestAnimationFrame(frame);
 poki.init().then(() => poki.loadingFinished());
 
-if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { gov, city, leader, target, get active() { return active; }, set active(v: number) { active = v; } };
+if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { gov, city, leader, target, poke: () => { lastMove = time; }, terrain, get active() { return active; }, set active(v: number) { active = v; } };

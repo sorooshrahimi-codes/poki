@@ -342,7 +342,7 @@ void main() { o = vec4(uAmount); }`, "fill");
       }
       this.buildings.push({ x: L.x, z: L.z, kind: L.kind, seed: L.seed, solid, eaten: 0, collapseAt: -1, h: top + 1 });
       // how hard each thing is to eat: bushes are soft, trees firmer, houses and barns hard, towers hardest
-      const TOUGH = [0.35, 0.65, 0.22, 0.33, 0.25, 0.06, 1.0, 0.5, 0.6, 0.22, 0.18];
+      const TOUGH = [0.45, 0.7, 0.4, 0.45, 0.5, 0.06, 1.0, 0.6, 0.65, 0.4, 0.5]; // nothing should feel unbreakable
       this.s2Arr[b * 4] = L.scale ?? 1; this.s2Arr[b * 4 + 1] = L.y ?? 0; this.s2Arr[b * 4 + 2] = TOUGH[L.kind];
       const half = (V * VS * (L.scale ?? 1)) / 2 + 1.0;
       for (let gz = 0; gz < GRID; gz++) for (let gx = 0; gx < GRID; gx++) {

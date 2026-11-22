@@ -136,6 +136,10 @@ uniform vec3 uCam, uFog, uSkyLow;
 in vec3 vW;
 out vec4 o;
 ${HEIGHT_GLSL}
+float hh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hh(i), hh(i + vec2(1, 0)), f.x), mix(hh(i + vec2(0, 1)), hh(i + vec2(1, 1)), f.x), f.y); }
+float fbm(vec2 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += vn(p) * a; p = p * 2.03 + 7.1; a *= 0.5; } return s; }
 void main() {
   float depth = WATER - groundH(vW.xz);
   if (depth < 0.0) discard;
@@ -146,15 +150,25 @@ void main() {
   vec2 w = vW.xz * 0.9 + vec2(uTime * 0.4, uTime * 0.25);
   vec3 n = normalize(vec3(sin(w.x) * 0.06 + sin(w.y * 1.7 + 1.0) * 0.04, 1.0, cos(w.y) * 0.06 + sin(w.x * 1.3) * 0.04) * vec3(rest, 1.0, rest) + vec3(0.0, 0.0, 0.0));
   float fres = pow(1.0 - max(0.0, dot(-v, n)), 3.0);
-  vec3 deep = mix(vec3(0.20, 0.21, 0.24), mix(vec3(0.05, 0.25, 0.45), vec3(0.10, 0.55, 0.65), smoothstep(1.5, 0.0, depth)), rest);
-  vec3 sky = mix(uSkyLow * 1.6 + 0.08, vec3(0.6, 0.75, 0.9), rest * 0.6);
-  vec3 c = mix(deep, sky, fres * 0.8) + vec3(1.0, 0.6, 0.25) * glow * 0.6;
+  vec3 deep = mix(vec3(0.08, 0.09, 0.13), mix(vec3(0.05, 0.25, 0.45), vec3(0.10, 0.55, 0.65), smoothstep(1.5, 0.0, depth)), rest);
+  vec3 sky = mix(uSkyLow * 2.2 + vec3(0.12, 0.13, 0.16), vec3(0.6, 0.75, 0.9), rest * 0.6);
+  vec3 c = mix(deep, sky, 0.25 + fres * 0.7) + vec3(1.0, 0.6, 0.25) * glow * 0.6;
+  c += smoothstep(0.25, 0.0, depth) * vec3(0.5, 0.55, 0.6) * 0.5; // a pale rim where it meets the shore
   float spark = pow(max(0.0, sin(w.x * 3.1) * sin(w.y * 2.7)), 40.0) * rest;
   c += spark * 0.8;
   float a = clamp(0.55 + depth * 0.4, 0.0, 0.92) * smoothstep(0.0, 0.12, depth);
   if (uLiquid > 1.5) { // lava: a glowing crust that cracks open, bright whatever the colour
-    float crust = smoothstep(0.35, 0.6, sin(vW.x * 1.3 + uTime * 0.3) * sin(vW.z * 1.1 - uTime * 0.2) * 0.5 + 0.5 + sin(vW.x * 3.7 + vW.z * 2.9) * 0.2);
-    c = mix(vec3(3.2, 1.1, 0.25), vec3(0.18, 0.08, 0.06), crust) * mix(0.8, 1.2, rest);
+    // slow-flowing molten rock: dark cooled plates drifting on a glowing flood, hot seams pulsing between them
+    vec2 q = vW.xz * 0.35;
+    vec2 warp = vec2(fbm(q + uTime * 0.05), fbm(q + 5.2 - uTime * 0.04));
+    float f = fbm(q * 1.6 + warp * 1.8 + vec2(uTime * 0.08, 0.0));
+    float plate = smoothstep(0.48, 0.62, f);
+    float seam = 1.0 - smoothstep(0.0, 0.08, abs(f - 0.5));
+    float pulse = 0.75 + 0.25 * sin(uTime * 2.0 + f * 12.0);
+    vec3 hot = mix(vec3(2.6, 0.7, 0.12), vec3(3.6, 2.2, 0.6), fbm(q * 4.0 - uTime * 0.2)) * pulse;
+    vec3 crustC = vec3(0.10, 0.05, 0.05) + vec3(0.5, 0.12, 0.03) * (1.0 - plate) * 0.6;
+    c = mix(hot, crustC, plate) + vec3(3.0, 1.4, 0.3) * seam * 0.8;
+    c *= smoothstep(0.0, 0.5, depth) * 0.6 + 0.4;
     a = smoothstep(0.0, 0.08, depth);
   } else if (uLiquid > 0.5) { // ice: pale, opaque, with white cracks
     float crack = smoothstep(0.96, 1.0, abs(sin(vW.x * 0.9 + sin(vW.z * 0.7) * 2.0)));
