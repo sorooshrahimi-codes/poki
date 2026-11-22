@@ -3,7 +3,9 @@
 // into a grid over the world, the grid is blurred, and each mite moves down the density gradient.
 // No sorting, no atomics, the same path on every WebGL2 device, and the cost does not depend on crowding.
 import { FULLSCREEN_VS, bindTex, program, target, type GL, type Program, type Target } from "./gl.ts";
-import { MAT_GLSL } from "./mats.ts";
+import { MAT_GLSL, MATS } from "./mats.ts";
+const MATS_N = MATS.length;
+import { HEIGHT_GLSL } from "./terrain.ts";
 
 export const S = 512; // 262,144 slots
 export const WORLD = 160; // world units across the density grid
@@ -17,7 +19,13 @@ vec3 h31(float p) { vec3 p3 = fract(vec3(p) * vec3(0.1031, 0.1030, 0.0973)); p3 
 const VS_W = 0.28;
 const UPDATE_FS = `#version 300 es
 precision highp float;
-uniform sampler2D uPos, uVel, uDen, uGrid, uAtlas;
+uniform sampler2D uPos, uVel, uDen, uGrid, uAtlas, uHeight;
+uniform vec4 uBirth; // the materials new mites are born with (what the swarm has been eating)
+uniform float uShape, uShapeScale; // 0..1: the swarm gathers into a shape when left alone
+uniform vec3 uShapePos;
+uniform vec4 uPa[16], uPb[16];
+uniform float uPw[16];
+uniform int uNP;
 uniform vec4 uB[64];
 uniform vec4 uB2[64];
 uniform vec4 uS2[64];
@@ -29,10 +37,33 @@ layout(location = 0) out vec4 oPos;
 layout(location = 1) out vec4 oVel;
 ${HASH}
 float den(vec2 xz) { return texture(uDen, xz / uWorld + 0.5).r; }
+${HEIGHT_GLSL}
+// a point on the shape this mite belongs to (spheres, capsules and boxes, picked by area)
+vec3 shapePoint(float id) {
+  vec3 r1 = h31(id * 1.37 + 5.0), r2 = h31(id * 2.71 + 9.0);
+  int k = 0;
+  for (int i = 0; i < 16; i++) if (i < uNP - 1 && r1.x > uPw[i]) k = i + 1;
+  vec4 A = uPa[k], B = uPb[k];
+  vec3 dir = normalize(r2 - 0.5 + 1e-4), p;
+  if (A.w < 0.5) p = A.xyz + dir * B.xyz * (0.82 + 0.18 * r1.y);
+  else if (A.w < 1.5) p = mix(A.xyz, B.xyz, r1.y) + dir * B.w * (0.8 + 0.2 * r1.z);
+  else {
+    p = A.xyz + (r2 * 2.0 - 1.0) * B.xyz;
+    int ax = int(r1.y * 2.999);
+    p[ax] = A[ax] + (r2[ax] > 0.5 ? 1.0 : -1.0) * B[ax];
+  }
+  return uShapePos + p * uShapeScale;
+}
+
 ivec2 atlasTexel(int b, ivec3 v) { return ivec2((b % 8) * 256 + (v.z % 8) * 32 + v.x, (b / 8) * 128 + (v.z / 8) * 32 + v.y); }
 float solidAt(int b, ivec3 v) {
   if (any(lessThan(v, ivec3(0))) || any(greaterThan(v, ivec3(31)))) return 0.0;
   return texelFetch(uAtlas, atlasTexel(b, v), 0).r;
+}
+float matAt(int b, ivec3 v) {
+  if (any(lessThan(v, ivec3(0))) || any(greaterThan(v, ivec3(31)))) return 0.0;
+  vec4 t = texelFetch(uAtlas, atlasTexel(b, v), 0);
+  return t.r > 0.5 ? t.b : 0.0;
 }
 void main() {
   ivec2 c = ivec2(gl_FragCoord.xy);
@@ -47,7 +78,11 @@ void main() {
     return;
   }
   vec3 pos = p.xyz, vel = v.xyz;
+  float mat = floor(v.w), phase = fract(v.w);
   if (p.w < 0.5) {
+    // born of what was eaten: it carries that colour
+    float pick = h11(id * 0.77 + floor(uTime));
+    mat = pick < 0.25 ? uBirth.x : pick < 0.5 ? uBirth.y : pick < 0.75 ? uBirth.z : uBirth.w;
     // just born: a little burst out of the seed
     vec3 q = h31(id + floor(uTime * 60.0)) - 0.5;
     pos = uLeader + vec3(q.x, 0.4 + abs(q.y), q.z) * 2.0;
@@ -78,10 +113,20 @@ void main() {
   vec2 g = vec2(den(pos.xz + vec2(e.x, 0.0)) - den(pos.xz - vec2(e.x, 0.0)), den(pos.xz + vec2(0.0, e.y)) - den(pos.xz - vec2(0.0, e.y)));
   vec3 rep = -vec3(g.x, 0.0, g.y) * uRep;
   vec3 want = uLeaderVel + seek + mill + flow;
+  // left alone, the swarm gathers into a shape (and bursts back into a swarm at the next touch)
+  if (uShape > 0.0) {
+    vec3 sw = (shapePoint(id) - pos) * 3.2;
+    float sl = length(sw), sm = uSpeed * 2.2 + 8.0;
+    if (sl > sm) sw *= sm / sl;
+    want = mix(want, sw, uShape);
+    rep *= 1.0 - 0.8 * uShape;
+  }
   vel += ((want - vel) * 4.0 + rep) * uDt;
   // 5. height: a soft floor, a soft ceiling that grows with the swarm, and the flow lifts sheets into the air
-  float cap = 1.5 + uRadius * 0.45 * uLift;
-  vel.y += (max(0.0, 0.4 - pos.y) * 12.0 - max(0.0, pos.y - cap) * 4.0 - 0.6) * uDt;
+  float gy = max(groundH(pos.xz), WATER);
+  float cap = 1.5 + uRadius * 0.45 * uLift + uShape * 200.0;
+  float hy = pos.y - gy;
+  vel.y += (max(0.0, 0.4 - hy) * 12.0 - max(0.0, hy - cap) * 4.0 - 0.6 * (1.0 - uShape)) * uDt;
   // a stomp: everything close is thrown up and away
   if (uShock.w > 0.0) {
     vec2 dv = pos.xz - uShock.xy; float dd = length(dv);
@@ -101,12 +146,14 @@ void main() {
       float ahead = solidAt(b, ivec3(floor(lp + hd * 1.2)));
       if (here > 0.5) {
         w = 2.0 + float(b);
+        if (h11(id * 0.31 + uTime * 7.0) < 0.04) { float m = matAt(b, ivec3(floor(lp))); if (m > 0.5) mat = m; }
         // chewing through stone slows a mite down; the swarm behind keeps pushing, so tunnels open up
         vel *= exp(-3.5 * uDt);
         vel.y += (above > 0.5 ? 2.0 : 4.0) * uDt;
       } else if (ahead > 0.5) {
         // stone right in front: bite it (w + 0.5 tells the eat pass to take the voxel ahead) and climb
         w = 2.5 + float(b);
+        if (h11(id * 0.31 + uTime * 7.0) < 0.04) { float m = matAt(b, ivec3(floor(lp + hd * 1.2))); if (m > 0.5) mat = m; }
         vel.xz *= exp(-2.0 * uDt);
         vel.y += 3.5 * uDt;
       } else {
@@ -121,9 +168,10 @@ void main() {
   float vmax = uSpeed * 1.8 + 6.0;
   if (sp > vmax) vel *= vmax / sp;
   pos += vel * uDt;
-  if (pos.y < 0.08) { pos.y = 0.08; vel.y = abs(vel.y) * 0.3; }
+  float fy = max(groundH(pos.xz), WATER) + 0.08;
+  if (pos.y < fy) { pos.y = fy; vel.y = abs(vel.y) * 0.3; }
   oPos = vec4(pos, w);
-  oVel = vec4(vel, v.w);
+  oVel = vec4(vel, mat + phase);
 }`;
 
 const SPLAT_VS = `#version 300 es
@@ -166,6 +214,7 @@ out vec2 vUv;
 out vec3 vCol;
 out float vBright;
 ${HASH}
+${MAT_GLSL}
 void main() {
   int i = gl_InstanceID;
   ivec2 c = ivec2(i % int(uS), i / int(uS));
@@ -189,6 +238,9 @@ void main() {
   vUv = aCorner;
   // gold to warm white, a few cyan sparks
   vCol = r.z < 0.12 ? vec3(0.45, 1.0, 1.0) : mix(vec3(1.0, 0.62, 0.18), vec3(1.0, 0.92, 0.6), r.y);
+  // a mite that ate something carries its colour (brightened to a glowing pastel, a touch of gold left)
+  int m = int(floor(v.w));
+  if (m > 0 && m < ${MATS_N}) { vec3 mc = MAT[m]; mc = mc / max(max(mc.r, mc.g), max(mc.b, 0.05)); vCol = mix(mc * 0.85 + 0.12, vCol, 0.22); }
   vBright = 0.7 + 0.6 * flap;
 }`;
 const MITE_FS = `#version 300 es
@@ -304,7 +356,9 @@ export class Swarm {
   get light() { return this.denB.tex[0]; }
 
   shock = new Float32Array(4);
-  step(dt: number, t: number, leader: Float32Array, leaderVel: Float32Array, active: number, speed: number, world: { grid: WebGLTexture; atlas: WebGLTexture; b: Float32Array; b2: Float32Array; s2: Float32Array }) {
+  birth = new Float32Array([0, 0, 0, 0]);
+  shape = { blend: 0, scale: 1, pos: new Float32Array(3), pa: new Float32Array(64), pb: new Float32Array(64), pw: new Float32Array(16), n: 1 };
+  step(dt: number, t: number, leader: Float32Array, leaderVel: Float32Array, active: number, speed: number, world: { grid: WebGLTexture; atlas: WebGLTexture; height: WebGLTexture; b: Float32Array; b2: Float32Array; s2: Float32Array }) {
     const gl = this.gl, src = this.pos[this.cur], dst = this.pos[1 - this.cur];
     gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST);
     gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fb);
@@ -318,6 +372,11 @@ export class Swarm {
     gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uActive, active); gl.uniform1f(u.uS, S); gl.uniform1f(u.uWorld, WORLD);
     gl.uniform1f(u.uSpeed, speed); gl.uniform1f(u.uRep, 1.0); gl.uniform1f(u.uLift, 1.7);
     gl.uniform1f(u.uRadius, 2.2 + Math.sqrt(active) * 0.05);
+    bindTex(gl, 5, world.height, u.uHeight);
+    gl.uniform4fv(u.uBirth, this.birth);
+    const sh = this.shape;
+    gl.uniform1f(u.uShape, sh.blend); gl.uniform1f(u.uShapeScale, sh.scale); gl.uniform3fv(u.uShapePos, sh.pos);
+    gl.uniform4fv(u.uPa, sh.pa); gl.uniform4fv(u.uPb, sh.pb); gl.uniform1fv(u.uPw, sh.pw); gl.uniform1i(u.uNP, sh.n);
     gl.uniform2f(u.uDenTexel, 1 / DEN, 1 / DEN);
     gl.bindVertexArray(this.empty);
     // only the rows that hold living mites (plus the next few to be born) are simulated

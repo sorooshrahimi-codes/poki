@@ -8,6 +8,8 @@ import { City, theme, type Kind } from "./city.ts";
 import { poki } from "./poki.ts";
 import { Grass } from "./grass.ts";
 import { Audio } from "./audio.ts";
+import { Terrain } from "./terrain.ts";
+import { loadShape, SHAPES } from "./shapes.ts";
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
 const hudCanvas = document.getElementById("hud") as HTMLCanvasElement;
@@ -25,7 +27,8 @@ if (!gl || !gl.getExtension("EXT_color_buffer_float")) {
 gl.getExtension("EXT_float_blend");
 
 const swarm = new Swarm(gl);
-const world = new World(gl);
+const terrain = new Terrain(gl);
+const world = new World(gl, terrain);
 const post = new Post(gl);
 const gov = new Governor();
 const forcedTier = params.get("tier");
@@ -57,7 +60,8 @@ function makeLand(d: number) {
   const L = landOf(d);
   let a = d * 101 + 7;
   const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
-  const list: { x: number; z: number; kind: Kind; seed: number; scale?: number }[] = [];
+  const list: { x: number; z: number; kind: Kind; seed: number; scale?: number; y?: number }[] = [];
+  const pond = terrain.plan(d);
   // the first meals are right next to the seed: little things, a bite away
   for (let i = 0; i < 7; i++) {
     const an = (i / 7) * Math.PI * 2 + rnd(), r = 5 + rnd() * 4;
@@ -68,13 +72,20 @@ function makeLand(d: number) {
     if (gx === 0 && gz === 0) continue; // the square in the middle stays open: the seed starts there
     const x = gx * L.gap + (rnd() - 0.5) * 6, z = gz * L.gap + (rnd() - 0.5) * 6;
     if (Math.hypot(x, z) > WALL - 9 || rnd() < L.skip) continue;
+    if (Math.hypot(x - pond.x, z - pond.z) < pond.r + 6) continue; // nothing stands in the pond
     let r = rnd(), kind = L.mix[0][0];
     for (const [k, w] of L.mix) { if (r < w) { kind = k; break; } r -= w; }
     list.push({ x, z, kind, seed: Math.floor(rnd() * 1e6) });
   }
   theme.snow = L.snow;
+  theme.giant = (d - 1) % LANDS.length;
   world.pal = L.pal;
-  return list.slice(0, 62);
+  world.scenery(d);
+  const out = list.slice(0, 62);
+  // the hills, with a level pad under every building (sunk a little, so it sits in the ground)
+  const ys = terrain.build(d, out.map((b) => ({ x: b.x, z: b.z, half: (32 * 0.28 * (b.scale ?? 1)) / 2 + 0.6 })));
+  out.forEach((b, k) => (b.y = ys[k] - 0.12));
+  return out;
 }
 // progress is kept: the land you are on and how big the swarm has grown
 const SAVE = "glowmites-save";
@@ -99,13 +110,15 @@ resize();
 addEventListener("resize", resize);
 
 // ---------------------------------------------------------------- all state preallocated (zero garbage in the loop)
-const cityLink = { grid: city.grid, atlas: city.atlas.tex[0], b: city.bArr, b2: city.b2Arr, s2: city.s2Arr };
+const cityLink = { grid: city.grid, atlas: city.atlas.tex[0], height: terrain.tex, b: city.bArr, b2: city.b2Arr, s2: city.s2Arr };
 const proj = new Float32Array(16), view = new Float32Array(16), vp = new Float32Array(16), inv = new Float32Array(16);
 const cam = new Float32Array(3), camR = new Float32Array(3), camU = new Float32Array(3);
 const leader = new Float32Array([0, 0, 0]), leaderVel = new Float32Array(3);
 const target = new Float32Array([0, 0, 0]);
-let hasTarget = false, lastInput = -99;
-let camD = 2.2, camX = 0, camZ = 0, shake = 0;
+let hasTarget = false, lastInput = -99, lastMove = 0;
+// left alone, the swarm builds something: a heart, a dinosaur, a tower, a rocket, a whale, a star
+let shapeK = 0, shapeOn = false;
+let camD = 2.2, camX = 0, camZ = 0, camY = 0, shake = 0;
 
 // ---------------------------------------------------------------- input: the finger (or mouse) is where the seed goes
 const ndc = new Float32Array(4), tmp4 = new Float32Array(4);
@@ -116,8 +129,9 @@ function pick(clientX: number, clientY: number) {
   const ax = tmp4[0] / tmp4[3], ay = tmp4[1] / tmp4[3], az = tmp4[2] / tmp4[3];
   ndc[2] = 1; xform(tmp4, inv, ndc);
   const bx = tmp4[0] / tmp4[3], by = tmp4[1] / tmp4[3], bz = tmp4[2] / tmp4[3];
-  const t = ay / (ay - by);
-  if (!(t > 0)) return;
+  // the ray meets the hills: start at the flat plane, then refine against the height map
+  let gy = 0, t = 0;
+  for (let k = 0; k < 4; k++) { t = (ay - gy) / (ay - by); if (!(t > 0)) return; gy = terrain.floor(ax + (bx - ax) * t, az + (bz - az) * t); }
   target[0] = ax + (bx - ax) * t; target[2] = az + (bz - az) * t;
   hasTarget = true; lastInput = time;
 }
@@ -172,6 +186,7 @@ canvas.addEventListener("pointerdown", (e) => {
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); zoom0 = userZoom; aiming = false; }
   else { down = true; aiming = true; aimX = e.clientX; aimY = e.clientY; }
+  lastMove = time;
   if (!touched) { touched = true; hand.classList.add("gone"); }
   if (!document.getElementById("win")!.classList.contains("show")) poki.gameplayStart();
 });
@@ -183,7 +198,7 @@ addEventListener("pointermove", (e) => {
     userZoom = Math.min(2.6, Math.max(0.4, zoom0 * pinch0 / Math.max(20, Math.hypot(a.x - b.x, a.y - b.y))));
     return;
   }
-  if (down || e.pointerType === "mouse") { aiming = true; aimX = e.clientX; aimY = e.clientY; }
+  if (down || e.pointerType === "mouse") { aiming = true; aimX = e.clientX; aimY = e.clientY; lastMove = time; }
 });
 const lift = (e: PointerEvent) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; if (ptrs.size === 0) down = false; };
 addEventListener("pointerup", lift);
@@ -208,8 +223,12 @@ let landT = 0, firstBite = false;
 let GIANT_SCALE = 2.4, GIANT_H = 32 * 0.28 * GIANT_SCALE;
 let giant = -1, giantState: "sleep" | "rise" | "walk" | "fallen" = "sleep", giantT = 0, giantY = -GIANT_H, nextStomp = 0, won = false;
 let progress = 0;
+// what the new mites look like: the colours of what the swarm is eating
+const BIRTH: number[][] = [[3, 1, 2, 4], [8, 9, 7, 10], [6, 14, 13, 6], [15, 11, 2, 16], [6, 17, 19, 6], [17, 19, 10, 6], [10, 9, 8, 13], [20, 21, 22, 20], [24, 24, 7, 23], [27, 1, 6, 4], [25, 25, 26, 25]];
+const GIANT_BIRTH: number[][] = [[17, 19, 10, 6], [20, 21, 22, 20], [27, 12, 13, 14], [23, 23, 17, 25], [26, 25, 18, 25]];
 city.onEat = (b, amount) => {
   meal += amount * 2.5; // every voxel eaten hatches new mites
+  { const k = city.buildings[b].kind; const m = k === 5 ? GIANT_BIRTH[theme.giant % 5] : BIRTH[k]; if (m) swarm.birth.set(m); }
   audio.eat(amount);
   const B = city.buildings[b];
   // a building is gone when (nearly) all of it, rubble included, has been eaten
@@ -241,13 +260,15 @@ function frame(now: number) {
   // district progress (also drives the goal bar)
   { let tot = 0, eat = 0; for (let b = 0; b < city.buildings.length; b++) { if (b === giant) continue; const B = city.buildings[b]; tot += B.solid; eat += Math.min(B.solid, B.eaten); } progress = Math.min(1, (eat / Math.max(1, tot)) * 1.15); }
   swarm.shock[3] = 0;
-  if (giant < 0 && progress >= (params.get("giant") === "1" && time > 1.5 ? 0 : 0.5)) {
+  if (giant < 0 && progress >= (params.get("giant") === "1" && time > 1.5 ? 0 : 0.7)) {
     // it rises on the far side of the swarm from the camera, so the player sees it come up out of the ground
     const ang = Math.atan2(leader[2] - cam[2], leader[0] - cam[0]);
     const gx = Math.max(-60, Math.min(60, leader[0] + Math.cos(ang) * 38)), gz = Math.max(-60, Math.min(60, leader[2] + Math.sin(ang) * 38));
     GIANT_SCALE = landOf(district).giant; GIANT_H = 32 * 0.28 * GIANT_SCALE;
     const lap = Math.floor((district - 1) / LANDS.length);
-    giant = city.add({ x: gx, z: gz, kind: 5, seed: 4242 + district }, GIANT_SCALE, -GIANT_H, 0.06 / (1 + lap * 0.5)); // hard stone: a real fight
+    // each land's giant is tougher than the last (and tougher again on every lap)
+    const tough = [0.034, 0.029, 0.025, 0.022, 0.018][(district - 1) % LANDS.length] / (1 + lap * 0.4);
+    giant = city.add({ x: gx, z: gz, kind: 5, seed: 4242 + district }, GIANT_SCALE, terrain.at(gx, gz) - GIANT_H, tough);
     giantState = "rise"; giantT = 0; audio.thump(1.4); shake = 1.2;
   }
   if (giant >= 0 && !city.gone[giant]) {
@@ -257,12 +278,12 @@ function frame(now: number) {
       giantY = -GIANT_H * Math.max(0, 1 - giantT / 3.2) ** 2;
       shake = Math.max(shake, 0.5);
       if (giantT > 3.2) { giantState = "walk"; giantY = 0; nextStomp = giantT + 1.2; }
-      city.place(giant, G.x, G.z, giantY);
+      city.place(giant, G.x, G.z, giantY + terrain.at(G.x, G.z));
     } else if (giantState === "walk") {
       const dx = leader[0] - G.x, dz = leader[2] - G.z, d = Math.hypot(dx, dz);
       const step = Math.min(d, 2.4 * dt);
       const bob = -Math.abs(Math.sin(giantT * 3.9)) * 0.5;
-      if (d > 4) city.place(giant, G.x + (dx / d) * step, G.z + (dz / d) * step, bob);
+      if (d > 4) { const nx = G.x + (dx / d) * step, nz = G.z + (dz / d) * step; city.place(giant, nx, nz, bob + terrain.floor(nx, nz)); }
       if (giantT >= nextStomp) {
         // the more of it is gone, the angrier: faster and harder stomps
         const hurt = Math.min(1, G.eaten / (G.solid * 0.55));
@@ -270,7 +291,7 @@ function frame(now: number) {
         swarm.shock[0] = G.x; swarm.shock[1] = G.z; swarm.shock[2] = 16 + hurt * 8; swarm.shock[3] = 22 + hurt * 14;
         shake = Math.max(shake, 0.9); audio.thump(1.1);
       }
-      if (G.eaten > G.solid * 0.55) { giantState = "fallen"; shake = 1.4; audio.thump(1.6); city.place(giant, G.x, G.z, 0); }
+      if (G.eaten > G.solid * 0.55) { giantState = "fallen"; shake = 1.4; audio.thump(1.6); city.place(giant, G.x, G.z, terrain.floor(G.x, G.z)); }
     }
   }
   if (giant >= 0 && city.gone[giant] && !won) {
@@ -281,12 +302,16 @@ function frame(now: number) {
   }
   while (milestone < MILESTONES.length && active >= MILESTONES[milestone]) audio.chime(milestone++);
   audio.swarm(active, Math.hypot(leaderVel[0], leaderVel[2]));
-  if (aiming && (down || !("ontouchstart" in window))) pick(aimX, aimY);
-  // the seed: to the finger, or a slow wander when nobody touches
-  if (!hasTarget || time - lastInput > 4) {
-    const a = time * 0.16;
-    target[0] = Math.cos(a) * 34 + Math.sin(a * 2.3) * 12; target[2] = Math.sin(a * 1.3) * 28 + Math.cos(a * 3.1) * 6;
-  }
+  // left alone (no touch, no mouse move) the swarm gathers into a shape; the next touch bursts it back
+  const fighting = giant >= 0 && !city.gone[giant] && giantState !== "fallen";
+  const idle = !down && time - lastMove > 2.6 && time > 4 && !fighting && !won;
+  const sh = swarm.shape;
+  if (idle && !shapeOn) { shapeOn = true; loadShape(shapeK, sh); sh.pos[0] = leader[0]; sh.pos[2] = leader[2]; sh.pos[1] = terrain.floor(leader[0], leader[2]); }
+  if (!idle && shapeOn && sh.blend < 0.05) { shapeOn = false; shapeK = (shapeK + 1) % SHAPES.length; }
+  sh.blend = shapeOn && idle ? Math.min(1, sh.blend + dt * 0.6) : Math.max(0, sh.blend - dt * 3);
+  sh.scale = 2.4 + Math.sqrt(active) * 0.07;
+  if (shapeOn && idle) { target[0] = leader[0]; target[2] = leader[2]; }
+  else if (aiming && (down || !("ontouchstart" in window))) pick(aimX, aimY);
   { const r = Math.hypot(target[0], target[2]), lim = WALL - 4; if (r > lim) { target[0] *= lim / r; target[2] *= lim / r; } }
   const speed = 8.5 + Math.sqrt(active) * 0.025;
   const dx = target[0] - leader[0], dz = target[2] - leader[2], d = Math.hypot(dx, dz);
@@ -294,6 +319,7 @@ function frame(now: number) {
   const vx = d > 0.01 ? (dx / d) * Math.min(d * 3.5, speed * 1.25) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * 3.5, speed * 1.25) : 0;
   leaderVel[0] += (vx - leaderVel[0]) * Math.min(1, dt * 7); leaderVel[2] += (vz - leaderVel[2]) * Math.min(1, dt * 7);
   leader[0] += leaderVel[0] * dt; leader[2] += leaderVel[2] * dt;
+  leader[1] = terrain.floor(leader[0], leader[2]);
 
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
   city.feed(swarm.state.tex[0], swarm.state.tex[1], active, dt, time);
@@ -309,7 +335,7 @@ function frame(now: number) {
   if ((gov.frames & 255) === 0) save();
 
   // camera: behind and above the seed, pulling back as the swarm grows
-  const want = 15 + Math.sqrt(active) * 0.13 + (giant >= 0 && giantState !== "fallen" && !city.gone[giant] ? 14 : 0);
+  const want = 15 + Math.sqrt(active) * 0.13 + (fighting ? 14 : 0) + sh.blend * sh.scale * 1.2;
   // opening: close and low on the glowing seed, rising and pulling back over ~3 s
   const open = Math.min(1, time / 3.2), ease = open * open * (3 - 2 * open);
   const wantD = (2.2 + (want - 2.2) * ease) * userZoom;
@@ -317,24 +343,25 @@ function frame(now: number) {
   camX += (leader[0] - camX) * Math.min(1, dt * 2.2); camZ += (leader[2] - camZ) * Math.min(1, dt * 2.2);
   // a slow orbit gives parallax: the swarm reads as a volume, not a decal
   const pitch = 0.3 + 0.52 * ease; // height / distance: low at first, then the overview
-  cam[0] = camX; cam[1] = 0.6 + camD * pitch; cam[2] = camZ + camD * 0.95;
+  camY += (terrain.floor(camX, camZ) + sh.blend * sh.scale * 0.35 - camY) * Math.min(1, dt * 2);
+  cam[0] = camX; cam[1] = camY + 0.6 + camD * pitch; cam[2] = camZ + camD * 0.95;
   const aspect = cw / ch;
   perspective(proj, aspect < 1 ? 1.05 : 0.85, aspect, 0.3, 600);
   // a building coming down shakes the camera a little
   shake = Math.max(0, shake - dt * 1.6);
   const sk = shake * shake * 0.35;
-  lookAt(view, cam[0] + Math.sin(time * 61) * sk, cam[1] + Math.sin(time * 47) * sk, cam[2], camX, 0, camZ - camD * 0.12);
+  lookAt(view, cam[0] + Math.sin(time * 61) * sk, cam[1] + Math.sin(time * 47) * sk, cam[2], camX, camY, camZ - camD * 0.12);
   mul(vp, proj, view); invert(inv, vp);
   camR[0] = view[0]; camR[1] = view[4]; camR[2] = view[8];
   camU[0] = view[1]; camU[1] = view[5]; camU[2] = view[9];
 
   post.begin(tier.scale);
   world.draw(vp, inv, cam, swarm.light, city.color.tex[0], time);
-  city.focus[0] = leader[0]; city.focus[1] = 1.5; city.focus[2] = leader[2];
+  city.focus[0] = leader[0]; city.focus[1] = leader[1] + 1.5; city.focus[2] = leader[2];
   city.draw(vp, cam, swarm.light);
-  grass.draw(vp, cam, camX, camZ - camD * 0.1, time, city.color.tex[0], swarm.light, swarm.light, 1);
+  grass.draw(vp, cam, camX, camZ - camD * 0.1, time, city.color.tex[0], swarm.light, swarm.light, 1, terrain.tex);
   city.shadows = gov.tier <= 2;
-  world.drawWall(vp, time);
+  world.drawWater(vp, cam, swarm.light, city.color.tex[0], time);
   swarm.draw(vp, camR, camU, time, active, 2 / (proj[5] * ch * tier.scale), leader, cityLink);
   post.end(tier.scale, time, tier.bloom, cw, ch);
 

@@ -1,0 +1,56 @@
+// What the swarm makes when you let it rest: famous, instantly readable things, built from a few primitives.
+// Units: about 1 tall, standing on y = 0, facing the camera (+z), long side along x.
+// [type, ...]: S = ellipsoid (centre, semi-axes), C = capsule (a, b, radius), B = box (centre, half size)
+type P = ["S", number[], number[]] | ["C", number[], number[], number] | ["B", number[], number[]];
+const heart: P[] = [
+  ["S", [-0.24, 0.72, 0], [0.27, 0.27, 0.16]], ["S", [0.24, 0.72, 0], [0.27, 0.27, 0.16]],
+  ["C", [-0.36, 0.6, 0], [0, 0.1, 0], 0.17], ["C", [0.36, 0.6, 0], [0, 0.1, 0], 0.17], ["C", [-0.15, 0.6, 0], [0.15, 0.6, 0], 0.2],
+];
+const star: P[] = [0, 1, 2, 3, 4].map((k): P => { const a = Math.PI / 2 + (k * Math.PI * 2) / 5; return ["C", [0, 0.58, 0], [Math.cos(a) * 0.52, 0.58 + Math.sin(a) * 0.52, 0], 0.075]; });
+star.push(["S", [0, 0.58, 0], [0.17, 0.17, 0.08]]);
+const eiffel: P[] = [];
+for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+  eiffel.push(["C", [sx * 0.34, 0, sz * 0.34], [sx * 0.1, 0.42, sz * 0.1], 0.035]);
+  eiffel.push(["C", [sx * 0.1, 0.42, sz * 0.1], [sx * 0.025, 1.0, sz * 0.025], 0.022]);
+}
+eiffel.push(["B", [0, 0.2, 0], [0.25, 0.018, 0.25]], ["B", [0, 0.42, 0], [0.12, 0.016, 0.12]], ["C", [0, 1.0, 0], [0, 1.16, 0], 0.012],
+  ["C", [-0.22, 0.12, 0.28], [0.22, 0.12, 0.28], 0.02]);
+const dino: P[] = [
+  ["S", [0, 0.5, 0], [0.32, 0.19, 0.17]],                                   // body
+  ["C", [0.22, 0.58, 0], [0.4, 0.76, 0], 0.1],                               // neck
+  ["S", [0.5, 0.8, 0], [0.17, 0.1, 0.09]], ["S", [0.56, 0.73, 0], [0.12, 0.04, 0.07]], // head, jaw
+  ["C", [-0.28, 0.5, 0], [-0.62, 0.42, 0], 0.09], ["C", [-0.62, 0.42, 0], [-0.88, 0.3, 0], 0.045], // tail
+  ["C", [0.0, 0.42, 0.1], [0.04, 0.03, 0.12], 0.07], ["C", [-0.08, 0.42, -0.1], [-0.1, 0.03, -0.12], 0.07], // legs
+  ["C", [0.25, 0.48, 0.1], [0.33, 0.4, 0.13], 0.025],                        // tiny arm
+];
+const rocket: P[] = [
+  ["C", [0, 0.2, 0], [0, 0.78, 0], 0.15], ["S", [0, 0.84, 0], [0.15, 0.22, 0.15]],
+  ["B", [0.2, 0.18, 0], [0.07, 0.12, 0.015]], ["B", [-0.2, 0.18, 0], [0.07, 0.12, 0.015]], ["B", [0, 0.18, 0.2], [0.015, 0.12, 0.07]],
+  ["S", [0, 0.06, 0], [0.09, 0.12, 0.09]], ["S", [0, 0.55, 0.13], [0.06, 0.06, 0.03]],
+];
+const whale: P[] = [
+  ["S", [0, 0.42, 0], [0.5, 0.22, 0.24]], ["C", [-0.42, 0.44, 0], [-0.72, 0.56, 0], 0.07],
+  ["B", [-0.78, 0.6, 0], [0.05, 0.02, 0.2]], ["S", [0.15, 0.28, 0.2], [0.14, 0.03, 0.08]],
+  ["C", [0.22, 0.63, 0], [0.22, 0.92, 0], 0.02], ["S", [0.22, 1.0, 0], [0.13, 0.08, 0.13]],
+];
+export const SHAPES = [heart, dino, eiffel, rocket, whale, star];
+
+/** fill the swarm's shape uniforms for shape k */
+export function loadShape(k: number, out: { pa: Float32Array; pb: Float32Array; pw: Float32Array; n: number }) {
+  const prims = SHAPES[k % SHAPES.length];
+  const area: number[] = prims.map((p) => {
+    if (p[0] === "S") { const [a, b, c] = p[2]; return 4 * Math.PI * Math.pow((Math.pow(a * b, 1.6) + Math.pow(a * c, 1.6) + Math.pow(b * c, 1.6)) / 3, 1 / 1.6); }
+    if (p[0] === "C") return 2 * Math.PI * p[3] * Math.hypot(p[2][0] - p[1][0], p[2][1] - p[1][1], p[2][2] - p[1][2]) + 4 * Math.PI * p[3] * p[3];
+    const [x, y, z] = p[2]; return 8 * (x * y + y * z + x * z);
+  });
+  const tot = area.reduce((a, b) => a + b, 0);
+  let acc = 0;
+  out.n = prims.length;
+  prims.forEach((p, i) => {
+    acc += area[i] / tot; out.pw[i] = acc;
+    const o = i * 4;
+    if (p[0] === "S") { out.pa.set([...p[1], 0], o); out.pb.set([...p[2], 0], o); }
+    else if (p[0] === "C") { out.pa.set([...p[1], 1], o); out.pb.set([...p[2], p[3]], o); }
+    else { out.pa.set([...p[1], 2], o); out.pb.set([...p[2], 0], o); }
+  });
+}

@@ -3,13 +3,14 @@
 // the swarm as it flows over them (the same density field that lights the world pushes the grass).
 import { bindTex, program, type GL, type Program } from "./gl.ts";
 import { WORLD } from "./swarm.ts";
+import { HEIGHT_GLSL } from "./terrain.ts";
 
 export const SIDE = 260; // blades per side of the patch
 export const STEP = 0.24; // world units between blades
 
 const VS = `#version 300 es
 precision highp float;
-uniform sampler2D uColor, uDen;
+uniform sampler2D uColor, uDen, uHeight;
 uniform mat4 uVP;
 uniform vec2 uOrigin;
 uniform float uTime, uWorld;
@@ -17,6 +18,7 @@ out vec3 vCol;
 out float vTip;
 out vec3 vW;
 float h11(float p) { p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
+${HEIGHT_GLSL}
 void main() {
   int i = gl_InstanceID;
   vec2 cell = vec2(float(i % ${SIDE}), float(i / ${SIDE}));
@@ -27,7 +29,8 @@ void main() {
   world += (vec2(r1, r2) - 0.5) * ${STEP.toFixed(3)} * 1.4;
   vec2 uv = world / uWorld + 0.5;
   float rest = clamp(texture(uColor, uv).r * 1.6 - (r3 * 0.5), 0.0, 1.0);
-  float h = rest < 0.04 ? 0.0 : mix(0.05, 0.42 + 0.55 * r2, rest);
+  float gy = groundH(world);
+  float h = rest < 0.04 || gy < WATER + 0.05 ? 0.0 : mix(0.05, 0.42 + 0.55 * r2, rest);
   // the blade: 5 vertices (a tapering strip), bent by wind and pushed by the swarm
   int k = gl_VertexID;
   float t = float(k / 2) / 2.0;
@@ -42,7 +45,7 @@ void main() {
   vec2 push = -g * 0.02 + vec2(sin(uTime * 1.7 + world.x * 0.4 + world.y * 0.2), cos(uTime * 1.3 + world.y * 0.5)) * 0.12 * rest;
   push *= 1.0 + min(d0 * 0.02, 2.0);
   vec3 p = vec3(world.x, 0.0, world.y) + vec3(-dir.y, 0.0, dir.x) * side;
-  p.y = t * h;
+  p.y = gy + t * h;
   p.xz += push * t * t * h * 2.5;
   vW = p;
   vTip = t;
@@ -74,12 +77,12 @@ void main() {
 export class Grass {
   gl: GL; prog: Program; vao: WebGLVertexArrayObject;
   constructor(gl: GL) { this.gl = gl; this.prog = program(gl, VS, FS, "grass"); this.vao = gl.createVertexArray()!; }
-  draw(vp: Float32Array, cam: Float32Array, cx: number, cz: number, t: number, color: WebGLTexture, den: WebGLTexture, light: WebGLTexture, density: number) {
+  draw(vp: Float32Array, cam: Float32Array, cx: number, cz: number, t: number, color: WebGLTexture, den: WebGLTexture, light: WebGLTexture, density: number, height: WebGLTexture) {
     const gl = this.gl, u = this.prog.u;
     gl.bindVertexArray(this.vao);
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.disable(gl.CULL_FACE);
     gl.useProgram(this.prog.p);
-    bindTex(gl, 0, color, u.uColor); bindTex(gl, 1, den, u.uDen); bindTex(gl, 2, light, u.uLight);
+    bindTex(gl, 0, color, u.uColor); bindTex(gl, 1, den, u.uDen); bindTex(gl, 2, light, u.uLight); bindTex(gl, 3, height, u.uHeight);
     gl.uniformMatrix4fv(u.uVP, false, vp);
     // the patch is centred a little ahead of the camera target, snapped to the blade grid
     const half = (SIDE * STEP) / 2;
