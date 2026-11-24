@@ -411,6 +411,7 @@ void main() { o = vec4(uAmount); }`, "fill");
   }
 
   /** eating, counting, painting, then gravity for every building that is being eaten or still settling */
+  boost = 1; // how hard the swarm hits this frame (a fast pass or a punch hits harder than resting)
   feed(posTex: WebGLTexture, velTex: WebGLTexture, active: number, dt: number, t: number) {
     const gl = this.gl;
     gl.bindVertexArray(this.vao);
@@ -422,11 +423,11 @@ void main() { o = vec4(uAmount); }`, "fill");
     gl.uniform1f(u.uS, S); gl.uniform4fv(u.uB, this.bArr); gl.uniform4fv(u.uS2, this.s2Arr);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.atlas.fb); gl.viewport(0, 0, AW, AH);
     gl.blendEquation(gl.FUNC_REVERSE_SUBTRACT); gl.blendFunc(gl.ONE, gl.ONE);
-    gl.uniform1f(u.uMode, 0); gl.uniform1f(u.uAmount, dt * 2.4);
+    gl.uniform1f(u.uMode, 0); gl.uniform1f(u.uAmount, dt * 2.4 * this.boost);
     gl.drawArrays(gl.POINTS, 0, active);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.counter.fb); gl.viewport(0, 0, NB, 1);
     gl.blendEquation(gl.FUNC_ADD);
-    gl.uniform1f(u.uMode, 1); gl.uniform1f(u.uAmount, dt * 2.4);
+    gl.uniform1f(u.uMode, 1); gl.uniform1f(u.uAmount, dt * 2.4 * this.boost);
     gl.drawArrays(gl.POINTS, 0, active);
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.color.fb); gl.viewport(0, 0, COLOR, COLOR);
     gl.useProgram(this.paint.p);

@@ -116,7 +116,7 @@ const proj = new Float32Array(16), view = new Float32Array(16), vp = new Float32
 const cam = new Float32Array(3), camR = new Float32Array(3), camU = new Float32Array(3);
 const leader = new Float32Array([0, 0, 0]), leaderVel = new Float32Array(3);
 const target = new Float32Array([0, 0, 0]);
-let hasTarget = false, lastInput = -99, lastMove = 0;
+let hasTarget = false, lastInput = -99, lastMove = 0, tapT = -9, tapX = 0, tapY = 0, dashT = 0;
 // left alone, the swarm builds something: a heart, a dinosaur, a tower, a rocket, a whale, a star
 let shapeK = Math.floor(Math.random() * 1000) % 17, shapeOn = false, shapeT = 0;
 let camD = 2.2, camX = 0, camZ = 0, camY = 0, shake = 0;
@@ -145,7 +145,7 @@ function countNInit() { const el = document.getElementById("countN"); if (el) el
 function nextLand() {
   // the next land: the swarm keeps everything it has
   district++; save();
-  city.build(makeLand(district)); stallT.fill(0);
+  city.build(makeLand(district)); stallT.fill(0); hpPrev.fill(1); wasGone.fill(0); combo = 0;
   giant = -1; parts = []; stompT = -1; giantState = "sleep"; won = false; progress = 0; time = Math.min(time, 1e9); landT = 0; firstBite = false;
   // the swarm comes in through the south gate of the new land
   leader[0] = 0; leader[2] = 54; target[0] = 0; target[2] = 30; camX = 0; camZ = 54; camD = 10; swarm.reset = true; swarm.open = false; travel = -1; hasTarget = true; lastMove = time;
@@ -177,9 +177,9 @@ function renderPath() {
 const hand = document.getElementById("hand")!, countN = document.getElementById("countN")!, countBox = document.getElementById("count")!, goalFill = document.getElementById("goalFill")!;
 // test builds only: five quick taps on the swarm counter skip to the next land
 const SKIP_TEST = import.meta.env.MODE !== "poki";
-let taps = 0, tapT = 0;
+let taps = 0, skipT = 0;
 countBox.style.pointerEvents = "auto";
-countBox.addEventListener("pointerdown", () => { if (!SKIP_TEST) return; const n = performance.now(); taps = n - tapT < 600 ? taps + 1 : 1; tapT = n; if (taps >= 5) { taps = 0; nextLand(); } });
+countBox.addEventListener("pointerdown", () => { if (!SKIP_TEST) return; const n = performance.now(); taps = n - skipT < 600 ? taps + 1 : 1; skipT = n; if (taps >= 5) { taps = 0; nextLand(); } });
 let touched = false;
 // pointers: one finger (or the mouse) steers; two fingers pinch to zoom; the wheel zooms too
 const ptrs = new Map<number, { x: number; y: number }>();
@@ -188,7 +188,7 @@ canvas.addEventListener("pointerdown", (e) => {
   audio.start();
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); zoom0 = userZoom; aiming = false; }
-  else { down = true; aiming = true; aimX = e.clientX; aimY = e.clientY; }
+  else { down = true; aiming = true; aimX = e.clientX; aimY = e.clientY; tapT = time; tapX = e.clientX; tapY = e.clientY; }
   lastMove = time;
   if (!touched) { touched = true; hand.classList.add("gone"); }
   if (!document.getElementById("win")!.classList.contains("show")) poki.gameplayStart();
@@ -203,7 +203,10 @@ addEventListener("pointermove", (e) => {
   }
   if (down || e.pointerType === "mouse") { aiming = true; aimX = e.clientX; aimY = e.clientY; lastMove = time; }
 });
-const lift = (e: PointerEvent) => { ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; if (ptrs.size === 0) down = false; };
+const lift = (e: PointerEvent) => {
+  // a quick tap is a punch: the whole swarm lunges at that spot and hits hard
+  if (ptrs.size === 1 && time - tapT < 0.28 && Math.hypot(e.clientX - tapX, e.clientY - tapY) < 24) { pick(e.clientX, e.clientY); dashT = 0.5; shake = Math.max(shake, 0.35); audio.thump(0.45); }
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; if (ptrs.size === 0) down = false; };
 addEventListener("pointerup", lift);
 addEventListener("pointercancel", lift);
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); userZoom = Math.min(2.6, Math.max(0.4, userZoom * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
@@ -279,6 +282,75 @@ city.onEat = (b, amount) => {
     shake = B.kind === 6 ? 0.2 : 0.9; audio.thump(B.kind === 1 || B.kind === 6 ? 0.6 : 1.2);
   }
 };
+
+// ---------------------------------------------------------------- the readable layer: health bars, the boss bar, arrows to what is left, combos
+const fx = document.getElementById("fx") as HTMLCanvasElement, fctx = fx.getContext("2d")!;
+const bossEl = document.getElementById("boss")!, bossFill = document.getElementById("bossFill")!, leftEl = document.getElementById("left")!, comboEl = document.getElementById("combo")!;
+const hpPrev = new Float32Array(64).fill(1), hpFlash = new Float32Array(64), wasGone = new Uint8Array(64);
+let bossPrev = 1, combo = 0, lastKill = -9, fxW = 0, fxH = 0;
+function project(x: number, y: number, z: number, out: Float32Array) {
+  const w = vp[3] * x + vp[7] * y + vp[11] * z + vp[15];
+  out[0] = ((vp[0] * x + vp[4] * y + vp[8] * z + vp[12]) / w * 0.5 + 0.5) * fxW;
+  out[1] = (0.5 - (vp[1] * x + vp[5] * y + vp[9] * z + vp[13]) / w * 0.5) * fxH;
+  out[2] = w;
+}
+const pr = new Float32Array(3);
+function drawFx(dt: number) {
+  const dpr = Math.min(2, devicePixelRatio || 1), W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
+  if (fx.width !== W || fx.height !== H) { fx.width = W; fx.height = H; }
+  fxW = W; fxH = H;
+  fctx.clearRect(0, 0, W, H);
+  let left = 0;
+  const offs: { d: number; x: number; z: number }[] = [];
+  for (let b = 0; b < city.buildings.length; b++) {
+    if (isPart(b)) continue;
+    const B = city.buildings[b];
+    // destroyed: count the combo
+    if (city.gone[b]) {
+      if (!wasGone[b]) { wasGone[b] = 1; combo = time - lastKill < 4 ? combo + 1 : 1; lastKill = time; meal += 30 * combo; if (combo >= 2) { comboEl.textContent = `×${combo}`; comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop"); audio.chime(Math.min(9, combo + 2)); } }
+      continue;
+    }
+    wasGone[b] = 0; left++;
+    const sc = city.s2Arr[b * 4] || 1, top = city.s2Arr[b * 4 + 1] + B.h * 0.28 * sc + 0.6;
+    const hp = Math.max(0, 1 - B.eaten / (B.solid * 0.88));
+    if (hp < hpPrev[b] - 0.0015) hpFlash[b] = 1;
+    hpPrev[b] = hp; hpFlash[b] = Math.max(0, hpFlash[b] - dt * 3.5);
+    const dist = Math.hypot(B.x - leader[0], B.z - leader[2]);
+    project(B.x, top, B.z, pr);
+    const on = pr[2] > 0 && pr[0] > 0 && pr[0] < W && pr[1] > 0 && pr[1] < H;
+    if (!on) { offs.push({ d: dist, x: B.x, z: B.z }); continue; }
+    if (hp > 0.999 && dist > 22) continue;
+    // a bar above the thing: green, then yellow, then red; it flashes red every time it loses a bit
+    const bw = Math.max(26, Math.min(90, 2600 / pr[2])) * dpr * 0.6, bh = (5 + 4 * hpFlash[b]) * dpr;
+    const x0 = pr[0] - bw / 2, y0 = pr[1] - bh;
+    fctx.fillStyle = "rgba(10,10,20,0.65)"; fctx.fillRect(x0 - dpr, y0 - dpr, bw + 2 * dpr, bh + 2 * dpr);
+    fctx.fillStyle = `hsl(${Math.round(hp * 115)},90%,${50 + hpFlash[b] * 25}%)`; fctx.fillRect(x0, y0, bw * hp, bh);
+    if (hpFlash[b] > 0) { fctx.fillStyle = `rgba(255,40,30,${hpFlash[b] * 0.7})`; fctx.fillRect(x0 - 2 * dpr, y0 - 2 * dpr, bw + 4 * dpr, bh + 4 * dpr); }
+  }
+  // arrows at the edge of the screen to the nearest things still standing
+  offs.sort((a, c) => a.d - c.d);
+  for (let k = 0; k < Math.min(3, offs.length); k++) {
+    project(offs[k].x, 1, offs[k].z, pr);
+    let ax = pr[0] - W / 2, ay = pr[1] - H / 2;
+    if (pr[2] < 0) { ax = -ax; ay = -ay; }
+    const a = Math.atan2(ay, ax), m = Math.min((W / 2 - 40 * dpr) / Math.abs(Math.cos(a) || 1e-3), (H / 2 - 50 * dpr) / Math.abs(Math.sin(a) || 1e-3));
+    const px = W / 2 + Math.cos(a) * m, py = H / 2 + Math.sin(a) * m, s = (16 - k * 3) * dpr, pulse = 0.65 + 0.35 * Math.sin(time * 6 + k);
+    fctx.save(); fctx.translate(px, py); fctx.rotate(a);
+    fctx.fillStyle = `rgba(255,214,110,${pulse})`; fctx.shadowColor = "rgba(255,160,60,0.9)"; fctx.shadowBlur = 12 * dpr;
+    fctx.beginPath(); fctx.moveTo(s, 0); fctx.lineTo(-s * 0.7, s * 0.7); fctx.lineTo(-s * 0.35, 0); fctx.lineTo(-s * 0.7, -s * 0.7); fctx.closePath(); fctx.fill();
+    fctx.restore();
+  }
+  leftEl.textContent = left > 0 && !won ? `🏚️ ${left}` : "";
+  // the giant's own bar at the top: it flashes on every hit
+  const up = giant >= 0 && !giantGone() && giantState !== "fallen" && giantState !== "sleep";
+  bossEl.classList.toggle("on", up);
+  if (up) {
+    const hp = Math.max(0, 1 - giantSolid() / 0.5);
+    bossFill.style.width = `${(hp * 100).toFixed(1)}%`;
+    bossEl.classList.toggle("hit", hp < bossPrev - 0.001);
+    bossPrev = hp;
+  } else bossPrev = 1;
+}
 
 // ---------------------------------------------------------------- loop
 let time = 0, last = 0, refreshSamples = 0, refreshAcc = 0;
@@ -378,7 +450,9 @@ function frame(now: number) {
   const speed = 8.5 + Math.sqrt(active) * 0.025;
   const dx = target[0] - leader[0], dz = target[2] - leader[2], d = Math.hypot(dx, dz);
   // the seed is the finger: it gets there fast, easing in at the end
-  const vx = d > 0.01 ? (dx / d) * Math.min(d * 3.5, speed * 1.25) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * 3.5, speed * 1.25) : 0;
+  dashT = Math.max(0, dashT - dt);
+  const vmax = speed * (dashT > 0 ? 3.2 : 1.25);
+  const vx = d > 0.01 ? (dx / d) * Math.min(d * (dashT > 0 ? 8 : 3.5), vmax) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * (dashT > 0 ? 8 : 3.5), vmax) : 0;
   leaderVel[0] += (vx - leaderVel[0]) * Math.min(1, dt * 7); leaderVel[2] += (vz - leaderVel[2]) * Math.min(1, dt * 7);
   leader[0] += leaderVel[0] * dt; leader[2] += leaderVel[2] * dt;
   leader[1] = terrain.floor(leader[0], leader[2]);
@@ -396,6 +470,8 @@ function frame(now: number) {
     if (stallT[b] > 3.2 || (down && time - B.collapseAt > 9 && frac > 0.2)) { city.remove(b); audio.thump(0.4); stallT[b] = 0; }
   }
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
+  // a storm hits harder than a swarm at rest; a punch hits hardest
+  city.boost = 1 + 2.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 6 : 0);
   city.feed(swarm.state.tex[0], swarm.state.tex[1], active, dt, time);
   if (city.bloom > 0) { city.bloom -= dt; city.flood(dt * 0.45); }
   // onboarding (wordless): a pulsing ring around the nearest little thing until the first bite brings it down
@@ -438,6 +514,7 @@ function frame(now: number) {
   world.drawWater(vp, cam, swarm.light, city.color.tex[0], time);
   swarm.draw(vp, camR, camU, time, active, 2 / (proj[5] * ch * tier.scale), leader, cityLink);
   post.end(tier.scale, time, tier.bloom, cw, ch);
+  drawFx(dt);
 
   // the wordless HUD: the swarm count, and how much of the village has its colour back
   if ((gov.frames & 7) === 0) {
