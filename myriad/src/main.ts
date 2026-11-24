@@ -72,7 +72,8 @@ function makeLand(d: number) {
     if (gx === 0 && gz === 0) continue; // the square in the middle stays open: the seed starts there
     const x = gx * L.gap + (rnd() - 0.5) * 6, z = gz * L.gap + (rnd() - 0.5) * 6;
     if (Math.hypot(x, z) > WALL - 9 || rnd() < L.skip) continue;
-    if (Math.hypot(x - pond.x, z - pond.z) < pond.r + 6) continue; // nothing stands in the pond
+    if (Math.hypot(x - pond.x, z - pond.z) < pond.r + 6) continue; // nothing stands in a pond
+    if (Math.hypot(x - terrain.pond2.x, z - terrain.pond2.z) < terrain.pond2.r + 6) continue;
     let r = rnd(), kind = L.mix[0][0];
     for (const [k, w] of L.mix) { if (r < w) { kind = k; break; } r -= w; }
     list.push({ x, z, kind, seed: Math.floor(rnd() * 1e6) });
@@ -145,7 +146,7 @@ function countNInit() { const el = document.getElementById("countN"); if (el) el
 function nextLand() {
   // the next land: the swarm keeps everything it has
   district++; save();
-  city.build(makeLand(district)); stallT.fill(0); hpPrev.fill(1); wasGone.fill(0); combo = 0;
+  city.build(makeLand(district)); contactT.fill(0); hpOf.fill(1); gContact = 0; gHp = 1; hpPrev.fill(1); wasGone.fill(0); combo = 0;
   giant = -1; parts = []; stompT = -1; giantState = "sleep"; won = false; progress = 0; time = Math.min(time, 1e9); landT = 0; firstBite = false;
   // the swarm comes in through the south gate of the new land
   leader[0] = 0; leader[2] = 54; target[0] = 0; target[2] = 30; camX = 0; camZ = 54; camD = 10; swarm.reset = true; swarm.open = false; travel = -1; hasTarget = true; lastMove = time;
@@ -225,7 +226,8 @@ const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? Math.max(800, saved.land === district ? saved.active : 800));
 let meal = 0;
 let landT = 0, firstBite = false;
-const stallT = new Float32Array(64);
+const contactT = new Float32Array(64), hpOf = new Float32Array(64).fill(1);
+let gContact = 0, gHp = 1;
 let travel = -1; // >= 0: the swarm is marching out of the north gate to the next land
 // ---------------------------------------------------------------- the stone giant: wakes when the village is mostly colour again
 // The giant is six volumes (head, body, two arms, two legs), each with its own fine detail, moved every frame:
@@ -312,7 +314,7 @@ function drawFx(dt: number) {
     }
     wasGone[b] = 0; left++;
     const sc = city.s2Arr[b * 4] || 1, top = city.s2Arr[b * 4 + 1] + B.h * 0.28 * sc + 0.6;
-    const hp = Math.max(0, 1 - B.eaten / (B.solid * 0.88));
+    const hp = hpOf[b];
     if (hp < hpPrev[b] - 0.0015) hpFlash[b] = 1;
     hpPrev[b] = hp; hpFlash[b] = Math.max(0, hpFlash[b] - dt * 3.5);
     const dist = Math.hypot(B.x - leader[0], B.z - leader[2]);
@@ -345,7 +347,7 @@ function drawFx(dt: number) {
   const up = giant >= 0 && !giantGone() && giantState !== "fallen" && giantState !== "sleep";
   bossEl.classList.toggle("on", up);
   if (up) {
-    const hp = Math.max(0, 1 - giantSolid() / 0.5);
+    const hp = gHp;
     bossFill.style.width = `${(hp * 100).toFixed(1)}%`;
     bossEl.classList.toggle("hit", hp < bossPrev - 0.001);
     bossPrev = hp;
@@ -382,7 +384,7 @@ function frame(now: number) {
     parts = [];
     for (let k = 0; k < 6; k++) { theme.part = k; const b = city.add({ x: gX, z: gZ, kind: 5, seed: 4242 + district * 7 + k }, PART_SCALE[k] * gM, -40, tough); if (b >= 0) parts.push(b); }
     giant = parts[0] ?? -1;
-    giantState = "rise"; giantT = 0; audio.thump(1.4); shake = 1.2;
+    giantState = "rise"; giantT = 0; gContact = 0; gHp = 1; audio.thump(1.4); shake = 1.2;
   }
   if (giant >= 0 && !giantGone()) {
     giantT += dt;
@@ -395,7 +397,7 @@ function frame(now: number) {
     } else if (giantState === "walk") {
       const dx = leader[0] - gX, dz = leader[2] - gZ, d = Math.hypot(dx, dz);
       if (d > 0.1) { gDirX += (dx / d - gDirX) * Math.min(1, dt * 2); gDirZ += (dz / d - gDirZ) * Math.min(1, dt * 2); }
-      const hurt = Math.min(1, giantSolid() / 0.5);
+      const hurt = 1 - gHp;
       const moving = d > 5 && stompT < 0;
       if (moving) { const step = Math.min(d, (2.2 + hurt * 1.2) * dt * gM); gX += (dx / d) * step; gZ += (dz / d) * step; gPhase += dt * (3.2 + hurt * 1.5); }
       if (stompT >= 0) {
@@ -408,7 +410,7 @@ function frame(now: number) {
       } else if (giantT >= nextStomp) { stompT = 0; nextStomp = giantT + 2.4 - hurt * 1.0; }
       poseGiant(terrain.floor(gX, gZ));
       // beaten: half of it eaten, it falls apart
-      if (giantSolid() > 0.5) {
+      if (gHp <= 0) {
         giantState = "fallen"; shake = 1.4; audio.thump(1.6); stompT = -1;
         for (let k = 0; k < 6; k++) { partVY[k] = 2 + Math.random() * 3; partX[k] += (Math.random() - 0.5) * 4 * gM; partZ[k] += (Math.random() - 0.5) * 4 * gM; }
       }
@@ -457,18 +459,29 @@ function frame(now: number) {
   leader[0] += leaderVel[0] * dt; leader[2] += leaderVel[2] * dt;
   leader[1] = terrain.floor(leader[0], leader[2]);
 
-  // nothing is unbreakable: whatever the swarm touches for a moment, once a third of it is gone (or it has
-  // already come down), crumbles away; collapsed rubble the swarm has left also turns to dust after a while
+  // health: the swarm touching something drains it at a steady, readable rate (a fast pass drains more, a punch most);
+  // at zero it comes down and crumbles away. The pieces eaten along the way count too.
+  const swarmR = 2 + Math.sqrt(active) * 0.031;
+  const hitRate = (1 + 1.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 4 : 0)) * (1 + Math.sqrt(active) / 150);
   for (let b = 0; b < city.buildings.length; b++) {
-    if (city.gone[b] || (isPart(b) && giantState !== "fallen")) continue;
+    if (city.gone[b] || isPart(b)) continue;
     const B = city.buildings[b];
-    const half = (32 * 0.28 * (city.s2Arr[b * 4] || 1)) / 2;
-    const near = Math.hypot(B.x - leader[0], B.z - leader[2]) < half + 3 + Math.sqrt(active) * 0.02;
-    const down = B.collapseAt >= 0, frac = B.eaten / Math.max(1, B.solid);
-    if (near && (down || frac > 0.33)) stallT[b] += dt;
-    if (stallT[b] > 1.6 && !down) { B.collapseAt = time; city.fail(b); audio.thump(0.7); shake = Math.max(shake, 0.5); }
-    if (stallT[b] > 3.2 || (down && time - B.collapseAt > 9 && frac > 0.2)) { city.remove(b); audio.thump(0.4); stallT[b] = 0; }
+    const sc = city.s2Arr[b * 4] || 1, half = (32 * 0.28 * sc) / 2;
+    if (Math.hypot(B.x - leader[0], B.z - leader[2]) < half + swarmR * 0.7) contactT[b] += dt * hitRate;
+    const T = (0.6 + B.solid / 2500) / Math.max(0.2, city.s2Arr[b * 4 + 2]) * 0.5;
+    hpOf[b] = Math.max(0, 1 - Math.max(B.eaten / (B.solid * 0.88), contactT[b] / T));
+    if (hpOf[b] <= 0) {
+      if (B.collapseAt < 0) { B.collapseAt = time; city.fail(b); audio.thump(0.8); shake = Math.max(shake, 0.6); }
+      else if (time - B.collapseAt > 0.7) city.remove(b);
+    }
   }
+  // the giant: the same, on a bigger scale (punch it!)
+  if (giant >= 0 && giantState === "walk") {
+    if (Math.hypot(gX - leader[0], gZ - leader[2]) < 5 * gM + swarmR * 0.6) gContact += dt * hitRate / (1 + Math.sqrt(active) / 150) * (1 + Math.sqrt(active) / 400);
+    const TG = (14 + ((district - 1) % LANDS.length) * 3) * (1 + Math.floor((district - 1) / LANDS.length) * 0.3);
+    gHp = Math.max(0, 1 - Math.max(giantSolid() / 0.5, gContact / TG));
+  }
+  if (giantState === "fallen") for (let k = 0; k < parts.length; k++) { const B = city.buildings[parts[k]]; if (!city.gone[parts[k]] && B.collapseAt >= 0 && time - B.collapseAt > 1.4 + k * 0.25) { city.remove(parts[k]); audio.thump(0.5); } }
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
   // a storm hits harder than a swarm at rest; a punch hits hardest
   city.boost = 1 + 2.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 6 : 0);

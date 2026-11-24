@@ -12,6 +12,7 @@ export class Terrain {
   h = new Float32Array(HN * HN);
   tex: WebGLTexture;
   pond = { x: 0, z: 0, r: 0 };
+  pond2 = { x: 0, z: 0, r: 0 }; // a second pond: always clear water
   amp = 2;
   gl: GL;
   constructor(gl: GL) {
@@ -29,8 +30,10 @@ export class Terrain {
       + 0.9 * Math.sin(x * 0.12 - z * 0.1 + s * 2.3) + 0.45 * Math.sin(x * 0.23 + z * 0.19 + s);
     const r = Math.hypot(x, z);
     y *= this.amp * smooth(6, 16, r) * (1 - smooth(RIM - 10, RIM, r)); // the seed's square and the rim stay level
-    const p = this.pond;
-    if (p.r > 0) { const d = Math.hypot(x - p.x, z - p.z) / p.r; y = Math.max(y, WATER + 0.35) * smooth(0.7, 1.5, d) - 3.4 * Math.exp(-d * d * 1.3); } // only the pond holds water
+    // only the ponds hold water: elsewhere the land never dips below the water line
+    let wet = 1, dig = 0;
+    for (const p of [this.pond, this.pond2]) if (p.r > 0) { const d = Math.hypot(x - p.x, z - p.z) / p.r; wet *= smooth(0.7, 1.5, d); dig += 3.4 * Math.exp(-d * d * 1.3); }
+    y = Math.max(y, WATER + 0.35) * wet - dig;
     return y;
   }
   /** a new land: hills, a pond, and level pads (x, z, half size) under the buildings; returns each pad's height */
@@ -40,6 +43,8 @@ export class Terrain {
     const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
     const ang = rnd() * Math.PI * 2, rr = 26 + rnd() * 10;
     this.pond = { x: Math.cos(ang) * rr, z: Math.sin(ang) * rr, r: 14 + rnd() * 4 };
+    const a2 = ang + Math.PI * (0.8 + rnd() * 0.4), r2 = 26 + rnd() * 10;
+    this.pond2 = { x: Math.cos(a2) * r2, z: Math.sin(a2) * r2, r: 11 + rnd() * 3 };
     return this.pond;
   }
   build(seed: number, pads: { x: number; z: number; half: number }[]) {

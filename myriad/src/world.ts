@@ -348,15 +348,19 @@ export class World {
   }
   /** the pond (transparent: after the solid things, before the swarm) */
   drawWater(vp: Float32Array, cam: Float32Array, light: WebGLTexture, color: WebGLTexture, t: number) {
-    const gl = this.gl, w = this.water.u, pd = this.terrain.pond;
-    if (pd.r <= 0) return;
+    const gl = this.gl, w = this.water.u;
     gl.bindVertexArray(this.vao);
     gl.useProgram(this.water.p);
-    gl.uniformMatrix4fv(w.uVP, false, vp); gl.uniform4f(w.uPond, pd.x, pd.z, pd.r * 1.5, 0);
-    gl.uniform1f(w.uWorld, WORLD); gl.uniform1f(w.uTime, t); gl.uniform1f(w.uLiquid, this.liquid); gl.uniform3fv(w.uCam, cam); gl.uniform3fv(w.uFog, this.pal.fog); gl.uniform3fv(w.uSkyLow, this.pal.skyLow);
+    gl.uniformMatrix4fv(w.uVP, false, vp);
+    gl.uniform1f(w.uWorld, WORLD); gl.uniform1f(w.uTime, t); gl.uniform3fv(w.uCam, cam); gl.uniform3fv(w.uFog, this.pal.fog); gl.uniform3fv(w.uSkyLow, this.pal.skyLow);
     bindTex(gl, 0, color, w.uColor); bindTex(gl, 1, this.terrain.tex, w.uHeight); bindTex(gl, 2, light, w.uLight);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    // the land's own pond (water, ice or lava), and a second pond that is always clear water
+    for (const [pd, liq] of [[this.terrain.pond, this.liquid], [this.terrain.pond2, 0]] as [{ x: number; z: number; r: number }, number][]) {
+      if (pd.r <= 0) continue;
+      gl.uniform4f(w.uPond, pd.x, pd.z, pd.r * 1.5, 0); gl.uniform1f(w.uLiquid, liq);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
     gl.depthMask(true); gl.disable(gl.BLEND);
   }
 }
