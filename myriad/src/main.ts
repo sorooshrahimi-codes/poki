@@ -145,7 +145,7 @@ function countNInit() { const el = document.getElementById("countN"); if (el) el
 function nextLand() {
   // the next land: the swarm keeps everything it has
   district++; save();
-  city.build(makeLand(district));
+  city.build(makeLand(district)); stallT.fill(0);
   giant = -1; parts = []; stompT = -1; giantState = "sleep"; won = false; progress = 0; time = Math.min(time, 1e9); landT = 0; firstBite = false;
   // the swarm comes in through the south gate of the new land
   leader[0] = 0; leader[2] = 54; target[0] = 0; target[2] = 30; camX = 0; camZ = 54; camD = 10; swarm.reset = true; swarm.open = false; travel = -1; hasTarget = true; lastMove = time;
@@ -222,7 +222,7 @@ const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? Math.max(800, saved.land === district ? saved.active : 800));
 let meal = 0;
 let landT = 0, firstBite = false;
-const stallT = new Float32Array(64), lastEat = new Float32Array(64);
+const stallT = new Float32Array(64);
 let travel = -1; // >= 0: the swarm is marching out of the north gate to the next land
 // ---------------------------------------------------------------- the stone giant: wakes when the village is mostly colour again
 // The giant is six volumes (head, body, two arms, two legs), each with its own fine detail, moved every frame:
@@ -298,7 +298,7 @@ function frame(now: number) {
   // district progress (also drives the goal bar)
   { let tot = 0, eat = 0; for (let b = 0; b < city.buildings.length; b++) { if (isPart(b)) continue; const B = city.buildings[b]; tot += B.solid; eat += city.gone[b] ? B.solid : Math.min(B.solid, B.eaten); } progress = Math.min(1, (eat / Math.max(1, tot)) * 1.15); }
   swarm.shock[3] = 0;
-  if (giant < 0 && progress >= (params.get("giant") === "1" && time > 1.5 ? 0 : 0.7)) {
+  if (giant < 0 && progress >= (params.get("giant") === "1" && time > 1.5 ? 0 : 0.62)) {
     // it rises on the far side of the swarm from the camera, so the player sees it come up out of the ground
     const ang = Math.atan2(leader[2] - cam[2], leader[0] - cam[0]);
     gX = Math.max(-50, Math.min(50, leader[0] + Math.cos(ang) * 34)); gZ = Math.max(-50, Math.min(50, leader[2] + Math.sin(ang) * 34));
@@ -382,16 +382,17 @@ function frame(now: number) {
   leader[0] += leaderVel[0] * dt; leader[2] += leaderVel[2] * dt;
   leader[1] = terrain.floor(leader[0], leader[2]);
 
-  // nothing is unbreakable: if the swarm sits on something and it stops shrinking, it crumbles away
+  // nothing is unbreakable: whatever the swarm touches for a moment, once a third of it is gone (or it has
+  // already come down), crumbles away; collapsed rubble the swarm has left also turns to dust after a while
   for (let b = 0; b < city.buildings.length; b++) {
     if (city.gone[b] || isPart(b)) continue;
     const B = city.buildings[b];
-    const near = Math.hypot(B.x - leader[0], B.z - leader[2]) < (32 * 0.28 * (city.s2Arr[b * 4] || 1)) / 2 + 4;
-    if (!near || B.eaten < B.solid * 0.08) { stallT[b] = 0; lastEat[b] = B.eaten; continue; }
-    if (B.eaten > lastEat[b] + B.solid * 0.01) { lastEat[b] = B.eaten; stallT[b] = 0; continue; }
-    stallT[b] += dt;
-    if (stallT[b] > 1.2 && B.collapseAt < 0) { B.collapseAt = time; city.fail(b); audio.thump(0.7); shake = Math.max(shake, 0.5); }
-    if (stallT[b] > 3.0) { city.remove(b); audio.thump(0.5); stallT[b] = 0; }
+    const half = (32 * 0.28 * (city.s2Arr[b * 4] || 1)) / 2;
+    const near = Math.hypot(B.x - leader[0], B.z - leader[2]) < half + 3 + Math.sqrt(active) * 0.02;
+    const down = B.collapseAt >= 0, frac = B.eaten / Math.max(1, B.solid);
+    if (near && (down || frac > 0.33)) stallT[b] += dt;
+    if (stallT[b] > 1.6 && !down) { B.collapseAt = time; city.fail(b); audio.thump(0.7); shake = Math.max(shake, 0.5); }
+    if (stallT[b] > 3.2 || (down && time - B.collapseAt > 9 && frac > 0.2)) { city.remove(b); audio.thump(0.4); stallT[b] = 0; }
   }
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
   city.feed(swarm.state.tex[0], swarm.state.tex[1], active, dt, time);
