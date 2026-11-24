@@ -118,7 +118,7 @@ const leader = new Float32Array([0, 0, 0]), leaderVel = new Float32Array(3);
 const target = new Float32Array([0, 0, 0]);
 let hasTarget = false, lastInput = -99, lastMove = 0;
 // left alone, the swarm builds something: a heart, a dinosaur, a tower, a rocket, a whale, a star
-let shapeK = Math.floor(Math.random() * 3), shapeOn = false;
+let shapeK = Math.floor(Math.random() * 1000) % 17, shapeOn = false, shapeT = 0;
 let camD = 2.2, camX = 0, camZ = 0, camY = 0, shake = 0;
 
 // ---------------------------------------------------------------- input: the finger (or mouse) is where the seed goes
@@ -306,7 +306,7 @@ function frame(now: number) {
     GIANT_H = 32 * 0.28 * gM * 2.4;
     const lap = Math.floor((district - 1) / LANDS.length);
     // each land's giant is tougher than the last (and tougher again on every lap)
-    const tough = [0.05, 0.044, 0.038, 0.033, 0.028][(district - 1) % LANDS.length] / (1 + lap * 0.4);
+    const tough = [0.24, 0.21, 0.19, 0.17, 0.15][(district - 1) % LANDS.length] / (1 + lap * 0.3);
     parts = [];
     for (let k = 0; k < 6; k++) { theme.part = k; const b = city.add({ x: gX, z: gZ, kind: 5, seed: 4242 + district * 7 + k }, PART_SCALE[k] * gM, -40, tough); if (b >= 0) parts.push(b); }
     giant = parts[0] ?? -1;
@@ -367,7 +367,8 @@ function frame(now: number) {
     if (travel > 2.8) nextLand();
   }
   const sh = swarm.shape;
-  if (idle && !shapeOn) { shapeOn = true; loadShape(shapeK, sh); sh.pos[0] = leader[0]; sh.pos[2] = leader[2]; sh.pos[1] = terrain.floor(leader[0], leader[2]); }
+  if (idle && shapeOn && sh.blend > 0.95) { shapeT += dt; if (shapeT > 6.5) { shapeT = 0; shapeK = nextShape(shapeK); loadShape(shapeK, sh); } } // one shape melts into the next
+  if (idle && !shapeOn) { shapeOn = true; shapeT = 0; loadShape(shapeK, sh); sh.pos[0] = leader[0]; sh.pos[2] = leader[2]; sh.pos[1] = terrain.floor(leader[0], leader[2]); }
   if (!idle && shapeOn && sh.blend < 0.05) { shapeOn = false; shapeK = nextShape(shapeK); }
   sh.blend = shapeOn && idle ? Math.min(1, sh.blend + dt * 0.6) : Math.max(0, sh.blend - dt * 3);
   sh.scale = 2.4 + Math.sqrt(active) * 0.07;
@@ -385,7 +386,7 @@ function frame(now: number) {
   // nothing is unbreakable: whatever the swarm touches for a moment, once a third of it is gone (or it has
   // already come down), crumbles away; collapsed rubble the swarm has left also turns to dust after a while
   for (let b = 0; b < city.buildings.length; b++) {
-    if (city.gone[b] || isPart(b)) continue;
+    if (city.gone[b] || (isPart(b) && giantState !== "fallen")) continue;
     const B = city.buildings[b];
     const half = (32 * 0.28 * (city.s2Arr[b * 4] || 1)) / 2;
     const near = Math.hypot(B.x - leader[0], B.z - leader[2]) < half + 3 + Math.sqrt(active) * 0.02;

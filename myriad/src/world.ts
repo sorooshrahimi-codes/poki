@@ -149,13 +149,15 @@ void main() {
   float glow = 1.0 - exp(-texture(uLight, uv).r * 0.012);
   vec3 v = normalize(vW - uCam);
   vec2 w = vW.xz * 0.9 + vec2(uTime * 0.4, uTime * 0.25);
-  vec3 n = normalize(vec3(sin(w.x) * 0.06 + sin(w.y * 1.7 + 1.0) * 0.04, 1.0, cos(w.y) * 0.06 + sin(w.x * 1.3) * 0.04) * vec3(rest, 1.0, rest) + vec3(0.0, 0.0, 0.0));
+  vec3 n = normalize(vec3(sin(w.x) * 0.08 + sin(w.y * 1.7 + 1.0) * 0.05, 1.0, cos(w.y) * 0.08 + sin(w.x * 1.3) * 0.05));
   float fres = pow(1.0 - max(0.0, dot(-v, n)), 3.0);
-  vec3 deep = mix(vec3(0.08, 0.09, 0.13), mix(vec3(0.05, 0.25, 0.45), vec3(0.10, 0.55, 0.65), smoothstep(1.5, 0.0, depth)), rest);
-  vec3 sky = mix(uSkyLow * 2.2 + vec3(0.12, 0.13, 0.16), vec3(0.6, 0.75, 0.9), rest * 0.6);
+  vec3 deep = mix(vec3(0.10, 0.22, 0.36), mix(vec3(0.05, 0.25, 0.45), vec3(0.10, 0.55, 0.65), smoothstep(1.5, 0.0, depth)), rest);
+  vec3 sky = mix(vec3(0.45, 0.55, 0.68), vec3(0.6, 0.8, 0.95), rest * 0.6);
   vec3 c = mix(deep, sky, 0.25 + fres * 0.7) + vec3(1.0, 0.6, 0.25) * glow * 0.6;
   c += smoothstep(0.25, 0.0, depth) * vec3(0.5, 0.55, 0.6) * 0.5; // a pale rim where it meets the shore
-  float spark = pow(max(0.0, sin(w.x * 3.1) * sin(w.y * 2.7)), 40.0) * rest;
+  float spark = pow(max(0.0, sin(w.x * 3.1) * sin(w.y * 2.7)), 30.0) * (0.35 + 0.65 * rest);
+  float rip = smoothstep(0.92, 1.0, sin(length(vW.xz - uPond.xy) * 2.2 - uTime * 1.6)) * 0.18; // slow rings across the pond
+  c += rip;
   c += spark * 0.8;
   float a = clamp(0.55 + depth * 0.4, 0.0, 0.92) * smoothstep(0.0, 0.12, depth);
   if (uLiquid > 1.5) { // lava: a glowing crust that cracks open, bright whatever the colour
