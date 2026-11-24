@@ -166,6 +166,11 @@ void main() {
         if (h11(id * 0.31 + uTime * 7.0) < 0.3) { float m = matAt(b, ivec3(floor(lp + hd * 1.2))); if (m > 0.5) mat = m; }
         vel.xz *= exp(-2.0 * uDt);
         vel.y += 3.5 * uDt;
+      } else if (solidAt(b, ivec3(floor(lp - vec3(0.0, 1.2, 0.0)))) > 0.5) {
+        // stone underneath: chew down into it (so low rocks, rubble and the last layer get eaten too)
+        w = 2.25 + float(b);
+        vel.y -= 1.5 * uDt;
+        if (h11(id * 0.31 + uTime * 7.0) < 0.3) { float m = matAt(b, ivec3(floor(lp - vec3(0.0, 1.2, 0.0)))); if (m > 0.5) mat = m; }
       } else {
         vel.y += 1.0 * uDt;
       }

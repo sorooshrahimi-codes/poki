@@ -245,11 +245,13 @@ void main() {
   gl_PointSize = 1.0;
   if (p.w < 1.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
   int b = int(floor(p.w - 2.0 + 0.01));
-  bool ahead = fract(p.w) > 0.25;
+  float fw = fract(p.w);
+  bool ahead = fw > 0.375, below = fw > 0.125 && fw < 0.375; // .5 = the voxel ahead, .25 = the voxel underneath
   vK = uS2[b].z > 0.0 ? uS2[b].z : 1.0;
   vec4 B = uB[b];
   vec3 lp = (p.xyz - vec3(B.x, uS2[b].y, B.y)) / (${VS.toFixed(3)} * uS2[b].x) + vec3(16.0, 0.0, 16.0);
   if (ahead) { vec3 vel = texelFetch(uVel, ivec2(i % int(uS), i / int(uS)), 0).xyz; lp += (length(vel) > 0.1 ? normalize(vel) : vec3(0.0, -1.0, 0.0)) * 1.2; }
+  if (below) lp.y -= 1.2;
   ivec3 v = clamp(ivec3(floor(lp)), ivec3(0), ivec3(31));
   if (uMode < 0.5) gl_Position = vec4((vec2(atl(b, v)) + 0.5) / vec2(${AW}.0, ${AH}.0) * 2.0 - 1.0, 0.0, 1.0);
   else gl_Position = vec4((float(b) + 0.5) / ${NB}.0 * 2.0 - 1.0, 0.0, 0.0, 1.0);
