@@ -6,8 +6,8 @@ Thanks for the quick reply — totally understood that the Playtesting beta is l
 
 While it opens up, I'd love for your publishing team to take a look at the game I submitted, **Deep Luck**, and two more games I've finished for Poki. All three are complete HTML5 builds with the **Poki SDK already integrated** (gameplayStart/Stop, commercialBreak only at natural breaks, rewarded ads), they run smoothly on mobile and desktop, and they load fast.
 
-**▶ Play all three (no login):** PLAY_LINK
-(Deep Luck: PLAY_LINK/deep-luck/ · Critter Vac: PLAY_LINK/critter-vac/ · Glowmites: PLAY_LINK/glowmites/)
+**▶ Play all three (no login):** https://kidgames.soroosh-ra.workers.dev
+(Deep Luck: https://kidgames.soroosh-ra.workers.dev/deep-luck/ · Critter Vac: https://kidgames.soroosh-ra.workers.dev/critter-vac/ · Glowmites: https://kidgames.soroosh-ra.workers.dev/glowmites/)
 
 ---
 

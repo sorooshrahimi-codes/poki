@@ -2,21 +2,15 @@
 
 مخزن: `sorooshrahimi-codes/poki`، شاخه‌ی `ccr-712f8ebd-3t9t7z`، پوشه‌ی `packages/`
 
-## لینک بازی‌ها (بدون لاگین)
-یک بار **GitHub Pages** را روشن کن. با گوشی، در مرورگر:
-1. برو به `github.com/sorooshrahimi-codes/poki` → **Settings** → **Pages**
-2. **Source**: `Deploy from a branch`
-3. **Branch**: `ccr-712f8ebd-3t9t7z` و پوشه `/ (root)` → **Save**
-4. یکی دو دقیقه صبر کن. این سه لینک باز می‌شوند:
-
-| بازی | لینک قابل بازی |
+## لینک بازی‌ها (بدون لاگین، روی Cloudflare)
+| بازی | لینک |
 |---|---|
-| Deep Luck (ماهیگیری) | https://sorooshrahimi-codes.github.io/poki/packages/deep-luck/web/ |
-| Critter Vac (جاروبرقی) | https://sorooshrahimi-codes.github.io/poki/packages/critter-vac/web/ |
-| Glowmites | https://sorooshrahimi-codes.github.io/poki/packages/glowmites/web/ |
+| هر سه بازی | https://kidgames.soroosh-ra.workers.dev/ |
+| Deep Luck | https://kidgames.soroosh-ra.workers.dev/deep-luck/ |
+| Critter Vac | https://kidgames.soroosh-ra.workers.dev/critter-vac/ |
+| Glowmites | https://kidgames.soroosh-ra.workers.dev/glowmites/ |
 
-در فرم پوکی، با این لینک‌ها گزینه‌ی **Playable browser build** را انتخاب کن.
-⚠️ مخزن تا پایان بررسی پوکی باید **Public** بماند.
+یک Worker کوچک روی Cloudflare (کد: `site/_worker_source.js`) فایل‌ها را از همین مخزن گیت‌هاب سرو می‌کند. برای همین مخزن باید **Public** بماند.
 
 ## ویدیوها (همین حالا کار می‌کنند)
 - Deep Luck: https://cdn.jsdelivr.net/gh/sorooshrahimi-codes/poki@17172afeedd7ddf5986fb8f377a91454356a631e/packages/deep-luck/trailer_web.mp4
