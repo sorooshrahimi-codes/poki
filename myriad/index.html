@@ -44,7 +44,7 @@
       #win { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; pointer-events: none; opacity: 0; transition: opacity 0.6s; }
       #win.show { opacity: 1; pointer-events: auto; }
       #win .stars { font-size: 64px; filter: drop-shadow(0 0 18px rgba(255, 220, 120, 0.9)); animation: bump 1.2s ease-in-out infinite; }
-      #path { display: flex; align-items: center; gap: 6px; font-size: 40px; padding: 10px 18px; border-radius: 40px; background: rgba(10, 8, 20, 0.45); }
+      #path { display: none; align-items: center; gap: 6px; font-size: 40px; padding: 10px 18px; border-radius: 40px; background: rgba(10, 8, 20, 0.45); }
       #path span { filter: grayscale(1) brightness(0.55); transition: filter 0.6s; }
       #path span.done { filter: drop-shadow(0 0 10px rgba(255, 220, 120, 0.9)); }
       #path span.next { filter: grayscale(0.6) brightness(0.9); animation: bump 1s ease-in-out infinite; display: inline-block; }
@@ -55,6 +55,30 @@
       #win #boost.used { opacity: 0.25; pointer-events: none; }
       #win button { font-size: 44px; width: 110px; height: 110px; border-radius: 50%; border: 0; cursor: pointer; color: #fff;
         background: radial-gradient(circle at 35% 30%, #fff8, #fff0 40%), linear-gradient(#ffcf6a, #ff8a3d); box-shadow: 0 0 40px rgba(255, 170, 80, 0.8); }
+
+      #goalTxt { position: fixed; left: 50%; top: calc(max(16px, env(safe-area-inset-top)) + 50px); translate: -50% 0; font-size: 24px; font-weight: 900; padding: 4px 14px; border-radius: 16px; background: rgba(10, 8, 20, 0.45); text-shadow: 0 2px 6px rgba(0,0,0,.7); pointer-events: none; white-space: nowrap; }
+      #goalTxt.pop { animation: bump 0.35s; }
+      #intro { position: fixed; left: 50%; top: 34%; translate: -50% -50%; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 18px 34px; border-radius: 28px; background: rgba(10, 8, 24, 0.7); box-shadow: 0 0 40px rgba(255, 190, 90, 0.35); pointer-events: none; opacity: 0; }
+      #intro small { font-size: 22px; font-weight: 800; opacity: 0.7; }
+      #intro div { font-size: 58px; font-weight: 900; color: #ffe27a; text-shadow: 0 0 20px rgba(255, 170, 60, 0.9); white-space: nowrap; }
+      #intro em { font-style: normal; font-size: 24px; font-weight: 800; opacity: 0.85; }
+      #intro.show { animation: intro 2.6s ease-out forwards; }
+      @keyframes intro { 0% { opacity: 0; transform: scale(0.5); } 12% { opacity: 1; transform: scale(1.1); } 22% { transform: scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translateY(-40px) scale(0.8); } }
+      #rank .lv { text-align: center; font-size: 20px; font-weight: 800; opacity: 0.7; }
+      #win #mapBtn { width: 84px; height: 84px; font-size: 34px; background: radial-gradient(circle at 35% 30%, #fff8, #fff0 40%), linear-gradient(#6ad0ff, #3a7bff); box-shadow: 0 0 30px rgba(90, 160, 255, 0.7); }
+      #win #boost.off { display: none; }
+      #map { position: fixed; inset: 0; overflow-y: auto; overflow-x: hidden; background: radial-gradient(circle at 50% 30%, #1a1430, #05060a); display: none; z-index: 5; touch-action: pan-y; -webkit-overflow-scrolling: touch; }
+      #map.show { display: block; }
+      #map .mapIn { position: relative; margin: 0 auto; }
+      #map .landIcon { position: absolute; translate: -50% -50%; font-size: 52px; opacity: 0.8; filter: drop-shadow(0 0 16px rgba(255, 255, 255, 0.35)); pointer-events: none; }
+      #map .node { position: absolute; translate: -50% -50%; width: 70px; height: 70px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;
+        background: radial-gradient(circle at 35% 30%, #fff8, #fff0 45%), linear-gradient(#ffcf6a, #ff8a3d); box-shadow: 0 0 22px rgba(255, 170, 80, 0.6), 0 5px 0 #8a3b00; }
+      #map .node b { font-size: 22px; line-height: 1; }
+      #map .node .gi { position: absolute; top: -16px; right: -14px; font-size: 26px; }
+      #map .node .st { position: absolute; bottom: -22px; font-size: 16px; color: #ffd76a; letter-spacing: 1px; white-space: nowrap; text-shadow: 0 1px 3px #000; }
+      #map .node.boss { width: 82px; height: 82px; background: radial-gradient(circle at 35% 30%, #fff8, #fff0 45%), linear-gradient(#ff6a6a, #b0202a); box-shadow: 0 0 26px rgba(255, 60, 60, 0.7), 0 5px 0 #5a0000; }
+      #map .node.lock { background: linear-gradient(#555a66, #2c2f38); box-shadow: 0 4px 0 #15161a; opacity: 0.75; }
+      #map .node.cur { animation: bump 1s ease-in-out infinite; box-shadow: 0 0 0 4px #fff, 0 0 34px rgba(255, 220, 120, 0.9); }
     </style>
   </head>
   <body>
@@ -64,13 +88,16 @@
     <div id="count"><i></i><span id="countN">300</span></div>
     <div id="goal"><b id="goalFill"></b></div>
     <div id="left"></div>
-    <div id="timer">2:00</div>
+    <div id="timer">1:00</div>
+    <div id="goalTxt"></div>
+    <div id="intro"></div>
     <div id="board"></div>
     <div id="boss"><b id="bossFill"></b></div>
     <div id="combo"></div>
     <div id="fade"></div>
     <div id="hand">👆</div>
-    <div id="win"><div id="rank"></div><div id="path"></div><div id="row"><button id="boost">🎬✨</button><button id="next">▶</button></div></div>
+    <div id="win"><div id="rank"></div><div id="path"></div><div id="row"><button id="mapBtn">🗺️</button><button id="boost">🎬🐜</button><button id="next">▶</button></div></div>
+    <div id="map"></div>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

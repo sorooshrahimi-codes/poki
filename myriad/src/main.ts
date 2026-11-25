@@ -10,6 +10,7 @@ import { Grass } from "./grass.ts";
 import { Audio } from "./audio.ts";
 import { Terrain } from "./terrain.ts";
 import { loadShape, nextShape } from "./shapes.ts";
+import { LEVELS, goalText, renderMap, saveStars, unlocked, type Level } from "./saga.ts";
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
 const hudCanvas = document.getElementById("hud") as HTMLCanvasElement;
@@ -56,12 +57,12 @@ const LANDS: Land[] = [
     pal: { skyLow: [0.30, 0.08, 0.06], skyTop: [0.05, 0.02, 0.05], horizon: [1.00, 0.30, 0.08], stoneA: [0.13, 0.11, 0.12], stoneB: [0.28, 0.24, 0.25], fog: [0.16, 0.06, 0.05], grassA: [0.24, 0.46, 0.14], grassB: [0.55, 0.72, 0.20] } },
 ];
 function landOf(d: number) { return LANDS[(d - 1) % LANDS.length]; }
-function makeLand(d: number) {
+function makeLand(d: number, seed = d) {
   const L = landOf(d);
-  let a = d * 101 + 7;
+  let a = seed * 101 + 7;
   const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
   const list: { x: number; z: number; kind: Kind; seed: number; scale?: number; y?: number }[] = [];
-  const pond = terrain.plan(d);
+  const pond = terrain.plan(seed);
   // the first meals are right next to the seed: little things, a bite away
   for (let i = 0; i < 7; i++) {
     const an = (i / 7) * Math.PI * 2 + rnd(), r = 5 + rnd() * 4;
@@ -85,7 +86,7 @@ function makeLand(d: number) {
   world.liquid = L.liquid; terrain.amp = L.amp;
   const out = list.slice(0, 56); // (64 volumes: the land, plus six for the giant)
   // the hills, with a level pad under every building (sunk a little, so it sits in the ground)
-  const ys = terrain.build(d, out.map((b) => ({ x: b.x, z: b.z, half: (32 * 0.28 * (b.scale ?? 1)) / 2 + 0.6 })));
+  const ys = terrain.build(seed, out.map((b) => ({ x: b.x, z: b.z, half: (32 * 0.28 * (b.scale ?? 1)) / 2 + 0.6 })));
   out.forEach((b, k) => (b.y = ys[k] - 0.12));
   return out;
 }
@@ -94,8 +95,11 @@ const SAVE = "glowmites-save";
 let saved: { land: number; active: number } = { land: 1, active: 800 };
 try { const j = JSON.parse(localStorage.getItem(SAVE) || "null"); if (j && j.land >= 1) saved = j; } catch { /* private mode */ }
 function save() { try { localStorage.setItem(SAVE, JSON.stringify({ land: district, active })); } catch { /* ignore */ } }
-let district = params.has("land") ? Number(params.get("land")) : saved.land;
-city.build(makeLand(district));
+let lvlI = Math.min(LEVELS.length - 1, Math.max(0, params.has("lvl") ? Number(params.get("lvl")) - 1 : unlocked()));
+let LV: Level = LEVELS[lvlI];
+let district = LV.land;
+void saved;
+city.build(makeLand(district, LV.seed));
 
 
 // ---------------------------------------------------------------- sizing (capped pixel count keeps the fill cost bounded)
@@ -143,51 +147,94 @@ function xform(out: Float32Array, m: Float32Array, v: Float32Array) {
 let down = false;
 countNInit();
 function countNInit() { const el = document.getElementById("countN"); if (el) el.textContent = String(Number(params.get("start") ?? 800)); }
-function nextLand() {
-  // the next land: the swarm keeps everything it has
-  district++; save();
-  city.build(makeLand(district)); resetRound(); contactT.fill(0); hpOf.fill(1); gContact = 0; gHp = 1; hpPrev.fill(1); wasGone.fill(0); combo = 0;
-  giant = -1; parts = []; stompT = -1; giantState = "sleep"; won = false; progress = 0; time = Math.min(time, 1e9); landT = 0; firstBite = false;
-  // the swarm comes in through the south gate of the new land
-  leader[0] = 0; leader[2] = 54; target[0] = 0; target[2] = 30; camX = 0; camZ = 54; camD = 10; swarm.reset = true; swarm.open = false; travel = -1; hasTarget = true; lastMove = time;
+// ---------------------------------------------------------------- the saga: one short level at a time
+let mine = 0, goldMine = 0, castle = -1, bossK = -1, bestActive = 400;
+const hard = new Float32Array(64).fill(1);
+const mapEl = document.getElementById("map")!, introEl = document.getElementById("intro")!, goalTxt = document.getElementById("goalTxt")!;
+function startLevel(i: number) {
+  lvlI = i; LV = LEVELS[i]; district = LV.land; roundLen = LV.time;
+  city.build(makeLand(district, LV.seed)); resetRound();
+  if (boostNext) { active = START_SIZE * 5; boostNext = false; }
+  contactT.fill(0); hpOf.fill(1); hpPrev.fill(1); wasGone.fill(0); killer.fill(-1); hard.fill(1); combo = 0;
+  giant = -1; parts = []; stompT = -1; giantState = "sleep"; won = false; progress = 0; landT = 0; firstBite = i > 0;
+  if (i > 0) hand.classList.add("gone");
+  mine = 0; goldMine = 0; castle = -1; bossK = -1; bestActive = START_SIZE;
+  // which rivals play: none, some, or one giant red boss
+  for (let k = 1; k < 4; k++) if (k > LV.rivals) { swarm.A[k] = 0; rv.dead[k] = Infinity; }
+  if (LV.goal === "boss") { bossK = 2; swarm.A[2] = LV.n; rv.dead[2] = 0; swarm.L[6] = 0; swarm.L[8] = -36; }
+  if (LV.goal === "castle") {
+    // the biggest thing in the land, made far tougher: grow first, then bring it down
+    let bs = -1; for (let b = 7; b < city.buildings.length; b++) if (city.buildings[b].solid > bs) { bs = city.buildings[b].solid; castle = b; }
+    if (castle >= 0) hard[castle] = LV.n;
+  }
+  leader[0] = 0; leader[2] = 0; target[0] = 0; target[2] = 0; camX = 0; camZ = 0; swarm.reset = true; swarm.open = false; travel = -1; hasTarget = false; lastMove = time;
+  roundT = -2.4; // the goal is shown first; the clock starts after it
+  introEl.innerHTML = `<small>${i + 1}</small><div>${goalText(LV)}</div><em>⏱ ${LV.time}</em>`;
+  introEl.classList.remove("show"); void introEl.offsetWidth; introEl.classList.add("show");
+  boardEl.style.display = LV.rivals > 0 || bossK > 0 ? "" : "none";
   document.getElementById("fade")!.classList.remove("on");
   document.getElementById("win")!.classList.remove("show");
+  mapEl.classList.remove("show");
   audio.chime(2);
   poki.gameplayStart();
 }
-let adBusy = false;
-document.getElementById("next")!.addEventListener("click", () => {
-  if (adBusy) return; adBusy = true;
-  audio.setMuted(true);
-  poki.commercialBreak().then(() => { adBusy = false; audio.setMuted(false); document.getElementById("win")!.classList.remove("show"); travel = 0; poki.gameplayStart(); });
-});
+/** how far the goal is done, 0..1 */
+function goalProgress() {
+  switch (LV.goal) {
+    case "wreck": return mine / LV.n;
+    case "gold": return goldMine / LV.n;
+    case "grow": return active / LV.n;
+    case "castle": return castle >= 0 ? (city.gone[castle] ? 1 : 1 - hpOf[castle]) : 0;
+    case "boss": return bossK > 0 ? (rv.dead[bossK] > 0 && swarm.A[bossK] < 1 ? 1 : active / (active + swarm.A[bossK])) : 0;
+    case "race": return Math.max(0, roundT) / roundLen;
+  }
+}
+function checkGoal() {
+  if (roundT < 0) return;
+  const p = goalProgress();
+  if (LV.goal === "race") { if (roundT >= roundLen) { const place = [1, 2, 3].filter((k) => sizeOf(k) > active).length; finishLevel(place < 3, 3 - place); } return; }
+  const done = LV.goal === "boss" ? p >= 1 : p >= 1;
+  if (done) { const left = 1 - roundT / roundLen; finishLevel(true, left > 0.4 ? 3 : left > 0.15 ? 2 : 1); }
+  else if (roundT >= roundLen) finishLevel(false, 0);
+}
+let lastWin = false;
+function finishLevel(win: boolean, stars: number) {
+  roundOver = true; won = true; lastWin = win; poki.gameplayStop();
+  if (win) { shake = 0.8; city.bloom = 2.5; saveStars(lvlI, stars); for (let i = 0; i < 3 + stars; i++) setTimeout(() => audio.chime(3 + i), i * 140); }
+  else audio.thump(0.8);
+  const fmt = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+  let body = `<div class="lv">${lvlI + 1}</div><div class="st">${win ? "★".repeat(stars) + "☆".repeat(3 - stars) : "⏱"}</div>`;
+  if (LV.goal === "race" || LV.rivals > 0 || bossK > 0) {
+    const medal = ["🥇", "🥈", "🥉", "4"];
+    const ks = [0, 1, 2, 3].filter((k) => k === 0 || k <= LV.rivals || k === bossK);
+    body += ks.map((k) => ({ k, n: sizeOf(k) })).sort((a, b) => b.n - a.n).map((o, i) => `<div class="row${o.k === 0 ? " me" : ""}"><span>${medal[i]}</span><span>${o.k === 0 ? "✨" : o.k === bossK ? "👾" : RIVAL_NAMES[o.k]}</span><b>${fmt(o.n)}</b></div>`).join("");
+  } else body += `<div class="row me"><span>${goalText(LV)}</span><b>${Math.min(100, Math.round(goalProgress() * 100))}%</b></div>`;
+  document.getElementById("rank")!.innerHTML = body;
+  const nextBtn = document.getElementById("next")!;
+  nextBtn.textContent = win ? "▶" : "↻";
+  document.getElementById("boost")!.classList.toggle("off", win);
+  document.getElementById("boost")!.classList.remove("used");
+  save();
+  setTimeout(() => document.getElementById("win")!.classList.add("show"), win ? 1200 : 600);
+}
+let adBusy = false, boostNext = false;
+function afterAd(fn: () => void) {
+  if (adBusy) return; adBusy = true; audio.setMuted(true);
+  poki.commercialBreak().then(() => { adBusy = false; audio.setMuted(false); fn(); });
+}
+document.getElementById("next")!.addEventListener("click", () => afterAd(() => startLevel(lastWin ? Math.min(LEVELS.length - 1, lvlI + 1) : lvlI)));
+document.getElementById("mapBtn")!.addEventListener("click", () => afterAd(showMap));
+function showMap() { document.getElementById("win")!.classList.remove("show"); renderMap(mapEl, (i) => startLevel(i)); mapEl.classList.add("show"); }
 document.getElementById("boost")!.addEventListener("click", (e) => {
+  // a rewarded ad: try again with a far bigger swarm
   if (adBusy) return; adBusy = true; audio.setMuted(true);
   const btn = e.currentTarget as HTMLElement;
   poki.rewardedBreak().then((ok) => {
     adBusy = false; audio.setMuted(false);
-    if (ok) { active = Math.min(CAP, Math.round(active * 1.5) + 2000); save(); btn.classList.add("used"); for (let i = 0; i < 5; i++) setTimeout(() => audio.chime(6 + i), i * 120); }
+    if (ok) { btn.classList.add("used"); boostNext = true; startLevel(lvlI); }
   });
 });
-function endRound() {
-  roundOver = true; won = true; shake = 0.8; city.bloom = 2.5; poki.gameplayStop();
-  const order = [0, 1, 2, 3].map((k) => ({ k, n: sizeOf(k) })).sort((a, b) => b.n - a.n);
-  const place = order.findIndex((o) => o.k === 0);
-  const stars = [3, 2, 1, 0][place];
-  try { const st = JSON.parse(localStorage.getItem(SAVE + "-stars") || "{}"); st[district] = Math.max(st[district] || 0, stars); localStorage.setItem(SAVE + "-stars", JSON.stringify(st)); } catch { /* */ }
-  const medal = ["🥇", "🥈", "🥉", "4"];
-  const fmt = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
-  document.getElementById("rank")!.innerHTML = `<div class="st">${"★".repeat(stars)}${"☆".repeat(3 - stars)}</div>` + order.map((o, i) => `<div class="row${o.k === 0 ? " me" : ""}"><span>${medal[i]}</span><span>${o.k === 0 ? "✨" : RIVAL_NAMES[o.k]}</span><b>${fmt(o.n)}</b></div>`).join("");
-  for (let i = 0; i < 3 + stars; i++) setTimeout(() => audio.chime(3 + i), i * 140);
-  save();
-  setTimeout(() => { district++; renderPath(); district--; document.getElementById("boost")!.classList.remove("used"); document.getElementById("win")!.classList.add("show"); }, 1200);
-}
-function renderPath() {
-  // the road through the five lands: done ones in colour, the next one pulsing
-  const el = document.getElementById("path")!;
-  const lap = Math.floor((district - 1) / LANDS.length), at = (district - 1) % LANDS.length;
-  el.innerHTML = LANDS.map((L, i) => `<span class="${i <= at ? "done" : i === at + 1 ? "next" : ""}">${L.icon}</span>`).join("<i></i>") + (lap > 0 ? `<b>${"★".repeat(Math.min(5, lap))}</b>` : "");
-}
+function nextLand() { finishLevel(true, 3); }
 const timerEl = document.getElementById("timer")!, boardEl = document.getElementById("board")!;
 const hand = document.getElementById("hand")!, countN = document.getElementById("countN")!, countBox = document.getElementById("count")!, goalFill = document.getElementById("goalFill")!;
 // test builds only: five quick taps on the swarm counter skip to the next land
@@ -241,7 +288,7 @@ const catchUp = (k: number) => Math.min(2.2, Math.max(1, (sizeOf(0) + 200) / (sw
 /** the golden target: one building at a time is worth a big burst; everyone races for it */
 const TEAM_CSS = ["#ffc05a", "#5aa6ff", "#ff4d5a", "#73ff73"];
 let gold = -1, goldNext = 5, goldCount = 0;
-const ROUND = 90, START_SIZE = 400;
+let roundLen = 90; const START_SIZE = 400;
 const RIVAL_NAMES = ["", "🔵", "🔴", "🟢"];
 let roundT = 0, roundOver = false;
 const rv = { tx: new Float32Array(4), tz: new Float32Array(4), think: new Float32Array(4), dead: new Float32Array(4), meal: new Float32Array(4) };
@@ -273,7 +320,7 @@ function sizeOf(k: number) { return k === 0 ? active : swarm.A[k]; }
 const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? START_SIZE);
 let meal = 0;
-queueMicrotask(() => resetRound());
+queueMicrotask(() => startLevel(lvlI));
 let landT = 0, firstBite = false;
 const contactT = new Float32Array(64), hpOf = new Float32Array(64).fill(1), killer = new Int8Array(64);
 let gContact = 0, gHp = 1;
@@ -319,7 +366,7 @@ const BIRTH: number[][] = [[3, 1, 2, 4], [8, 9, 7, 10], [6, 14, 13, 6], [15, 11,
 const GIANT_BIRTH: number[][] = [[17, 19, 10, 6], [20, 21, 22, 20], [27, 12, 13, 14], [23, 23, 17, 25], [26, 25, 18, 25]];
 city.onEat = (b, amount) => {
   // every voxel eaten hatches new mites, for whichever swarm is eating it
-  { const B0 = city.buildings[b], k = teamAt(B0.x, B0.z, 8); if (k === 0) meal += amount * 0.7; else if (k > 0) rv.meal[k] += amount * 1.1 * catchUp(k); if (k !== 0) return; }
+  { const B0 = city.buildings[b], k = teamAt(B0.x, B0.z, 8); if (k === 0) meal += amount * 0.7; else if (k > 0) rv.meal[k] += amount * (k === bossK ? 0.35 : 1.1 * catchUp(k)); if (k !== 0) return; }
   { const k = city.buildings[b].kind; const m = k === 5 ? GIANT_BIRTH[theme.giant % 5] : BIRTH[k]; if (m) swarm.birth.set(m); }
   audio.eat(amount);
   const B = city.buildings[b];
@@ -394,28 +441,30 @@ function drawFx(dt: number) {
     fctx.restore();
   }
   // the golden target: a big star over it, or a big gold arrow at the edge when it is off screen
-  if (gold >= 0) {
-    const B = city.buildings[gold], sc = city.s2Arr[gold * 4] || 1;
-    project(B.x, city.s2Arr[gold * 4 + 1] + B.h * 0.28 * sc + 2.5, B.z, pr);
+  for (const [mb, icon] of [[gold, "🌟"], [castle, "🏰"]] as [number, string][]) {
+    if (mb < 0 || city.gone[mb]) continue;
+    const B = city.buildings[mb], sc = city.s2Arr[mb * 4] || 1;
+    project(B.x, city.s2Arr[mb * 4 + 1] + B.h * 0.28 * sc + 2.5, B.z, pr);
     const on = pr[2] > 0 && pr[0] > 0 && pr[0] < W && pr[1] > 0 && pr[1] < H, pulse = 1 + 0.15 * Math.sin(time * 7);
     fctx.save(); fctx.textAlign = "center"; fctx.textBaseline = "middle"; fctx.shadowColor = "rgba(255,200,40,1)"; fctx.shadowBlur = 18 * dpr;
-    if (on) { fctx.font = `${Math.round(38 * dpr * pulse)}px sans-serif`; fctx.fillText("🌟", pr[0], pr[1] - 10 * dpr * Math.sin(time * 3)); }
+    if (on) { fctx.font = `${Math.round(38 * dpr * pulse)}px sans-serif`; fctx.fillText(icon, pr[0], pr[1] - 10 * dpr * Math.sin(time * 3)); }
     else {
       let ax = pr[0] - W / 2, ay = pr[1] - H / 2; if (pr[2] < 0) { ax = -ax; ay = -ay; }
       const a = Math.atan2(ay, ax), m = Math.min((W / 2 - 46 * dpr) / Math.abs(Math.cos(a) || 1e-3), (H / 2 - 60 * dpr) / Math.abs(Math.sin(a) || 1e-3));
       const px = W / 2 + Math.cos(a) * m, py = H / 2 + Math.sin(a) * m, s2 = 26 * dpr * pulse;
-      fctx.font = `${Math.round(30 * dpr)}px sans-serif`; fctx.fillText("🌟", px - Math.cos(a) * 34 * dpr, py - Math.sin(a) * 34 * dpr);
+      fctx.font = `${Math.round(30 * dpr)}px sans-serif`; fctx.fillText(icon, px - Math.cos(a) * 34 * dpr, py - Math.sin(a) * 34 * dpr);
       fctx.translate(px, py); fctx.rotate(a); fctx.fillStyle = "#ffd23c";
       fctx.beginPath(); fctx.moveTo(s2, 0); fctx.lineTo(-s2 * 0.7, s2 * 0.75); fctx.lineTo(-s2 * 0.3, 0); fctx.lineTo(-s2 * 0.7, -s2 * 0.75); fctx.closePath(); fctx.fill();
     }
     fctx.restore();
   }
   // a crown floats over whoever is biggest right now
-  { let top = 0; for (let k = 1; k < 4; k++) if (sizeOf(k) > sizeOf(top)) top = k;
+  if (LV.rivals > 0 || bossK > 0) { let top = 0; for (let k = 1; k < 4; k++) if (sizeOf(k) > sizeOf(top)) top = k;
+    if (top === bossK) { /* the boss wears no crown: it is the boss */ }
     const x = top === 0 ? leader[0] : swarm.L[top * 3], z = top === 0 ? leader[2] : swarm.L[top * 3 + 2], y = (top === 0 ? leader[1] : swarm.L[top * 3 + 1]) + 3 + Math.sqrt(sizeOf(top)) * 0.03;
     project(x, y, z, pr);
     if (sizeOf(top) > 0 && pr[2] > 0) { fctx.save(); fctx.textAlign = "center"; fctx.font = `${Math.round((top === 0 ? 34 : 28) * dpr)}px sans-serif`; fctx.fillText("👑", pr[0], pr[1] + 4 * dpr * Math.sin(time * 4)); fctx.restore(); } }
-  leftEl.textContent = left > 0 && !won ? `🏚️ ${left}` : "";
+  leftEl.textContent = ""; void left;
   // the giant's own bar at the top: it flashes on every hit
   const up = giant >= 0 && !giantGone() && giantState !== "fallen" && giantState !== "sleep";
   bossEl.classList.toggle("on", up);
@@ -499,7 +548,7 @@ function frame(now: number) {
   if (giant >= 0 && giantGone() && !won) {
     won = true; shake = 1; city.bloom = 3.5;
     save(); poki.gameplayStop();
-    setTimeout(() => { district++; renderPath(); district--; document.getElementById("boost")!.classList.remove("used"); document.getElementById("win")!.classList.add("show"); }, 2200);
+    finishLevel(true, 3);
     for (let i = 0; i < 6; i++) setTimeout(() => audio.chime(4 + i), i * 160);
   }
   while (milestone < MILESTONES.length && active >= MILESTONES[milestone]) audio.chime(milestone++);
@@ -546,7 +595,7 @@ function frame(now: number) {
       const rr = 3 + Math.sqrt(A) * 0.05, rate = 1.6 * (1 + Math.sqrt(A) / 150);
       if (Math.hypot(B.x - swarm.L[k * 3], B.z - swarm.L[k * 3 + 2]) < half + rr * 0.95) { contactT[b] += dt * rate; contactBy[b * 4 + k] += dt * rate; }
     }
-    const T = (0.6 + B.solid / 2500) / Math.max(0.2, city.s2Arr[b * 4 + 2]) * 0.5;
+    const T = (0.6 + B.solid / 2500) / Math.max(0.2, city.s2Arr[b * 4 + 2]) * 0.5 * hard[b];
     hpOf[b] = Math.max(0, 1 - Math.max(B.eaten / (B.solid * 0.88), contactT[b] / T));
     if (hpOf[b] <= 0) {
       if (B.collapseAt < 0) { B.collapseAt = time; city.fail(b); audio.thump(0.8); shake = Math.max(shake, 0.6); }
@@ -554,13 +603,14 @@ function frame(now: number) {
         // whoever did most of the work gets the prize: a burst of new mites
         let kb = 0; for (let k = 1; k < 4; k++) if (contactBy[b * 4 + k] > contactBy[b * 4 + kb]) kb = k;
         killer[b] = kb; const prize = 40 + B.solid * 0.05;
-        if (kb === 0) meal += prize; else rv.meal[kb] += prize * 1.3 * catchUp(kb);
+        if (kb === 0) mine++;
+        if (kb === 0) meal += prize; else rv.meal[kb] += prize * (kb === bossK ? 0.4 : 1.3 * catchUp(kb));
         if (b === gold) {
           const bonus = Math.round(Math.max(700, sizeOf(kb) * 0.45) * (kb === 0 ? 1 : catchUp(kb)));
-          if (kb === 0) { meal += bonus; audio.chime(9); shake = Math.max(shake, 1); } else rv.meal[kb] += bonus;
+          if (kb === 0) { meal += bonus; goldMine++; audio.chime(9); shake = Math.max(shake, 1); } else rv.meal[kb] += bonus;
           comboEl.textContent = kb === 0 ? `🌟 +${bonus}` : `🌟 ✖`; comboEl.style.color = kb === 0 ? "" : TEAM_CSS[kb];
           comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop");
-          gold = -1; goldNext = roundT + 7;
+          gold = -1; goldNext = roundT + (LV.goal === "gold" ? 1.5 : 7);
         }
         city.remove(b);
       }
@@ -574,10 +624,11 @@ function frame(now: number) {
   }
   if (giantState === "fallen") for (let k = 0; k < parts.length; k++) { const B = city.buildings[parts[k]]; if (!city.gone[parts[k]] && B.collapseAt >= 0 && time - B.collapseAt > 1.4 + k * 0.25) { city.remove(parts[k]); audio.thump(0.5); } }
   // ---- the rivals: each one hunts what it can eat and runs from what can eat it
-  if (!roundOver && travel < 0) roundT += dt;
+  if (!roundOver) roundT += dt;
+  bestActive = Math.max(bestActive, active);
   // a new golden target: a big building, not too close to anyone, a little farther each time
-  if (gold >= 0 && city.gone[gold]) { gold = -1; goldNext = roundT + 7; }
-  if (gold < 0 && !roundOver && roundT > goldNext && roundT < ROUND - 6) {
+  if (gold >= 0 && city.gone[gold]) { gold = -1; goldNext = roundT + (LV.goal === "gold" ? 1.5 : 7); }
+  if (gold < 0 && !roundOver && (LV.goal === "gold" || LV.goal === "race") && roundT > (LV.goal === "gold" ? 0.5 : goldNext) && roundT < roundLen - 6) {
     let best = -1, bs = -1;
     for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b] || isPart(b) || city.buildings[b].collapseAt >= 0) continue; const B = city.buildings[b];
       let near = 1e9; for (let k = 0; k < 4; k++) { const x = k === 0 ? leader[0] : swarm.L[k * 3], z = k === 0 ? leader[2] : swarm.L[k * 3 + 2]; near = Math.min(near, Math.hypot(B.x - x, B.z - z)); }
@@ -585,6 +636,7 @@ function frame(now: number) {
     if (best >= 0) { gold = best; goldCount++; audio.chime(6); }
   }
   for (let k = 1; k < 4; k++) {
+    if (roundT < 0 || roundOver) { swarm.LV[k * 3] = 0; swarm.LV[k * 3 + 2] = 0; swarm.SP[k] = 8; continue; }
     if (rv.dead[k] > 0) { rv.dead[k] -= dt; if (rv.dead[k] <= 0) { const a = Math.random() * 6.28; swarm.L[k * 3] = Math.cos(a) * 45; swarm.L[k * 3 + 2] = Math.sin(a) * 45; swarm.A[k] = Math.max(300, Math.floor(sizeOf(0) * 0.35)); } continue; }
     if (rv.meal[k] >= 1) { const add = Math.floor(rv.meal[k]); rv.meal[k] -= add; swarm.A[k] = Math.min(TEAM_CAP[k], swarm.A[k] + add); }
     const A = swarm.A[k], lx = swarm.L[k * 3], lz = swarm.L[k * 3 + 2];
@@ -595,7 +647,7 @@ function frame(now: number) {
       for (let j = 0; j < 4; j++) { if (j === k) continue; const B = sizeOf(j); if (B < 1) continue;
         const jx = j === 0 ? leader[0] : swarm.L[j * 3], jz = j === 0 ? leader[2] : swarm.L[j * 3 + 2], d = Math.hypot(jx - lx, jz - lz);
         if (B > A * 1.15 && d < 22 + Math.sqrt(B) * 0.04) { tx = lx + (lx - jx); tz = lz + (lz - jz); flee = true; break; }
-        if (A > B * 1.15 && d < (j === 0 ? 45 : 32) && Number.isNaN(tx) && roundT > 8 && !(j === 0 && safeT > 0)) { tx = jx; tz = jz; } }
+        if (A > B * 1.15 && (d < (j === 0 ? 45 : 32) || (k === bossK && j === 0)) && Number.isNaN(tx) && roundT > (k === bossK ? 3 : 8) && !(j === 0 && safeT > 0)) { tx = jx; tz = jz; } }
       if (!flee && Number.isNaN(tx)) {
         let best = -1, bs = -1;
         for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b]) continue; const B = city.buildings[b]; const d = Math.hypot(B.x - lx, B.z - lz); const sc = (B.solid + 400) / (d + 8) * (b === gold ? 9 : 1); if (sc > bs) { bs = sc; best = b; } }
@@ -614,7 +666,7 @@ function frame(now: number) {
   // ---- swarm eats swarm: a clearly bigger swarm that catches a smaller one drains it into itself
   for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
     if (i === j) continue;
-    const Ai = sizeOf(i), Aj = sizeOf(j); if (Ai < 1 || Aj < 1 || Ai < Aj * 1.15 || roundT < 7 || (j === 0 && safeT > 0)) continue;
+    const Ai = sizeOf(i), Aj = sizeOf(j); if (Ai < 1 || Aj < 1 || Ai < Aj * 1.15 || roundT < (bossK > 0 ? 2 : 7) || roundOver || (j === 0 && safeT > 0)) continue;
     const ix = i === 0 ? leader[0] : swarm.L[i * 3], iz = i === 0 ? leader[2] : swarm.L[i * 3 + 2], jx = j === 0 ? leader[0] : swarm.L[j * 3], jz = j === 0 ? leader[2] : swarm.L[j * 3 + 2];
     const reach = (4 + Math.sqrt(Ai) * 0.05 + Math.sqrt(Aj) * 0.05) * 0.8;
     if (Math.hypot(ix - jx, iz - jz) > reach) continue;
@@ -623,13 +675,13 @@ function frame(now: number) {
     if (i === 0) { meal += take * 0.8; audio.eat(take * 0.05); } else rv.meal[i] += take * 0.8;
     if (sizeOf(j) < 40) {
       if (j === 0) { active = 0; playerDead = 2.5; shake = 1.2; audio.thump(1.2); }
-      else { swarm.A[j] = 0; rv.dead[j] = 3; if (i === 0) { audio.thump(1); for (let c = 0; c < 4; c++) setTimeout(() => audio.chime(6 + c), c * 100); } }
+      else { swarm.A[j] = 0; rv.dead[j] = j === bossK ? Infinity : 3; if (i === 0) { audio.thump(1); for (let c = 0; c < 4; c++) setTimeout(() => audio.chime(6 + c), c * 100); } }
     }
   }
   safeT = Math.max(0, safeT - dt);
-  if (playerDead > 0) { playerDead -= dt; if (playerDead <= 0) { active = START_SIZE; safeT = 4; leader[0] = (Math.random() - 0.5) * 60; leader[2] = (Math.random() - 0.5) * 60; target[0] = leader[0]; target[2] = leader[2]; camX = leader[0]; camZ = leader[2]; } }
+  if (playerDead > 0) { playerDead -= dt; if (playerDead <= 0) { active = Math.round(START_SIZE + bestActive * 0.3); safeT = 4; leader[0] = (Math.random() - 0.5) * 60; leader[2] = (Math.random() - 0.5) * 60; target[0] = leader[0]; target[2] = leader[2]; camX = leader[0]; camZ = leader[2]; } }
   // ---- the end of the round: everyone is ranked by size
-  if (!roundOver && roundT >= ROUND) endRound();
+  if (!roundOver) checkGoal();
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
   // a storm hits harder than a swarm at rest; a punch hits hardest
   city.boost = 1 + 2.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 6 : 0);
@@ -638,11 +690,11 @@ function frame(now: number) {
   // onboarding (wordless): a pulsing ring around the nearest little thing until the first bite brings it down
   landT += dt;
   world.hint[3] = 0;
-  if (gold >= 0) { const B = city.buildings[gold]; world.hint[0] = B.x; world.hint[1] = B.z; world.hint[2] = 3 + (city.s2Arr[gold * 4] || 1) * 4.5; world.hint[3] = 0.75 + 0.25 * Math.sin(time * 5); }
-  if (!firstBite && district === 1 && time > 2.5) {
+  { const mk = gold >= 0 ? gold : castle >= 0 && !city.gone[castle] ? castle : -1; if (mk >= 0) { const B = city.buildings[mk]; world.hint[0] = B.x; world.hint[1] = B.z; world.hint[2] = 3 + (city.s2Arr[mk * 4] || 1) * 4.5; world.hint[3] = 0.75 + 0.25 * Math.sin(time * 5); } }
+  if (!firstBite && lvlI === 0 && landT > 2.5) {
     let best = -1, bd = 1e9;
     for (let b = 0; b < Math.min(7, city.buildings.length); b++) { if (city.gone[b]) continue; const B = city.buildings[b]; const dd = Math.hypot(B.x - leader[0], B.z - leader[2]); if (dd < bd) { bd = dd; best = b; } }
-    if (best >= 0) { const B = city.buildings[best]; world.hint[0] = B.x; world.hint[1] = B.z; world.hint[2] = 3.2; world.hint[3] = Math.min(1, (time - 2.5) * 0.7); if (touched && bd < 4) hand.classList.add("gone"); else if (!touched) hand.classList.remove("gone"); }
+    if (best >= 0) { const B = city.buildings[best]; world.hint[0] = B.x; world.hint[1] = B.z; world.hint[2] = 3.2; world.hint[3] = Math.min(1, (landT - 2.5) * 0.7); if (touched && bd < 4) hand.classList.add("gone"); else if (!touched) hand.classList.remove("gone"); }
   }
   if ((gov.frames & 255) === 0) save();
 
@@ -684,17 +736,20 @@ function frame(now: number) {
     if (countN.textContent !== txt) { countN.textContent = txt; countBox.classList.remove("pop"); void countBox.offsetWidth; countBox.classList.add("pop"); }
     const tot = 0, eat = 0;
     void tot; void eat;
-    goalFill.style.width = `${(Math.max(0, 1 - roundT / ROUND) * 100).toFixed(1)}%`;
-    const left = Math.max(0, Math.ceil(ROUND - roundT));
+    goalFill.style.width = `${(Math.min(1, Math.max(0, LV.goal === "race" ? 1 - roundT / roundLen : goalProgress())) * 100).toFixed(1)}%`;
+    const fmtG = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+    const gt = LV.goal === "wreck" ? `🏚️ ${mine}/${LV.n}` : LV.goal === "gold" ? `🌟 ${goldMine}/${LV.n}` : LV.goal === "grow" ? `🐜 ${fmtG(active)}/${fmtG(LV.n)}` : LV.goal === "castle" ? "🏰" : LV.goal === "boss" ? "👾" : "🥇";
+    if (goalTxt.textContent !== gt) { goalTxt.textContent = gt; goalTxt.classList.remove("pop"); void goalTxt.offsetWidth; goalTxt.classList.add("pop"); }
+    const left = Math.max(0, Math.ceil(roundLen - Math.max(0, roundT)));
     timerEl.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
     timerEl.classList.toggle("hurry", left <= 15 && !roundOver);
     // the live ranking: four colour dots, biggest first
     const fmt = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
-    boardEl.innerHTML = [0, 1, 2, 3].map((k) => ({ k, n: sizeOf(k) })).sort((a, b) => b.n - a.n).map((o) => `<div class="${o.k === 0 ? "me" : ""}"><i style="background:${["#ffc35a", "#5aa6ff", "#ff5a60", "#6dff7a"][o.k]}"></i>${fmt(o.n)}</div>`).join("");
+    boardEl.innerHTML = [0, 1, 2, 3].filter((k) => k === 0 || k <= LV.rivals || k === bossK).map((k) => ({ k, n: sizeOf(k) })).sort((a, b) => b.n - a.n).map((o) => `<div class="${o.k === 0 ? "me" : ""}">${o.k === bossK ? "👾" : `<i style="background:${["#ffc35a", "#5aa6ff", "#ff5a60", "#6dff7a"][o.k]}"></i>`}${fmt(o.n)}</div>`).join("");
   }
   if (showHud && hudCanvas.style.display !== "none" && (gov.frames & 3) === 0) gov.graph(hud, `${active.toLocaleString()} mites  ${cw}x${ch} @${Math.round(tier.scale * 100)}%`);
 }
 requestAnimationFrame(frame);
 poki.init().then(() => poki.loadingFinished());
 
-if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { gov, city, swarm, leader, target, poke: () => { lastMove = time; }, terrain, get active() { return active; }, set active(v: number) { active = v; } };
+if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { startLevel, showMap, finishLevel, gov, city, swarm, leader, target, poke: () => { lastMove = time; }, terrain, get active() { return active; }, set active(v: number) { active = v; } };
