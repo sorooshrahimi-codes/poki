@@ -236,13 +236,19 @@ addEventListener("keydown", (e) => {
 // ---------------------------------------------------------------- the growing swarm (phase 1 demo: grows by itself)
 const CAP = Math.min(TEAM_CAP[0], Number(params.get("n") ?? TEAM_CAP[0]));
 // ---------------------------------------------------------------- the round: two minutes, you and three rival swarms
-const ROUND = 120, START_SIZE = 400;
+/** a rival that trails the player eats faster, so the race stays close */
+const catchUp = (k: number) => Math.min(2.2, Math.max(1, (sizeOf(0) + 200) / (swarm.A[k] + 200)));
+/** the golden target: one building at a time is worth a big burst; everyone races for it */
+const TEAM_CSS = ["#ffc05a", "#5aa6ff", "#ff4d5a", "#73ff73"];
+let gold = -1, goldNext = 5, goldCount = 0;
+const ROUND = 90, START_SIZE = 400;
 const RIVAL_NAMES = ["", "🔵", "🔴", "🟢"];
 let roundT = 0, roundOver = false;
 const rv = { tx: new Float32Array(4), tz: new Float32Array(4), think: new Float32Array(4), dead: new Float32Array(4), meal: new Float32Array(4) };
 const contactBy = new Float32Array(64 * 4);
 let playerDead = 0, safeT = 0;
 function resetRound() {
+  gold = -1; goldNext = 5; goldCount = 0;
   roundT = 0; roundOver = false; active = START_SIZE; meal = 0; playerDead = 0; milestone = 0;
   for (let k = 1; k < 4; k++) {
     const a = (k / 3) * Math.PI * 2 + 0.6;
@@ -313,7 +319,7 @@ const BIRTH: number[][] = [[3, 1, 2, 4], [8, 9, 7, 10], [6, 14, 13, 6], [15, 11,
 const GIANT_BIRTH: number[][] = [[17, 19, 10, 6], [20, 21, 22, 20], [27, 12, 13, 14], [23, 23, 17, 25], [26, 25, 18, 25]];
 city.onEat = (b, amount) => {
   // every voxel eaten hatches new mites, for whichever swarm is eating it
-  { const B0 = city.buildings[b], k = teamAt(B0.x, B0.z, 8); if (k === 0) meal += amount * 0.7; else if (k > 0) rv.meal[k] += amount * 0.7; if (k !== 0) return; }
+  { const B0 = city.buildings[b], k = teamAt(B0.x, B0.z, 8); if (k === 0) meal += amount * 0.7; else if (k > 0) rv.meal[k] += amount * 1.1 * catchUp(k); if (k !== 0) return; }
   { const k = city.buildings[b].kind; const m = k === 5 ? GIANT_BIRTH[theme.giant % 5] : BIRTH[k]; if (m) swarm.birth.set(m); }
   audio.eat(amount);
   const B = city.buildings[b];
@@ -354,7 +360,7 @@ function drawFx(dt: number) {
     // destroyed: count the combo
     if (city.gone[b]) {
       if (!wasGone[b] && killer[b] !== 0) wasGone[b] = 1;
-      if (!wasGone[b]) { wasGone[b] = 1; combo = time - lastKill < 4 ? combo + 1 : 1; lastKill = time; meal += 30 * combo; if (combo >= 2) { comboEl.textContent = `×${combo}`; comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop"); audio.chime(Math.min(9, combo + 2)); } }
+      if (!wasGone[b]) { wasGone[b] = 1; combo = time - lastKill < 4 ? combo + 1 : 1; lastKill = time; meal += 30 * combo; if (combo >= 2) { comboEl.style.color = ""; comboEl.textContent = `×${combo}`; comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop"); audio.chime(Math.min(9, combo + 2)); } }
       continue;
     }
     wasGone[b] = 0; left++;
@@ -387,6 +393,28 @@ function drawFx(dt: number) {
     fctx.beginPath(); fctx.moveTo(s, 0); fctx.lineTo(-s * 0.7, s * 0.7); fctx.lineTo(-s * 0.35, 0); fctx.lineTo(-s * 0.7, -s * 0.7); fctx.closePath(); fctx.fill();
     fctx.restore();
   }
+  // the golden target: a big star over it, or a big gold arrow at the edge when it is off screen
+  if (gold >= 0) {
+    const B = city.buildings[gold], sc = city.s2Arr[gold * 4] || 1;
+    project(B.x, city.s2Arr[gold * 4 + 1] + B.h * 0.28 * sc + 2.5, B.z, pr);
+    const on = pr[2] > 0 && pr[0] > 0 && pr[0] < W && pr[1] > 0 && pr[1] < H, pulse = 1 + 0.15 * Math.sin(time * 7);
+    fctx.save(); fctx.textAlign = "center"; fctx.textBaseline = "middle"; fctx.shadowColor = "rgba(255,200,40,1)"; fctx.shadowBlur = 18 * dpr;
+    if (on) { fctx.font = `${Math.round(38 * dpr * pulse)}px sans-serif`; fctx.fillText("🌟", pr[0], pr[1] - 10 * dpr * Math.sin(time * 3)); }
+    else {
+      let ax = pr[0] - W / 2, ay = pr[1] - H / 2; if (pr[2] < 0) { ax = -ax; ay = -ay; }
+      const a = Math.atan2(ay, ax), m = Math.min((W / 2 - 46 * dpr) / Math.abs(Math.cos(a) || 1e-3), (H / 2 - 60 * dpr) / Math.abs(Math.sin(a) || 1e-3));
+      const px = W / 2 + Math.cos(a) * m, py = H / 2 + Math.sin(a) * m, s2 = 26 * dpr * pulse;
+      fctx.font = `${Math.round(30 * dpr)}px sans-serif`; fctx.fillText("🌟", px - Math.cos(a) * 34 * dpr, py - Math.sin(a) * 34 * dpr);
+      fctx.translate(px, py); fctx.rotate(a); fctx.fillStyle = "#ffd23c";
+      fctx.beginPath(); fctx.moveTo(s2, 0); fctx.lineTo(-s2 * 0.7, s2 * 0.75); fctx.lineTo(-s2 * 0.3, 0); fctx.lineTo(-s2 * 0.7, -s2 * 0.75); fctx.closePath(); fctx.fill();
+    }
+    fctx.restore();
+  }
+  // a crown floats over whoever is biggest right now
+  { let top = 0; for (let k = 1; k < 4; k++) if (sizeOf(k) > sizeOf(top)) top = k;
+    const x = top === 0 ? leader[0] : swarm.L[top * 3], z = top === 0 ? leader[2] : swarm.L[top * 3 + 2], y = (top === 0 ? leader[1] : swarm.L[top * 3 + 1]) + 3 + Math.sqrt(sizeOf(top)) * 0.03;
+    project(x, y, z, pr);
+    if (sizeOf(top) > 0 && pr[2] > 0) { fctx.save(); fctx.textAlign = "center"; fctx.font = `${Math.round((top === 0 ? 34 : 28) * dpr)}px sans-serif`; fctx.fillText("👑", pr[0], pr[1] + 4 * dpr * Math.sin(time * 4)); fctx.restore(); } }
   leftEl.textContent = left > 0 && !won ? `🏚️ ${left}` : "";
   // the giant's own bar at the top: it flashes on every hit
   const up = giant >= 0 && !giantGone() && giantState !== "fallen" && giantState !== "sleep";
@@ -526,7 +554,14 @@ function frame(now: number) {
         // whoever did most of the work gets the prize: a burst of new mites
         let kb = 0; for (let k = 1; k < 4; k++) if (contactBy[b * 4 + k] > contactBy[b * 4 + kb]) kb = k;
         killer[b] = kb; const prize = 40 + B.solid * 0.05;
-        if (kb === 0) meal += prize; else rv.meal[kb] += prize;
+        if (kb === 0) meal += prize; else rv.meal[kb] += prize * 1.3 * catchUp(kb);
+        if (b === gold) {
+          const bonus = Math.round(Math.max(700, sizeOf(kb) * 0.45) * (kb === 0 ? 1 : catchUp(kb)));
+          if (kb === 0) { meal += bonus; audio.chime(9); shake = Math.max(shake, 1); } else rv.meal[kb] += bonus;
+          comboEl.textContent = kb === 0 ? `🌟 +${bonus}` : `🌟 ✖`; comboEl.style.color = kb === 0 ? "" : TEAM_CSS[kb];
+          comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop");
+          gold = -1; goldNext = roundT + 7;
+        }
         city.remove(b);
       }
     }
@@ -540,27 +575,36 @@ function frame(now: number) {
   if (giantState === "fallen") for (let k = 0; k < parts.length; k++) { const B = city.buildings[parts[k]]; if (!city.gone[parts[k]] && B.collapseAt >= 0 && time - B.collapseAt > 1.4 + k * 0.25) { city.remove(parts[k]); audio.thump(0.5); } }
   // ---- the rivals: each one hunts what it can eat and runs from what can eat it
   if (!roundOver && travel < 0) roundT += dt;
+  // a new golden target: a big building, not too close to anyone, a little farther each time
+  if (gold >= 0 && city.gone[gold]) { gold = -1; goldNext = roundT + 7; }
+  if (gold < 0 && !roundOver && roundT > goldNext && roundT < ROUND - 6) {
+    let best = -1, bs = -1;
+    for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b] || isPart(b) || city.buildings[b].collapseAt >= 0) continue; const B = city.buildings[b];
+      let near = 1e9; for (let k = 0; k < 4; k++) { const x = k === 0 ? leader[0] : swarm.L[k * 3], z = k === 0 ? leader[2] : swarm.L[k * 3 + 2]; near = Math.min(near, Math.hypot(B.x - x, B.z - z)); }
+      const sc = (B.solid + 300) * Math.min(1, near / 18) * (0.6 + Math.random() * 0.8); if (sc > bs) { bs = sc; best = b; } }
+    if (best >= 0) { gold = best; goldCount++; audio.chime(6); }
+  }
   for (let k = 1; k < 4; k++) {
-    if (rv.dead[k] > 0) { rv.dead[k] -= dt; if (rv.dead[k] <= 0) { const a = Math.random() * 6.28; swarm.L[k * 3] = Math.cos(a) * 45; swarm.L[k * 3 + 2] = Math.sin(a) * 45; swarm.A[k] = 300; } continue; }
+    if (rv.dead[k] > 0) { rv.dead[k] -= dt; if (rv.dead[k] <= 0) { const a = Math.random() * 6.28; swarm.L[k * 3] = Math.cos(a) * 45; swarm.L[k * 3 + 2] = Math.sin(a) * 45; swarm.A[k] = Math.max(300, Math.floor(sizeOf(0) * 0.35)); } continue; }
     if (rv.meal[k] >= 1) { const add = Math.floor(rv.meal[k]); rv.meal[k] -= add; swarm.A[k] = Math.min(TEAM_CAP[k], swarm.A[k] + add); }
     const A = swarm.A[k], lx = swarm.L[k * 3], lz = swarm.L[k * 3 + 2];
     rv.think[k] -= dt;
     if (rv.think[k] <= 0) {
-      rv.think[k] = 0.4 + Math.random() * 0.4;
+      rv.think[k] = 0.25 + Math.random() * 0.25;
       let tx = NaN, tz = NaN, flee = false;
       for (let j = 0; j < 4; j++) { if (j === k) continue; const B = sizeOf(j); if (B < 1) continue;
         const jx = j === 0 ? leader[0] : swarm.L[j * 3], jz = j === 0 ? leader[2] : swarm.L[j * 3 + 2], d = Math.hypot(jx - lx, jz - lz);
         if (B > A * 1.15 && d < 22 + Math.sqrt(B) * 0.04) { tx = lx + (lx - jx); tz = lz + (lz - jz); flee = true; break; }
-        if (A > B * 1.3 && d < 30 && Number.isNaN(tx) && roundT > 12 && !(j === 0 && safeT > 0)) { tx = jx; tz = jz; } }
+        if (A > B * 1.15 && d < (j === 0 ? 45 : 32) && Number.isNaN(tx) && roundT > 8 && !(j === 0 && safeT > 0)) { tx = jx; tz = jz; } }
       if (!flee && Number.isNaN(tx)) {
         let best = -1, bs = -1;
-        for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b]) continue; const B = city.buildings[b]; const d = Math.hypot(B.x - lx, B.z - lz); const sc = (B.solid + 400) / (d + 8); if (sc > bs) { bs = sc; best = b; } }
+        for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b]) continue; const B = city.buildings[b]; const d = Math.hypot(B.x - lx, B.z - lz); const sc = (B.solid + 400) / (d + 8) * (b === gold ? 9 : 1); if (sc > bs) { bs = sc; best = b; } }
         if (best >= 0) { tx = city.buildings[best].x; tz = city.buildings[best].z; } else { tx = (Math.random() - 0.5) * 80; tz = (Math.random() - 0.5) * 80; }
       }
       const r = Math.hypot(tx, tz); if (r > WALL - 6) { tx *= (WALL - 6) / r; tz *= (WALL - 6) / r; }
       rv.tx[k] = tx; rv.tz[k] = tz;
     }
-    const sp = (8.5 + Math.sqrt(A) * 0.025) * 0.86;
+    const sp = (8.5 + Math.sqrt(A) * 0.025) * (A > sizeOf(0) ? 0.97 : 0.92);
     const ddx = rv.tx[k] - lx, ddz = rv.tz[k] - lz, dd = Math.hypot(ddx, ddz);
     const wx = dd > 0.01 ? (ddx / dd) * Math.min(dd * 3, sp * 1.2) : 0, wz = dd > 0.01 ? (ddz / dd) * Math.min(dd * 3, sp * 1.2) : 0;
     swarm.LV[k * 3] += (wx - swarm.LV[k * 3]) * Math.min(1, dt * 5); swarm.LV[k * 3 + 2] += (wz - swarm.LV[k * 3 + 2]) * Math.min(1, dt * 5);
@@ -570,7 +614,7 @@ function frame(now: number) {
   // ---- swarm eats swarm: a clearly bigger swarm that catches a smaller one drains it into itself
   for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
     if (i === j) continue;
-    const Ai = sizeOf(i), Aj = sizeOf(j); if (Ai < 1 || Aj < 1 || Ai < Aj * 1.15 || roundT < 10 || (j === 0 && safeT > 0)) continue;
+    const Ai = sizeOf(i), Aj = sizeOf(j); if (Ai < 1 || Aj < 1 || Ai < Aj * 1.15 || roundT < 7 || (j === 0 && safeT > 0)) continue;
     const ix = i === 0 ? leader[0] : swarm.L[i * 3], iz = i === 0 ? leader[2] : swarm.L[i * 3 + 2], jx = j === 0 ? leader[0] : swarm.L[j * 3], jz = j === 0 ? leader[2] : swarm.L[j * 3 + 2];
     const reach = (4 + Math.sqrt(Ai) * 0.031 + Math.sqrt(Aj) * 0.031) * 0.8;
     if (Math.hypot(ix - jx, iz - jz) > reach) continue;
@@ -594,6 +638,7 @@ function frame(now: number) {
   // onboarding (wordless): a pulsing ring around the nearest little thing until the first bite brings it down
   landT += dt;
   world.hint[3] = 0;
+  if (gold >= 0) { const B = city.buildings[gold]; world.hint[0] = B.x; world.hint[1] = B.z; world.hint[2] = 3 + (city.s2Arr[gold * 4] || 1) * 4.5; world.hint[3] = 0.75 + 0.25 * Math.sin(time * 5); }
   if (!firstBite && district === 1 && time > 2.5) {
     let best = -1, bd = 1e9;
     for (let b = 0; b < Math.min(7, city.buildings.length); b++) { if (city.gone[b]) continue; const B = city.buildings[b]; const dd = Math.hypot(B.x - leader[0], B.z - leader[2]); if (dd < bd) { bd = dd; best = b; } }
