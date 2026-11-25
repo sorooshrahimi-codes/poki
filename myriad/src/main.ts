@@ -263,7 +263,7 @@ function teamAt(x: number, z: number, reach: number) {
   for (let k = 0; k < 4; k++) {
     const A = k === 0 ? active : swarm.A[k]; if (A < 1) continue;
     const lx = k === 0 ? leader[0] : swarm.L[k * 3], lz = k === 0 ? leader[2] : swarm.L[k * 3 + 2];
-    const d = Math.hypot(x - lx, z - lz) - (2 + Math.sqrt(A) * 0.031);
+    const d = Math.hypot(x - lx, z - lz) - (3 + Math.sqrt(A) * 0.05);
     if (d < reach && d < bd) { bd = d; best = k; }
   }
   return best;
@@ -534,17 +534,17 @@ function frame(now: number) {
 
   // health: the swarm touching something drains it at a steady, readable rate (a fast pass drains more, a punch most);
   // at zero it comes down and crumbles away. The pieces eaten along the way count too.
-  const swarmR = 2 + Math.sqrt(active) * 0.031;
+  const swarmR = 3 + Math.sqrt(active) * 0.05;
   const hitRate = (1 + 1.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 4 : 0)) * (1 + Math.sqrt(active) / 150);
   for (let b = 0; b < city.buildings.length; b++) {
     if (city.gone[b] || isPart(b)) continue;
     const B = city.buildings[b];
     const sc = city.s2Arr[b * 4] || 1, half = (32 * 0.28 * sc) / 2;
-    if (active > 0 && Math.hypot(B.x - leader[0], B.z - leader[2]) < half + swarmR * 0.7) { contactT[b] += dt * hitRate; contactBy[b * 4] += dt * hitRate; }
+    if (active > 0 && Math.hypot(B.x - leader[0], B.z - leader[2]) < half + swarmR * 0.95) { contactT[b] += dt * hitRate; contactBy[b * 4] += dt * hitRate; }
     for (let k = 1; k < 4; k++) {
       const A = swarm.A[k]; if (A < 1) continue;
-      const rr = 2 + Math.sqrt(A) * 0.031, rate = 1.6 * (1 + Math.sqrt(A) / 150);
-      if (Math.hypot(B.x - swarm.L[k * 3], B.z - swarm.L[k * 3 + 2]) < half + rr * 0.7) { contactT[b] += dt * rate; contactBy[b * 4 + k] += dt * rate; }
+      const rr = 3 + Math.sqrt(A) * 0.05, rate = 1.6 * (1 + Math.sqrt(A) / 150);
+      if (Math.hypot(B.x - swarm.L[k * 3], B.z - swarm.L[k * 3 + 2]) < half + rr * 0.95) { contactT[b] += dt * rate; contactBy[b * 4 + k] += dt * rate; }
     }
     const T = (0.6 + B.solid / 2500) / Math.max(0.2, city.s2Arr[b * 4 + 2]) * 0.5;
     hpOf[b] = Math.max(0, 1 - Math.max(B.eaten / (B.solid * 0.88), contactT[b] / T));
@@ -616,7 +616,7 @@ function frame(now: number) {
     if (i === j) continue;
     const Ai = sizeOf(i), Aj = sizeOf(j); if (Ai < 1 || Aj < 1 || Ai < Aj * 1.15 || roundT < 7 || (j === 0 && safeT > 0)) continue;
     const ix = i === 0 ? leader[0] : swarm.L[i * 3], iz = i === 0 ? leader[2] : swarm.L[i * 3 + 2], jx = j === 0 ? leader[0] : swarm.L[j * 3], jz = j === 0 ? leader[2] : swarm.L[j * 3 + 2];
-    const reach = (4 + Math.sqrt(Ai) * 0.031 + Math.sqrt(Aj) * 0.031) * 0.8;
+    const reach = (4 + Math.sqrt(Ai) * 0.05 + Math.sqrt(Aj) * 0.05) * 0.8;
     if (Math.hypot(ix - jx, iz - jz) > reach) continue;
     const take = Math.min(Aj, Math.ceil(dt * (Ai * 0.35 + 300)));
     if (j === 0) { active -= take; shake = Math.max(shake, 0.4); } else swarm.A[j] -= take;

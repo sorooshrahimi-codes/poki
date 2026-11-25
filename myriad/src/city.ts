@@ -271,9 +271,9 @@ void main() {
   int i = gl_VertexID;
   vec4 p = texelFetch(uPos, ivec2(i % int(uS), i / int(uS)), 0);
   if (p.w < 0.5) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
-  vW = p.w > 1.5 ? 1.0 : 0.12;
+  vW = p.w > 1.5 ? 1.0 : 0.35;
   gl_Position = vec4(p.xz / uWorld * 2.0, 0.0, 1.0);
-  gl_PointSize = 3.0;
+  gl_PointSize = 8.0; // each mite paints a broad soft spot, so the swarm leaves a wide colourful path
 }`;
 const PAINT_FS = `#version 300 es
 precision highp float;

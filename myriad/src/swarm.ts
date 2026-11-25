@@ -412,7 +412,7 @@ export class Swarm {
     bindTex(gl, 3, world.grid, u.uGrid); bindTex(gl, 4, world.atlas, u.uAtlas);
     gl.uniform4fv(u.uB, world.b); gl.uniform4fv(u.uB2, world.b2); gl.uniform4fv(u.uS2, world.s2); gl.uniform4fv(u.uShock, this.shock);
     this.L.set(leader, 0); this.LV.set(leaderVel, 0); this.A[0] = active; this.SP[0] = speed;
-    for (let k = 0; k < 4; k++) this.R[k] = 2.0 + Math.sqrt(this.A[k]) * 0.031; // a dense head, even at 200k
+    for (let k = 0; k < 4; k++) this.R[k] = 3.0 + Math.sqrt(this.A[k]) * 0.05; // a wide head that sweeps a broad path
     gl.uniform3fv(u.uLeaders, this.L); gl.uniform3fv(u.uLeaderVels, this.LV);
     gl.uniform4fv(u.uActiveT, this.A); gl.uniform4fv(u.uRadiusT, this.R); gl.uniform4fv(u.uSpeedT, this.SP);
     gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uS, S); gl.uniform1f(u.uWorld, WORLD);
