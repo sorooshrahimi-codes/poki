@@ -506,7 +506,7 @@ function frame(now: number) {
   audio.swarm(active, Math.hypot(leaderVel[0], leaderVel[2]));
   // left alone (no touch, no mouse move) the swarm gathers into a shape; the next touch bursts it back
   const fighting = giant >= 0 && !giantGone() && giantState !== "fallen";
-  const idle = !down && time - lastMove > 2.6 && time > 4 && !fighting && !won && travel < 0;
+  const idle = !down && time - lastMove > 1.0 && time > 3 && !fighting && !won && travel < 0;
   if (travel >= 0) {
     travel += dt; swarm.open = true;
     target[0] = 0; target[2] = -70; hasTarget = true; aiming = false;
@@ -514,10 +514,10 @@ function frame(now: number) {
     if (travel > 2.8) nextLand();
   }
   const sh = swarm.shape;
-  if (idle && shapeOn && sh.blend > 0.95) { shapeT += dt; if (shapeT > 6.5) { shapeT = 0; shapeK = nextShape(shapeK); loadShape(shapeK, sh); } } // one shape melts into the next
+  if (idle && shapeOn && sh.blend > 0.95) { shapeT += dt; if (shapeT > 5) { shapeT = 0; shapeK = nextShape(shapeK); loadShape(shapeK, sh); } } // one shape melts into the next
   if (idle && !shapeOn) { shapeOn = true; shapeT = 0; loadShape(shapeK, sh); sh.pos[0] = leader[0]; sh.pos[2] = leader[2]; sh.pos[1] = terrain.floor(leader[0], leader[2]); }
   if (!idle && shapeOn && sh.blend < 0.05) { shapeOn = false; shapeK = nextShape(shapeK); }
-  sh.blend = shapeOn && idle ? Math.min(1, sh.blend + dt * 0.6) : Math.max(0, sh.blend - dt * 3);
+  sh.blend = shapeOn && idle ? Math.min(1, sh.blend + dt * 2.2) : Math.max(0, sh.blend - dt * 3);
   sh.scale = 2.4 + Math.sqrt(active) * 0.07;
   if (shapeOn && idle) { target[0] = leader[0]; target[2] = leader[2]; }
   else if (aiming && (down || !("ontouchstart" in window))) pick(aimX, aimY);

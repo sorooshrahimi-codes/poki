@@ -129,13 +129,13 @@ void main() {
   vec3 want = uLeaderVel + seek + mill + flow;
   // left alone, the swarm gathers into a shape (and bursts back into a swarm at the next touch)
   if (shapeOn > 0.0) {
-    vec3 sw = (shapePoint(id) - pos) * 3.2;
-    float sl = length(sw), sm = uSpeed * 2.2 + 8.0;
+    vec3 sw = (shapePoint(id) - pos) * 6.0;
+    float sl = length(sw), sm = uSpeed * 4.0 + 22.0;
     if (sl > sm) sw *= sm / sl;
     want = mix(want, sw, shapeOn);
     rep *= 1.0 - 0.8 * shapeOn;
   }
-  vel += ((want - vel) * 4.0 + rep) * uDt;
+  vel += ((want - vel) * (4.0 + 6.0 * shapeOn) + rep) * uDt;
   // 5. height: a soft floor, a soft ceiling that grows with the swarm, and the flow lifts sheets into the air
   float gy = max(groundH(pos.xz), WATER);
   float cap = 1.5 + uRadius * 0.45 * uLift + shapeOn * 200.0;
