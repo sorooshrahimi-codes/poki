@@ -241,7 +241,7 @@ const RIVAL_NAMES = ["", "🔵", "🔴", "🟢"];
 let roundT = 0, roundOver = false;
 const rv = { tx: new Float32Array(4), tz: new Float32Array(4), think: new Float32Array(4), dead: new Float32Array(4), meal: new Float32Array(4) };
 const contactBy = new Float32Array(64 * 4);
-let playerDead = 0;
+let playerDead = 0, safeT = 0;
 function resetRound() {
   roundT = 0; roundOver = false; active = START_SIZE; meal = 0; playerDead = 0; milestone = 0;
   for (let k = 1; k < 4; k++) {
@@ -313,7 +313,7 @@ const BIRTH: number[][] = [[3, 1, 2, 4], [8, 9, 7, 10], [6, 14, 13, 6], [15, 11,
 const GIANT_BIRTH: number[][] = [[17, 19, 10, 6], [20, 21, 22, 20], [27, 12, 13, 14], [23, 23, 17, 25], [26, 25, 18, 25]];
 city.onEat = (b, amount) => {
   // every voxel eaten hatches new mites, for whichever swarm is eating it
-  { const B0 = city.buildings[b], k = teamAt(B0.x, B0.z, 8); if (k === 0) meal += amount * 2.5; else if (k > 0) rv.meal[k] += amount * 2.5; if (k !== 0) return; }
+  { const B0 = city.buildings[b], k = teamAt(B0.x, B0.z, 8); if (k === 0) meal += amount * 0.7; else if (k > 0) rv.meal[k] += amount * 0.7; if (k !== 0) return; }
   { const k = city.buildings[b].kind; const m = k === 5 ? GIANT_BIRTH[theme.giant % 5] : BIRTH[k]; if (m) swarm.birth.set(m); }
   audio.eat(amount);
   const B = city.buildings[b];
@@ -525,7 +525,7 @@ function frame(now: number) {
       else if (time - B.collapseAt > 0.7) {
         // whoever did most of the work gets the prize: a burst of new mites
         let kb = 0; for (let k = 1; k < 4; k++) if (contactBy[b * 4 + k] > contactBy[b * 4 + kb]) kb = k;
-        killer[b] = kb; const prize = 60 + B.solid * 0.1;
+        killer[b] = kb; const prize = 40 + B.solid * 0.05;
         if (kb === 0) meal += prize; else rv.meal[kb] += prize;
         city.remove(b);
       }
@@ -551,7 +551,7 @@ function frame(now: number) {
       for (let j = 0; j < 4; j++) { if (j === k) continue; const B = sizeOf(j); if (B < 1) continue;
         const jx = j === 0 ? leader[0] : swarm.L[j * 3], jz = j === 0 ? leader[2] : swarm.L[j * 3 + 2], d = Math.hypot(jx - lx, jz - lz);
         if (B > A * 1.15 && d < 22 + Math.sqrt(B) * 0.04) { tx = lx + (lx - jx); tz = lz + (lz - jz); flee = true; break; }
-        if (A > B * 1.3 && d < 30 && Number.isNaN(tx)) { tx = jx; tz = jz; } }
+        if (A > B * 1.3 && d < 30 && Number.isNaN(tx) && roundT > 12 && !(j === 0 && safeT > 0)) { tx = jx; tz = jz; } }
       if (!flee && Number.isNaN(tx)) {
         let best = -1, bs = -1;
         for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b]) continue; const B = city.buildings[b]; const d = Math.hypot(B.x - lx, B.z - lz); const sc = (B.solid + 400) / (d + 8); if (sc > bs) { bs = sc; best = b; } }
@@ -560,7 +560,7 @@ function frame(now: number) {
       const r = Math.hypot(tx, tz); if (r > WALL - 6) { tx *= (WALL - 6) / r; tz *= (WALL - 6) / r; }
       rv.tx[k] = tx; rv.tz[k] = tz;
     }
-    const sp = (8.5 + Math.sqrt(A) * 0.025) * 0.92;
+    const sp = (8.5 + Math.sqrt(A) * 0.025) * 0.86;
     const ddx = rv.tx[k] - lx, ddz = rv.tz[k] - lz, dd = Math.hypot(ddx, ddz);
     const wx = dd > 0.01 ? (ddx / dd) * Math.min(dd * 3, sp * 1.2) : 0, wz = dd > 0.01 ? (ddz / dd) * Math.min(dd * 3, sp * 1.2) : 0;
     swarm.LV[k * 3] += (wx - swarm.LV[k * 3]) * Math.min(1, dt * 5); swarm.LV[k * 3 + 2] += (wz - swarm.LV[k * 3 + 2]) * Math.min(1, dt * 5);
@@ -570,7 +570,7 @@ function frame(now: number) {
   // ---- swarm eats swarm: a clearly bigger swarm that catches a smaller one drains it into itself
   for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
     if (i === j) continue;
-    const Ai = sizeOf(i), Aj = sizeOf(j); if (Ai < 1 || Aj < 1 || Ai < Aj * 1.15) continue;
+    const Ai = sizeOf(i), Aj = sizeOf(j); if (Ai < 1 || Aj < 1 || Ai < Aj * 1.15 || roundT < 10 || (j === 0 && safeT > 0)) continue;
     const ix = i === 0 ? leader[0] : swarm.L[i * 3], iz = i === 0 ? leader[2] : swarm.L[i * 3 + 2], jx = j === 0 ? leader[0] : swarm.L[j * 3], jz = j === 0 ? leader[2] : swarm.L[j * 3 + 2];
     const reach = (4 + Math.sqrt(Ai) * 0.031 + Math.sqrt(Aj) * 0.031) * 0.8;
     if (Math.hypot(ix - jx, iz - jz) > reach) continue;
@@ -582,7 +582,8 @@ function frame(now: number) {
       else { swarm.A[j] = 0; rv.dead[j] = 3; if (i === 0) { audio.thump(1); for (let c = 0; c < 4; c++) setTimeout(() => audio.chime(6 + c), c * 100); } }
     }
   }
-  if (playerDead > 0) { playerDead -= dt; if (playerDead <= 0) { active = START_SIZE; leader[0] = (Math.random() - 0.5) * 60; leader[2] = (Math.random() - 0.5) * 60; target[0] = leader[0]; target[2] = leader[2]; camX = leader[0]; camZ = leader[2]; } }
+  safeT = Math.max(0, safeT - dt);
+  if (playerDead > 0) { playerDead -= dt; if (playerDead <= 0) { active = START_SIZE; safeT = 4; leader[0] = (Math.random() - 0.5) * 60; leader[2] = (Math.random() - 0.5) * 60; target[0] = leader[0]; target[2] = leader[2]; camX = leader[0]; camZ = leader[2]; } }
   // ---- the end of the round: everyone is ranked by size
   if (!roundOver && roundT >= ROUND) endRound();
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
@@ -651,4 +652,4 @@ function frame(now: number) {
 requestAnimationFrame(frame);
 poki.init().then(() => poki.loadingFinished());
 
-if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { gov, city, leader, target, poke: () => { lastMove = time; }, terrain, get active() { return active; }, set active(v: number) { active = v; } };
+if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { gov, city, swarm, leader, target, poke: () => { lastMove = time; }, terrain, get active() { return active; }, set active(v: number) { active = v; } };
