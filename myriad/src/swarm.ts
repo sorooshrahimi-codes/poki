@@ -10,6 +10,13 @@ import { HEIGHT_GLSL } from "./terrain.ts";
 export const S = 512; // 262,144 slots
 export const WORLD = 160; // world units across the density grid
 export const DEN = 256; // density grid resolution
+// four swarms share the slots: the player's (up to 131k) and three rivals (up to 43k each)
+export const TEAM_START = [0, 131072, 174592, 218112], TEAM_CAP = [131072, 43520, 43520, 43520];
+const TEAM_GLSL = `
+int teamOf(float id) { return id < 131072.0 ? 0 : min(3, 1 + int((id - 131072.0) / 43520.0)); }
+float teamStart(int t) { return t == 0 ? 0.0 : 131072.0 + float(t - 1) * 43520.0; }
+const vec3 TEAMC[4] = vec3[4](vec3(1.0, 0.75, 0.35), vec3(0.35, 0.65, 1.0), vec3(1.0, 0.3, 0.35), vec3(0.45, 1.0, 0.45));
+`;
 
 const HASH = `
 float h11(float p) { p = fract(p * 0.1031); p *= p + 33.33; p *= p + p; return fract(p); }
@@ -30,13 +37,16 @@ uniform vec4 uB[64];
 uniform vec4 uB2[64];
 uniform vec4 uS2[64];
 uniform vec4 uShock; // x, z, radius, strength (a stomp)
-uniform vec3 uLeader, uLeaderVel;
-uniform float uDt, uTime, uActive, uS, uWorld, uSpeed, uRep, uLift, uRadius;
+uniform vec3 uLeaders[4], uLeaderVels[4];
+uniform vec4 uActiveT, uRadiusT, uSpeedT;
+uniform float uDt, uTime, uS, uWorld, uRep, uLift;
+vec3 uLeader, uLeaderVel; float uActive, uRadius, uSpeed;
 uniform vec2 uDenTexel;
 layout(location = 0) out vec4 oPos;
 layout(location = 1) out vec4 oVel;
 ${HASH}
 float den(vec2 xz) { return texture(uDen, xz / uWorld + 0.5).r; }
+${TEAM_GLSL}
 ${HEIGHT_GLSL}
 // a point on the shape this mite belongs to (spheres, capsules and boxes, picked by area)
 vec3 shapePoint(float id) {
@@ -71,7 +81,11 @@ void main() {
   vec4 p = texelFetch(uPos, c, 0);
   vec4 v = texelFetch(uVel, c, 0);
   vec3 r = h31(id);
-  if (id >= uActive) {
+  // which swarm this mite belongs to: its leader, its size, its body radius
+  int team = teamOf(id);
+  uLeader = uLeaders[team]; uLeaderVel = uLeaderVels[team]; uActive = uActiveT[team]; uRadius = uRadiusT[team]; uSpeed = uSpeedT[team];
+  float shapeOn = team == 0 ? uShape : 0.0;
+  if (id - teamStart(team) >= uActive) {
     // dormant: waits inside the seed, so it is born right where the swarm is
     oPos = vec4(uLeader + (r - 0.5) * vec3(1.5, 0.4, 1.5), 0.0);
     oVel = vec4(0.0, 0.0, 0.0, r.x);
@@ -114,19 +128,19 @@ void main() {
   vec3 rep = -vec3(g.x, 0.0, g.y) * uRep;
   vec3 want = uLeaderVel + seek + mill + flow;
   // left alone, the swarm gathers into a shape (and bursts back into a swarm at the next touch)
-  if (uShape > 0.0) {
+  if (shapeOn > 0.0) {
     vec3 sw = (shapePoint(id) - pos) * 3.2;
     float sl = length(sw), sm = uSpeed * 2.2 + 8.0;
     if (sl > sm) sw *= sm / sl;
-    want = mix(want, sw, uShape);
-    rep *= 1.0 - 0.8 * uShape;
+    want = mix(want, sw, shapeOn);
+    rep *= 1.0 - 0.8 * shapeOn;
   }
   vel += ((want - vel) * 4.0 + rep) * uDt;
   // 5. height: a soft floor, a soft ceiling that grows with the swarm, and the flow lifts sheets into the air
   float gy = max(groundH(pos.xz), WATER);
-  float cap = 1.5 + uRadius * 0.45 * uLift + uShape * 200.0;
+  float cap = 1.5 + uRadius * 0.45 * uLift + shapeOn * 200.0;
   float hy = pos.y - gy;
-  vel.y += (max(0.0, 0.4 - hy) * 12.0 - max(0.0, hy - cap) * 4.0 - 0.6 * (1.0 - uShape)) * uDt;
+  vel.y += (max(0.0, 0.4 - hy) * 12.0 - max(0.0, hy - cap) * 4.0 - 0.6 * (1.0 - shapeOn)) * uDt;
   // a stomp: everything close is thrown up and away
   if (uShock.w > 0.0) {
     vec2 dv = pos.xz - uShock.xy; float dd = length(dv);
@@ -233,6 +247,7 @@ out vec3 vCol;
 out float vBright;
 ${HASH}
 ${MAT_GLSL}
+${TEAM_GLSL}
 void main() {
   int i = gl_InstanceID;
   ivec2 c = ivec2(i % int(uS), i / int(uS));
@@ -259,6 +274,9 @@ void main() {
   // a mite that ate something carries its colour (brightened to a glowing pastel, a touch of gold left)
   int m = int(floor(v.w));
   if (m > 0 && m < ${MATS_N}) { vec3 mc = MAT[m]; mc = mc / max(max(mc.r, mc.g), max(mc.b, 0.05)); vCol = mc * 0.92 + 0.06; }
+  // rival swarms glow in their own colour, so every swarm is told apart at a glance
+  int tm = teamOf(float(i));
+  if (tm > 0) vCol = mix(TEAMC[tm], vCol, 0.18);
   vBright = 0.7 + 0.6 * flap;
 }`;
 const MITE_FS = `#version 300 es
@@ -290,7 +308,7 @@ const CHIP_VS = `#version 300 es
 precision highp float;
 uniform sampler2D uPos, uAtlas;
 uniform mat4 uVP;
-uniform vec3 uCamR, uCamU, uLeader;
+uniform vec3 uCamR, uCamU, uLeaders[4];
 uniform vec4 uB[64];
 uniform vec4 uS2[64];
 uniform float uS, uTime;
@@ -301,6 +319,7 @@ out float vKind;
 out vec3 vCol;
 ${HASH}
 ${MAT_GLSL}
+${TEAM_GLSL}
 ivec2 atlasTexel(int b, ivec3 v) { return ivec2((b % 8) * 256 + (v.z % 8) * 32 + v.x, (b / 8) * 128 + (v.z / 8) * 32 + v.y); }
 void main() {
   int i = gl_InstanceID;
@@ -315,7 +334,7 @@ void main() {
   vCol = vox.b > 0.5 ? MAT[int(vox.b + 0.5)] : vec3(0.42, 0.40, 0.38);
   // each bite throws a crumb that arcs into the swarm's heart and feeds it
   float ph = fract(uTime * (0.9 + r.x * 0.8) + r.y);
-  vec3 to = uLeader + vec3(r.x - 0.5, 1.2 + r.z, r.y - 0.5) * 2.0;
+  vec3 to = uLeaders[teamOf(float(i))] + vec3(r.x - 0.5, 1.2 + r.z, r.y - 0.5) * 2.0;
   vec3 cp = mix(p.xyz, to, ph * ph) + vec3(0.0, sin(ph * 3.14159) * (1.5 + 2.0 * r.z), 0.0);
   bool dust = r.z > 0.7;
   float size = dust ? 0.3 + 0.5 * ph : 0.07 + 0.06 * r.x;
@@ -374,6 +393,10 @@ export class Swarm {
   get light() { return this.denB.tex[0]; }
 
   shock = new Float32Array(4);
+  /** per team: leader position (x,y,z), leader velocity, living mites, body radius, speed */
+  L = new Float32Array(12); LV = new Float32Array(12); A = new Float32Array(4); R = new Float32Array(4); SP = new Float32Array(4).fill(10);
+  /** how many slots must be touched this frame (up to the end of the last living team) */
+  span() { let e = this.A[0]; for (let k = 1; k < 4; k++) if (this.A[k] > 0) e = TEAM_START[k] + this.A[k] + 1024; return Math.min(S * S, Math.max(e, this.A[0] + 1024)); }
   birth = new Float32Array([0, 0, 0, 0]);
   open = false;
   reset = false; // next step: every mite bursts out of the seed again (entering a new land)
@@ -388,10 +411,12 @@ export class Swarm {
     bindTex(gl, 0, src.tex[0], u.uPos); bindTex(gl, 1, src.tex[1], u.uVel); bindTex(gl, 2, this.denB.tex[0], u.uDen);
     bindTex(gl, 3, world.grid, u.uGrid); bindTex(gl, 4, world.atlas, u.uAtlas);
     gl.uniform4fv(u.uB, world.b); gl.uniform4fv(u.uB2, world.b2); gl.uniform4fv(u.uS2, world.s2); gl.uniform4fv(u.uShock, this.shock);
-    gl.uniform3fv(u.uLeader, leader); gl.uniform3fv(u.uLeaderVel, leaderVel);
-    gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uActive, active); gl.uniform1f(u.uS, S); gl.uniform1f(u.uWorld, WORLD);
-    gl.uniform1f(u.uSpeed, speed); gl.uniform1f(u.uRep, 1.0); gl.uniform1f(u.uLift, 1.7);
-    gl.uniform1f(u.uRadius, 2.0 + Math.sqrt(active) * 0.031); // a dense head, even at 200k
+    this.L.set(leader, 0); this.LV.set(leaderVel, 0); this.A[0] = active; this.SP[0] = speed;
+    for (let k = 0; k < 4; k++) this.R[k] = 2.0 + Math.sqrt(this.A[k]) * 0.031; // a dense head, even at 200k
+    gl.uniform3fv(u.uLeaders, this.L); gl.uniform3fv(u.uLeaderVels, this.LV);
+    gl.uniform4fv(u.uActiveT, this.A); gl.uniform4fv(u.uRadiusT, this.R); gl.uniform4fv(u.uSpeedT, this.SP);
+    gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uS, S); gl.uniform1f(u.uWorld, WORLD);
+    gl.uniform1f(u.uRep, 1.0); gl.uniform1f(u.uLift, 1.7);
     bindTex(gl, 5, world.height, u.uHeight);
     gl.uniform4fv(u.uBirth, this.birth); gl.uniform1f(u.uReset, this.reset ? 1 : 0); gl.uniform1f(u.uOpen, this.open ? 1 : 0); this.reset = false;
     const sh = this.shape;
@@ -400,7 +425,7 @@ export class Swarm {
     gl.uniform2f(u.uDenTexel, 1 / DEN, 1 / DEN);
     gl.bindVertexArray(this.empty);
     // only the rows that hold living mites (plus the next few to be born) are simulated
-    const rows = Math.min(S, Math.ceil((active + 2048) / S));
+    const rows = Math.min(S, Math.ceil((this.span() + 1024) / S));
     gl.enable(gl.SCISSOR_TEST); gl.scissor(0, 0, S, rows);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disable(gl.SCISSOR_TEST);
@@ -415,7 +440,7 @@ export class Swarm {
     gl.useProgram(this.splat.p);
     bindTex(gl, 0, this.state.tex[0], this.splat.u.uPos);
     gl.uniform1f(this.splat.u.uS, S); gl.uniform1f(this.splat.u.uWorld, WORLD);
-    gl.drawArrays(gl.POINTS, 0, Math.min(active, S * S));
+    gl.drawArrays(gl.POINTS, 0, this.span());
     gl.disable(gl.BLEND);
     gl.useProgram(this.blur.p);
     const pass = (from: WebGLTexture, to: Target, dx: number, dy: number) => {
@@ -438,16 +463,16 @@ export class Swarm {
     // opaque with a depth test: order-free, and near mites hide far ones, which gives the swarm volume
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
     gl.bindVertexArray(this.quad);
-    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, active);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.span());
     // chips and dust where the swarm is biting (premultiplied alpha, no depth writes)
     const c = this.chip.u;
     gl.useProgram(this.chip.p);
     bindTex(gl, 0, this.state.tex[0], c.uPos); bindTex(gl, 1, world.atlas, c.uAtlas);
-    gl.uniform3fv(c.uLeader, leader); gl.uniform4fv(c.uB, world.b); gl.uniform4fv(c.uS2, world.s2);
+    void leader; gl.uniform3fv(c.uLeaders, this.L); gl.uniform4fv(c.uB, world.b); gl.uniform4fv(c.uS2, world.s2);
     gl.uniformMatrix4fv(c.uVP, false, vp); gl.uniform3fv(c.uCamR, camR); gl.uniform3fv(c.uCamU, camU);
     gl.uniform1f(c.uS, S); gl.uniform1f(c.uTime, t);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
-    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, active);
+    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, this.span());
     gl.depthMask(true); gl.disable(gl.BLEND);
   }
 }
