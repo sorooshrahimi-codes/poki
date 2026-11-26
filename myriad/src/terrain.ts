@@ -16,6 +16,8 @@ export class Terrain {
   tex: WebGLTexture;
   pond = { x: 0, z: 0, r: 0 };
   pond2 = { x: 0, z: 0, r: 0 }; // a second pond: always clear water
+  /** the ponds as the land was made (they shrink as the swarm drinks them) */
+  r0 = [0, 0];
   amp = 2;
   gl: GL;
   constructor(gl: GL) {
@@ -49,6 +51,7 @@ export class Terrain {
     this.pond = { x: Math.cos(ang) * rr2, z: Math.sin(ang) * rr2, r: pr };
     const a2 = ang + Math.PI * (0.8 + rnd() * 0.4), q = 11 + rnd() * 3, r2 = Math.min(26 + rnd() * 10, 58 * wallF(a2) - q - 2);
     this.pond2 = { x: Math.cos(a2) * r2, z: Math.sin(a2) * r2, r: q };
+    this.r0 = [pr, q];
     return this.pond;
   }
   build(seed: number, pads: { x: number; z: number; half: number }[]) {
@@ -110,7 +113,12 @@ export class Terrain {
     return (g(i, j) * (1 - tx) + g(i + 1, j) * tx) * (1 - tz) + (g(i, j + 1) * (1 - tx) + g(i + 1, j + 1) * tx) * tz;
   }
   /** the top of what you stand on: ground or water */
-  floor(x: number, z: number) { return Math.max(WATER, this.at(x, z)); }
+  floor(x: number, z: number) {
+    const h = this.at(x, z); if (h >= WATER) return h;
+    // over a pond: on the surface while it has water, down in the bowl once the swarm has drunk it dry
+    for (const p of [this.pond, this.pond2]) if (p.r > 0.5 && Math.hypot(x - p.x, z - p.z) < p.r * 1.2) return WATER;
+    return h;
+  }
 }
 function smooth(a: number, b: number, x: number) { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); }
 

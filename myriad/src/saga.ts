@@ -10,7 +10,7 @@ for (let d = 1; d <= 5; d++) {
   const seed = 1000 + d * 37;
   LEVELS.push({ land: d, goal: "wreck", n: d === 1 ? 4 : 6 + d * 2, seed });
   LEVELS.push({ land: d, goal: "gold", n: d === 1 ? 2 : d < 4 ? 3 : 4, seed });
-  if (d >= 2) LEVELS.push({ land: d, goal: "rival", n: [0, 0, 0.6, 0.9, 1.3, 1.6][d], seed });
+  if (d >= 2) LEVELS.push({ land: d, goal: "rival", n: [0, 0, 0.5, 0.7, 1.3, 1.6][d], seed });
   LEVELS.push({ land: d, goal: "castle", n: 2 + d * 0.9, seed });
   LEVELS.push({ land: d, goal: "giant", n: 1, seed });
   LEVELS.push({ land: d, goal: "gate", n: 1, seed });

@@ -158,7 +158,7 @@ function ground(clientX: number, clientY: number, out: Float32Array) {
   const t = ay / (ay - by); if (!(t > 0)) return false;
   out[0] = ax + (bx - ax) * t; out[1] = az + (bz - az) * t; return true;
 }
-let burnAcc = 0;
+let burnAcc = 0, drinkAcc = 0, warnT = 0;
 const padNear: number[] = [];
 function keepPad(x: number, z: number) {
   for (const b of padNear) { const B = city.buildings[b], h = (32 * 0.28 * (city.s2Arr[b * 4] || 1)) / 2 + 0.9; if (Math.abs(x - B.x) < h && Math.abs(z - B.z) < h) return true; }
@@ -393,7 +393,9 @@ addEventListener("keydown", (e) => {
 });
 
 // ---------------------------------------------------------------- the growing swarm (phase 1 demo: grows by itself)
-const CAP = Math.min(TEAM_CAP[0], Number(params.get("n") ?? TEAM_CAP[0]));
+const CAP = Number(params.get("n") ?? 1e9); // the real size has no cap (the GPU draws up to TEAM_CAP of it)
+/** the body radius of a swarm of n (the drawn body stops growing at the GPU cap) */
+const bodyR = (n: number) => 3 + Math.sqrt(Math.min(n, TEAM_CAP[0])) * 0.05;
 // ---------------------------------------------------------------- the round: two minutes, you and three rival swarms
 /** a rival that trails the player eats faster, so the race stays close */
 const catchUp = (k: number) => Math.min(2.2, Math.max(1, (sizeOf(0) + 200) / (swarm.A[k] + 200)));
@@ -422,7 +424,7 @@ function teamAt(x: number, z: number, reach: number) {
   for (let k = 0; k < 4; k++) {
     const A = k === 0 ? active : swarm.A[k]; if (A < 1) continue;
     const lx = k === 0 ? leader[0] : swarm.L[k * 3], lz = k === 0 ? leader[2] : swarm.L[k * 3 + 2];
-    const d = Math.hypot(x - lx, z - lz) - (3 + Math.sqrt(A) * 0.05);
+    const d = Math.hypot(x - lx, z - lz) - bodyR(A);
     if (d < reach && d < bd) { bd = d; best = k; }
   }
   return best;
@@ -683,7 +685,7 @@ function frame(now: number) {
   if (idle && !shapeOn) { shapeOn = true; shapeT = 0; loadShape(shapeK, sh); sh.pos[0] = leader[0]; sh.pos[2] = leader[2]; sh.pos[1] = terrain.floor(leader[0], leader[2]); }
   if (!idle && shapeOn && sh.blend < 0.05) { shapeOn = false; shapeK = nextShape(shapeK); }
   sh.blend = shapeOn && idle ? Math.min(1, sh.blend + dt * 2.2) : Math.max(0, sh.blend - dt * 3);
-  sh.scale = 2.4 + Math.sqrt(active) * 0.07;
+  sh.scale = 2.4 + Math.sqrt(Math.min(active, TEAM_CAP[0])) * 0.07;
   if (travel >= 0) { /* marching through a gate */ }
   else if (shapeOn && idle) { target[0] = leader[0]; target[2] = leader[2]; }
   else if (stick) {
@@ -719,7 +721,7 @@ function frame(now: number) {
 
   // health: the swarm touching something drains it at a steady, readable rate (a fast pass drains more, a punch most);
   // at zero it comes down and crumbles away. The pieces eaten along the way count too.
-  const swarmR = 3 + Math.sqrt(active) * 0.05;
+  const swarmR = bodyR(active);
   // the ground itself is eaten: the swarm digs a shallow trail as it goes (never under what still stands)
   if (active > 0 && travel < 0 && !roundOver) {
     padNear.length = 0;
@@ -728,6 +730,16 @@ function frame(now: number) {
     if ((gov.frames & 1) === 0) terrain.flush();
   }
   world.swarmXZ[0] = leader[0]; world.swarmXZ[1] = leader[2];
+  // the swarm drinks the water: a pond it sits on shrinks until it is dry (lava does not: it burns)
+  if (active > 0 && travel < 0 && !roundOver) for (const [pd, lq] of [[terrain.pond, world.liquid], [terrain.pond2, 0]] as [{ x: number; z: number; r: number }, number][]) {
+    if (lq === 2 || pd.r <= 0) continue;
+    if (Math.hypot(leader[0] - pd.x, leader[2] - pd.z) < pd.r * 1.2 + swarmR * 0.5) {
+      const was = pd.r; pd.r = Math.max(0, pd.r - dt * (0.6 + swarmR * 0.09)); drinkAcc += (was - pd.r) * 40;
+      if (Math.floor(time * 3) !== Math.floor((time - dt) * 3)) audio.eat(30);
+      if (drinkAcc >= 60 || (pd.r === 0 && drinkAcc > 0)) { addScore(drinkAcc, leader[0], leader[1] + 4, leader[2]); meal += drinkAcc * 2; drinkAcc = 0; }
+      if (pd.r === 0 && was > 0) { comboEl.style.color = "#7ad8ff"; comboEl.textContent = "💧 dry!"; comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop"); addScore(400 * district, pd.x, 3, pd.z, true); }
+    }
+  }
   const hitRate = (1 + 1.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 4 : 0)) * (1 + Math.sqrt(active) / 150);
   for (let b = 0; b < city.buildings.length; b++) {
     if (city.gone[b] || isPart(b)) continue;
@@ -736,7 +748,7 @@ function frame(now: number) {
     if (active > 0 && Math.hypot(B.x - leader[0], B.z - leader[2]) < half + swarmR * 0.95) { contactT[b] += dt * hitRate; contactBy[b * 4] += dt * hitRate; }
     for (let k = 1; k < 4; k++) {
       const A = swarm.A[k]; if (A < 1) continue;
-      const rr = 3 + Math.sqrt(A) * 0.05, rate = 1.6 * (1 + Math.sqrt(A) / 150);
+      const rr = bodyR(A), rate = 1.6 * (1 + Math.sqrt(A) / 150);
       if (Math.hypot(B.x - swarm.L[k * 3], B.z - swarm.L[k * 3 + 2]) < half + rr * 0.95) { contactT[b] += dt * rate; contactBy[b * 4 + k] += dt * rate; }
     }
     const T = (0.6 + B.solid / 2500) / Math.max(0.2, city.s2Arr[b * 4 + 2]) * 0.5 * hard[b];
@@ -782,7 +794,7 @@ function frame(now: number) {
   for (let k = 1; k < 4; k++) {
     if (roundT < 0 || roundOver) { swarm.LV[k * 3] = 0; swarm.LV[k * 3 + 2] = 0; swarm.SP[k] = 8; continue; }
     if (rv.dead[k] > 0) { rv.dead[k] -= dt; if (rv.dead[k] <= 0) { const a = Math.random() * 6.28; swarm.L[k * 3] = Math.cos(a) * 45; swarm.L[k * 3 + 2] = Math.sin(a) * 45; swarm.A[k] = Math.max(300, Math.floor(sizeOf(0) * 0.35)); } continue; }
-    if (rv.meal[k] >= 1) { const add = Math.floor(rv.meal[k]); rv.meal[k] -= add; swarm.A[k] = Math.min(TEAM_CAP[k], swarm.A[k] + add); }
+    if (rv.meal[k] >= 1) { const add = Math.floor(rv.meal[k]); rv.meal[k] -= add; swarm.A[k] = swarm.A[k] + add; }
     const A = swarm.A[k], lx = swarm.L[k * 3], lz = swarm.L[k * 3 + 2];
     rv.think[k] -= dt;
     if (rv.think[k] <= 0) {
@@ -810,9 +822,9 @@ function frame(now: number) {
   // ---- swarm eats swarm: a clearly bigger swarm that catches a smaller one drains it into itself
   for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
     if (i === j) continue;
-    const Ai = sizeOf(i), Aj = sizeOf(j); if (Ai < 1 || Aj < 1 || Ai < Aj * 1.15 || roundT < (bossK > 0 ? 2 : 7) || roundOver || (j === 0 && safeT > 0)) continue;
+    const Ai = sizeOf(i), Aj = sizeOf(j); if (Ai < 1 || Aj < 1 || Ai < Aj * 1.1 || roundT < (bossK > 0 ? 2 : 7) || roundOver || (j === 0 && safeT > 0)) continue;
     const ix = i === 0 ? leader[0] : swarm.L[i * 3], iz = i === 0 ? leader[2] : swarm.L[i * 3 + 2], jx = j === 0 ? leader[0] : swarm.L[j * 3], jz = j === 0 ? leader[2] : swarm.L[j * 3 + 2];
-    const reach = (4 + Math.sqrt(Ai) * 0.05 + Math.sqrt(Aj) * 0.05) * 0.8;
+    const reach = (bodyR(Ai) + bodyR(Aj) - 2) * 0.8;
     if (Math.hypot(ix - jx, iz - jz) > reach) continue;
     const take = Math.min(Aj, Math.ceil(dt * (Ai * 0.35 + 300)));
     if (j === 0) { active -= take; shake = Math.max(shake, 0.4); } else swarm.A[j] -= take;
@@ -822,7 +834,10 @@ function frame(now: number) {
       else { swarm.A[j] = 0; rv.dead[j] = j === bossK ? Infinity : 3; if (i === 0) { audio.thump(1); for (let c = 0; c < 4; c++) setTimeout(() => audio.chime(6 + c), c * 100); } }
     }
   }
-  safeT = Math.max(0, safeT - dt);
+  safeT = Math.max(0, safeT - dt); warnT -= dt;
+  if (bossK > 0 && swarm.A[bossK] >= 1 && warnT <= 0 && active < swarm.A[bossK] * 1.1 && Math.hypot(leader[0] - swarm.L[bossK * 3], leader[2] - swarm.L[bossK * 3 + 2]) < bodyR(active) + bodyR(swarm.A[bossK])) {
+    warnT = 1.6; pops.push({ x: leader[0], y: leader[1] + 5, z: leader[2], t: 0, txt: "⚠️ grow first!", big: true }); audio.thump(0.4);
+  }
   if (playerDead > 0) { playerDead -= dt; if (playerDead <= 0) { active = Math.round(START_SIZE + bestActive * 0.3); safeT = 4; leader[0] = (Math.random() - 0.5) * 60; leader[2] = (Math.random() - 0.5) * 60; target[0] = leader[0]; target[2] = leader[2]; camX = leader[0]; camZ = leader[2]; } }
   // ---- the end of the round: everyone is ranked by size
   if (!roundOver) checkGoal();
@@ -839,7 +854,7 @@ function frame(now: number) {
   if ((gov.frames & 255) === 0) save();
 
   // camera: behind and above the seed, pulling back as the swarm grows
-  const want = 15 + Math.sqrt(active) * 0.13 + (fighting ? 14 : 0) + sh.blend * sh.scale * 1.2;
+  const want = 15 + Math.sqrt(Math.min(active, TEAM_CAP[0])) * 0.13 + (fighting ? 14 : 0) + sh.blend * sh.scale * 1.2;
   // opening: close and low on the glowing seed, rising and pulling back over ~3 s
   const open = Math.min(1, time / 3.2), ease = open * open * (3 - 2 * open);
   const wantD = (2.2 + (want - 2.2) * ease) * userZoom;
@@ -878,12 +893,15 @@ function frame(now: number) {
     if (countN.textContent !== txt) { countN.textContent = txt; countBox.classList.remove("pop"); void countBox.offsetWidth; countBox.classList.add("pop"); }
     const tot = 0, eat = 0;
     void tot; void eat;
-    goalFill.style.width = `${(Math.min(1, Math.max(0, goalProgress())) * 100).toFixed(1)}%`;
+    const fmt = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+    const gp = LV.goal === "rival" && bossK > 0 && swarm.A[bossK] >= 1 ? active / (swarm.A[bossK] * 1.1) : goalProgress();
+    goalFill.style.width = `${(Math.min(1, Math.max(0, gp)) * 100).toFixed(1)}%`;
     const cnt = LV.goal === "wreck" ? ` ${Math.min(mine, LV.n)}/${LV.n}` : LV.goal === "gold" ? ` ${Math.min(goldMine, LV.n)}/${LV.n}` : "";
-    const gt = `${GOAL_ICON[LV.goal]} ${goalSentence(LV)}${cnt ? " ·" + cnt : ""}`;
+    let gt = `${GOAL_ICON[LV.goal]} ${goalSentence(LV)}${cnt ? " ·" + cnt : ""}`;
+    if (LV.goal === "rival" && bossK > 0 && swarm.A[bossK] >= 1) gt = active >= swarm.A[bossK] * 1.1 ? "🔵 You are bigger: eat it now!" : `🔵 Too big! Grow to ${fmt(swarm.A[bossK] * 1.1)} first`;
     if (goalTxt.textContent !== gt) { goalTxt.textContent = gt; goalTxt.classList.remove("pop"); void goalTxt.offsetWidth; goalTxt.classList.add("pop"); }
     timerEl.textContent = "";
-    const fmt = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
+    const fmt2 = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
     boardEl.innerHTML = [0, 1].filter((k) => k === 0 || k === bossK).map((k) => ({ k, n: sizeOf(k) })).sort((a, b) => b.n - a.n).map((o) => `<div class="${o.k === 0 ? "me" : ""}">${`<i style="background:${["#ffc35a", "#5aa6ff", "#ff5a60", "#6dff7a"][o.k]}"></i>`}${fmt(o.n)}</div>`).join("");
   }
   if (showHud && hudCanvas.style.display !== "none" && (gov.frames & 3) === 0) gov.graph(hud, `${active.toLocaleString()} mites  ${cw}x${ch} @${Math.round(tier.scale * 100)}%`);

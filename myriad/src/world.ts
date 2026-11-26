@@ -165,10 +165,12 @@ void main() {
   c += smoothstep(0.25, 0.0, depth) * vec3(0.5, 0.55, 0.6) * 0.5; // a pale rim where it meets the shore
   float spark = pow(max(0.0, sin(w.x * 3.1) * sin(w.y * 2.7)), 30.0) * (0.35 + 0.65 * rest);
   // the swarm on the surface: splashes, foam and rings where it flies low over the water
-  float swd = 1.0 - exp(-texture(uLight, uv).r * 0.006);
+  float swd = 1.0 - exp(-texture(uLight, uv).r * 0.03);
   float ringS = 0.5 + 0.5 * sin(length(vW.xz - uSwarm) * 3.0 - uTime * 9.0);
   float foam = swd * (0.55 + 0.45 * vn(vW.xz * 4.0 + uTime * 2.0)) + swd * ringS * 0.5 * smoothstep(30.0, 2.0, length(vW.xz - uSwarm));
-  c = mix(c, vec3(0.92, 0.97, 1.0), clamp(foam, 0.0, 1.0) * 0.75);
+  c = mix(c, vec3(0.92, 0.97, 1.0), clamp(foam, 0.0, 1.0) * 0.9);
+  // a ring of froth at the shrinking edge, where the water is being drunk
+  c += vec3(0.8, 0.9, 1.0) * smoothstep(0.85, 1.0, length(vW.xz - uPond.xy) / (uPond.z * 0.8)) * 0.6;
   float rip = smoothstep(0.92, 1.0, sin(length(vW.xz - uPond.xy) * 2.2 - uTime * 1.6)) * 0.18; // slow rings across the pond
   c += rip;
   c += spark * 0.8;
