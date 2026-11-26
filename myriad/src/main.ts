@@ -265,8 +265,8 @@ function startLevel(i: number, fresh = false) {
   }
   if (LV.goal === "castle") {
     // the biggest thing still standing, made far tougher: grow first, then bring it down
-    let bs = -1; for (let b = 0; b < city.buildings.length; b++) if (!city.gone[b] && !isPart(b) && city.buildings[b].collapseAt < 0 && city.buildings[b].solid > bs) { bs = city.buildings[b].solid; castle = b; }
-    if (castle >= 0) hard[castle] = LV.n;
+    let bs = -1; for (let b = 0; b < city.buildings.length; b++) if (!city.gone[b] && !isPart(b) && city.buildings[b].collapseAt < 0 && hpOf[b] > 0.95 && city.buildings[b].solid > bs) { bs = city.buildings[b].solid; castle = b; }
+    if (castle >= 0) { hard[castle] = LV.n; contactT[castle] = 0; for (let k = 0; k < 4; k++) contactBy[castle * 4 + k] = 0; }
   }
   roundT = -1.6; roundOver = false;
   introEl.innerHTML = `<div>${GOAL_ICON[LV.goal]}</div><p>${goalSentence(LV)}</p>`;
