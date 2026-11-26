@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "build:qa": "vite build --mode qa --outDir dist-qa",
     "typecheck": "tsc --noEmit",
-    "build:poki": "vite build --mode poki --outDir dist-poki"
+    "build:poki": "vite build --mode poki --outDir dist-poki",
+    "playtest": "node qa/playtest.cjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

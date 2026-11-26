@@ -10,7 +10,7 @@ for (let d = 1; d <= 5; d++) {
   const seed = 1000 + d * 37;
   LEVELS.push({ land: d, goal: "wreck", n: d === 1 ? 4 : 6 + d * 2, seed });
   LEVELS.push({ land: d, goal: "gold", n: d === 1 ? 2 : d < 4 ? 3 : 4, seed });
-  if (d >= 2) LEVELS.push({ land: d, goal: "rival", n: [0, 0, 0.5, 0.7, 1.3, 1.6][d], seed });
+  if (d >= 2) LEVELS.push({ land: d, goal: "rival", n: [0, 0, 0.5, 0.6, 0.75, 0.85][d], seed });
   LEVELS.push({ land: d, goal: "castle", n: 2 + d * 0.9, seed });
   LEVELS.push({ land: d, goal: "giant", n: 1, seed });
   LEVELS.push({ land: d, goal: "gate", n: 1, seed });
@@ -26,7 +26,7 @@ export function goalSentence(L: Level) {
     case "wreck": return `Destroy ${L.n} houses`;
     case "gold": return `Grab the golden star${L.n > 1 ? "s" : ""}`;
     case "castle": return `Break the big tower`;
-    case "rival": return L.n > 1 ? `Grow bigger, then eat the blue swarm` : `Eat the blue swarm`;
+    case "rival": return `Catch and eat the blue swarm`;
     case "giant": return `The giant wakes! Bring it down`;
     case "gate": return `The gate is open: on to the next land!`;
   }

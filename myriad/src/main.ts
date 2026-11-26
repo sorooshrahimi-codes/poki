@@ -240,7 +240,8 @@ let mine = 0, goldMine = 0, castle = -1, bossK = -1, bestActive = 400, builtLand
 const hard = new Float32Array(64).fill(1);
 const introEl = document.getElementById("intro")!, goalTxt = document.getElementById("goalTxt")!, landsEl = document.getElementById("lands")!;
 function startLevel(i: number, fresh = false) {
-  lvlI = i; LV = LEVELS[i]; roundLen = Infinity; stepBusy = false; stepT = 0;
+  lvlI = i; LV = LEVELS[i]; roundLen = Infinity; stepBusy = false; stepT = 0; stuckT = 0; lastProg = 0;
+  qaLog(`STEP ${i} land=${LV.land} lap=${lap} goal=${LV.goal} n=${LV.n}`);
   if (fresh || LV.land + lap * 5 !== builtLand) {
     // a new land: built fresh, the swarm keeps its size
     district = LV.land + lap * 5; builtLand = district;
@@ -258,7 +259,7 @@ function startLevel(i: number, fresh = false) {
   for (let k = 1; k < 4; k++) { swarm.A[k] = 0; rv.dead[k] = Infinity; }
   if (LV.goal === "rival") {
     // one blue swarm, somewhere across the land: smaller at first, later bigger than you
-    bossK = 1; swarm.A[1] = Math.max(300, Math.round(active * LV.n)); rv.dead[1] = 0; rv.meal[1] = 0;
+    bossK = 1; swarm.A[1] = Math.max(300, Math.round(active * LV.n)); rv.dead[1] = 0; rv.meal[1] = 0; rivalCap = swarm.A[1] * 1.2;
     const a = Math.atan2(-leader[2], -leader[0]) + (Math.random() - 0.5);
     swarm.L[3] = Math.cos(a) * 40; swarm.L[5] = Math.sin(a) * 40; swarm.L[4] = terrain.floor(swarm.L[3], swarm.L[5]);
   }
@@ -301,6 +302,23 @@ function goalProgress() {
 const freeGold = { on: false, x: 0, z: 0 };
 /** how many things are still standing (not counting the giant) */
 function standing() { let n = 0; for (let b = 0; b < city.buildings.length; b++) if (!city.gone[b] && !isPart(b) && city.buildings[b].collapseAt < 0) n++; return n; }
+// ---------------------------------------------------------------- never stuck: if a task makes no progress, the game helps (and at last moves on)
+let stuckT = 0, lastProg = 0, rivalCap = 0, hintT = 0;
+function toast(t: string, col = "#ffe27a") { comboEl.style.color = col; comboEl.textContent = t; comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop"); }
+function watchdog(dt: number) {
+  if (roundT < 0 || stepBusy || roundOver || LV.goal === "gate") { stuckT = 0; return; }
+  const p = LV.goal === "rival" && bossK > 0 && swarm.A[bossK] >= 1 ? Math.min(1, active / (swarm.A[bossK] * 1.1)) : goalProgress();
+  if (p > lastProg + 0.005) { lastProg = p; stuckT = 0; } else stuckT += dt;
+  // the blue swarm never stays out of reach: when you cannot catch up, it starves and shrinks
+  if (LV.goal === "rival" && bossK > 0 && swarm.A[bossK] >= 1 && active < swarm.A[bossK] * 1.1 && stuckT > 8) { swarm.A[bossK] = Math.max(active * 0.8, swarm.A[bossK] * (1 - 0.08 * dt)); rivalCap = Math.min(rivalCap, swarm.A[bossK] * 1.05); }
+  if (LV.goal === "castle" && castle >= 0 && stuckT > 30) hard[castle] = Math.max(1, hard[castle] * (1 - 0.1 * dt));
+  if (LV.goal === "giant" && giant >= 0 && stuckT > 40) gContact += dt * 2;
+  if (stuckT > 15 && hintT <= 0) { hintT = 12; toast("👉 follow the arrow"); }
+  hintT -= dt;
+  if (stuckT > 90) { qaLog(`AUTO ${lvlI} ${LV.goal}`); stuckT = 0; stepDone(); }
+}
+const QA = import.meta.env.MODE === "qa", BOT = QA && params.get("bot") === "1";
+function qaLog(m: string) { if (QA) console.log(`[gm] t=${time.toFixed(1)} size=${Math.round(active)} score=${Math.round(score)} ${m}`); }
 function checkGoal() {
   if (roundT < 0 || stepBusy || LV.goal === "gate") return;
   if (LV.goal === "wreck" && standing() === 0) { stepDone(); return; } // nothing left to knock down: done
@@ -309,6 +327,7 @@ function checkGoal() {
 }
 function stepDone() {
   if (stepBusy) return; stepBusy = true;
+  qaLog(`DONE ${lvlI} ${LV.goal} took=${roundT.toFixed(1)}`);
   comboEl.style.color = "#8dff7a"; comboEl.textContent = "✔"; comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop");
   for (let k = 0; k < 4; k++) setTimeout(() => audio.chime(4 + k), k * 120);
   shake = Math.max(shake, 0.5);
@@ -579,7 +598,7 @@ function drawFx(dt: number) {
       fctx.font = `${Math.round(30 * dpr * pulse)}px sans-serif`; fctx.fillText(o.icon, pr[0], by - s2 * 2.1);
     } else {
       let ax = pr[0] - W / 2, ay = pr[1] - H / 2; if (pr[2] < 0) { ax = -ax; ay = -ay; }
-      const a = Math.atan2(ay, ax), m = Math.min((W / 2 - 46 * dpr) / Math.abs(Math.cos(a) || 1e-3), (H / 2 - 90 * dpr) / Math.abs(Math.sin(a) || 1e-3));
+      const a = Math.atan2(ay, ax), m = Math.min((W / 2 - 46 * dpr) / Math.abs(Math.cos(a) || 1e-3), (H / 2 - (ay < 0 ? 175 : 100) * dpr) / Math.abs(Math.sin(a) || 1e-3)); // clear of the HUD at the top
       const px = W / 2 + Math.cos(a) * m, py = H / 2 + Math.sin(a) * m, s2 = 30 * dpr * pulse;
       fctx.font = `${Math.round(30 * dpr)}px sans-serif`; fctx.fillText(o.icon, px - Math.cos(a) * 40 * dpr, py - Math.sin(a) * 40 * dpr);
       fctx.translate(px, py); fctx.rotate(a); fctx.fillStyle = "#ffd23c";
@@ -617,13 +636,14 @@ function drawFx(dt: number) {
 
 // ---------------------------------------------------------------- loop
 let time = 0, last = 0, refreshSamples = 0, refreshAcc = 0;
+const DTMAX = import.meta.env.MODE === "qa" && params.has("dtmax") ? Number(params.get("dtmax")) : 1 / 30;
 function frame(now: number) {
   requestAnimationFrame(frame);
   const ms = last ? now - last : 16.7;
   last = now;
   if (refreshSamples < 90 && ms < 40) { refreshAcc += ms; refreshSamples++; if (refreshSamples === 90) gov.setRefresh(1000 / (refreshAcc / 90)); }
   gov.push(ms);
-  const dt = Math.min(1 / 30, ms / 1000);
+  const dt = Math.min(DTMAX, ms / 1000);
   time += dt;
   if (forcedTier === null) gov.update(dt);
   const tier = TIERS[gov.tier];
@@ -698,6 +718,14 @@ function frame(now: number) {
   if (!idle && shapeOn && sh.blend < 0.05) { shapeOn = false; shapeK = nextShape(shapeK); }
   sh.blend = shapeOn && idle ? Math.min(1, sh.blend + dt * 2.2) : Math.max(0, sh.blend - dt * 3);
   sh.scale = 2.4 + Math.sqrt(Math.min(active, TEAM_CAP[0])) * 0.07;
+  if (BOT && travel < 0 && !roundOver) {
+    // the QA bot: go for the arrow; while too small for the blue swarm, eat the nearest thing instead
+    const o = objective(); lastMove = time;
+    let tx = o ? o.x : leader[0], tz = o ? o.z : leader[2];
+    if (!o || (LV.goal === "rival" && bossK > 0 && active < swarm.A[bossK] * 1.1)) { let bd = 1e9; for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b] || isPart(b)) continue; const B = city.buildings[b], d = Math.hypot(B.x - leader[0], B.z - leader[2]); if (d < bd) { bd = d; tx = B.x; tz = B.z; } } }
+    target[0] = tx; target[2] = tz; hasTarget = true;
+    if (winEl.classList.contains("show")) (winEl.querySelector(".go") as HTMLElement | null)?.click();
+  } else
   if (travel >= 0) { /* marching through a gate */ }
   else if (shapeOn && idle) { target[0] = leader[0]; target[2] = leader[2]; }
   else if (stick) {
@@ -774,7 +802,7 @@ function frame(now: number) {
         if (kb === 0) { mine++; const cb = time - lastKill < 4 ? combo + 1 : 1; addScore((50 + B.solid * 0.05) * cb, B.x, city.s2Arr[b * 4 + 1] + 3, B.z); }
         if (kb === 0) meal += prize; else rv.meal[kb] += prize * (kb === bossK ? 0.4 : 1.3 * catchUp(kb));
         if (b === gold) {
-          const bonus = Math.round(Math.max(700, sizeOf(kb) * 0.45) * (kb === 0 ? 1 : catchUp(kb)));
+          const bonus = Math.round(600 * district);
           if (kb === 0) { meal += bonus; goldMine++; audio.chime(9); shake = Math.max(shake, 1); addScore(500 * district, B.x, city.s2Arr[b * 4 + 1] + 5, B.z, true); } else rv.meal[kb] += bonus;
           comboEl.textContent = kb === 0 ? `🌟 +${bonus}` : `🌟 ✖`; comboEl.style.color = kb === 0 ? "" : TEAM_CSS[kb];
           comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop");
@@ -814,13 +842,13 @@ function frame(now: number) {
   }
   if (freeGold.on && !stepBusy && Math.hypot(freeGold.x - leader[0], freeGold.z - leader[2]) < bodyR(active) + 2.5) {
     freeGold.on = false; goldMine++; goldNext = roundT + 1.2; audio.chime(9); shake = Math.max(shake, 1);
-    const bonus = Math.round(Math.max(700, active * 0.2)); meal += bonus;
+    const bonus = Math.round(600 * district); meal += bonus;
     addScore(500 * district, freeGold.x, terrain.floor(freeGold.x, freeGold.z) + 5, freeGold.z, true);
   }
   for (let k = 1; k < 4; k++) {
     if (roundT < 0 || roundOver) { swarm.LV[k * 3] = 0; swarm.LV[k * 3 + 2] = 0; swarm.SP[k] = 8; continue; }
     if (rv.dead[k] > 0) { rv.dead[k] -= dt; if (rv.dead[k] <= 0) { const a = Math.random() * 6.28; swarm.L[k * 3] = Math.cos(a) * 45; swarm.L[k * 3 + 2] = Math.sin(a) * 45; swarm.A[k] = Math.max(300, Math.floor(sizeOf(0) * 0.35)); } continue; }
-    if (rv.meal[k] >= 1) { const add = Math.floor(rv.meal[k]); rv.meal[k] -= add; swarm.A[k] = swarm.A[k] + add; }
+    if (rv.meal[k] >= 1) { const add = Math.floor(rv.meal[k]); rv.meal[k] -= add; swarm.A[k] = k === bossK ? Math.min(rivalCap, swarm.A[k] + add) : swarm.A[k] + add; }
     const A = swarm.A[k], lx = swarm.L[k * 3], lz = swarm.L[k * 3 + 2];
     rv.think[k] -= dt;
     if (rv.think[k] <= 0) {
@@ -867,6 +895,7 @@ function frame(now: number) {
   if (playerDead > 0) { playerDead -= dt; if (playerDead <= 0) { active = Math.round(START_SIZE + bestActive * 0.3); safeT = 4; leader[0] = (Math.random() - 0.5) * 60; leader[2] = (Math.random() - 0.5) * 60; target[0] = leader[0]; target[2] = leader[2]; camX = leader[0]; camZ = leader[2]; } }
   // ---- the end of the round: everyone is ranked by size
   if (!roundOver) checkGoal();
+  watchdog(dt);
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
   // a storm hits harder than a swarm at rest; a punch hits hardest
   city.boost = 1 + 2.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 6 : 0);
