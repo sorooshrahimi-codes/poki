@@ -3,7 +3,7 @@ import { invert, lookAt, mul, perspective } from "./gl.ts";
 import { Governor, TIERS } from "./perf.ts";
 import { Post } from "./post.ts";
 import { S, Swarm, TEAM_CAP } from "./swarm.ts";
-import { WALL, World, type Palette } from "./world.ts";
+import { SHAPE, WALL, World, wallAt, type Palette } from "./world.ts";
 import { City, theme, type Kind } from "./city.ts";
 import { poki } from "./poki.ts";
 import { Grass } from "./grass.ts";
@@ -11,6 +11,7 @@ import { Audio } from "./audio.ts";
 import { Terrain } from "./terrain.ts";
 import { loadShape, nextShape } from "./shapes.ts";
 import { LEVELS, GOAL_ICON, LAND_ICON, firstOf, goalSentence, stepsOf, type Level } from "./saga.ts";
+import { WATER } from "./terrain.ts";
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
 const hudCanvas = document.getElementById("hud") as HTMLCanvasElement;
@@ -57,8 +58,11 @@ const LANDS: Land[] = [
     pal: { skyLow: [0.30, 0.08, 0.06], skyTop: [0.05, 0.02, 0.05], horizon: [1.00, 0.30, 0.08], stoneA: [0.13, 0.11, 0.12], stoneB: [0.28, 0.24, 0.25], fog: [0.16, 0.06, 0.05], grassA: [0.24, 0.46, 0.14], grassB: [0.55, 0.72, 0.20] } },
 ];
 function landOf(d: number) { return LANDS[(d - 1) % LANDS.length]; }
+// each land has its own outline (lobes, depth): round meadow, four-lobed forest, six-sided castle land, a long ice valley, a star of lava
+const SHAPES: [number, number][] = [[0, 0], [4, 0.2], [6, 0.14], [2, 0.32], [8, 0.13]];
 function makeLand(d: number, seed = d) {
   const L = landOf(d);
+  [SHAPE.k, SHAPE.a] = SHAPES[(d - 1) % LANDS.length];
   let a = seed * 101 + 7;
   const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
   const list: { x: number; z: number; kind: Kind; seed: number; scale?: number; y?: number }[] = [];
@@ -72,7 +76,7 @@ function makeLand(d: number, seed = d) {
   for (let gz = -n; gz <= n; gz++) for (let gx = -n; gx <= n; gx++) {
     if (gx === 0 && gz === 0) continue; // the square in the middle stays open: the seed starts there
     const x = gx * L.gap + (rnd() - 0.5) * 6, z = gz * L.gap + (rnd() - 0.5) * 6;
-    if (Math.hypot(x, z) > WALL - 9 || rnd() < L.skip) continue;
+    if (Math.hypot(x, z) > wallAt(x, z) - 9 || rnd() < L.skip) continue;
     if (Math.hypot(x - pond.x, z - pond.z) < pond.r + 6) continue; // nothing stands in a pond
     if (Math.hypot(x - terrain.pond2.x, z - terrain.pond2.z) < terrain.pond2.r + 6) continue;
     let r = rnd(), kind = L.mix[0][0];
@@ -82,7 +86,9 @@ function makeLand(d: number, seed = d) {
   theme.snow = L.snow;
   theme.giant = (d - 1) % LANDS.length;
   world.pal = L.pal;
-  world.scenery(d, d % LANDS.length); // beyond the wall: the next land
+  // beyond the wall: the next land ahead (north), the land you came from behind (south)
+  world.scenery(d, d % LANDS.length, d > 1 ? (d - 2) % LANDS.length : -1);
+  world.nextPal = LANDS[d % LANDS.length].pal; world.prevPal = d > 1 ? LANDS[(d - 2) % LANDS.length].pal : undefined;
   world.liquid = L.liquid; terrain.amp = L.amp;
   const out = list.slice(0, 56); // (64 volumes: the land, plus six for the giant)
   // the hills, with a level pad under every building (sunk a little, so it sits in the ground)
@@ -92,9 +98,9 @@ function makeLand(d: number, seed = d) {
 }
 // progress is kept: the land you are on and how big the swarm has grown
 const SAVE = "glowmites-save";
-let saved: { land: number; active: number; lap?: number } = { land: 1, active: 400 };
+let saved: { land: number; active: number; lap?: number; score?: number; best?: number[] } = { land: 1, active: 400 };
 try { const j = JSON.parse(localStorage.getItem(SAVE + "2") || "null"); if (j && j.land >= 1 && j.land <= 5) saved = j; } catch { /* private mode */ }
-function save() { try { localStorage.setItem(SAVE + "2", JSON.stringify({ land: LV.land, lap, active: Math.max(400, Math.round(active)) })); } catch { /* ignore */ } }
+function save() { try { localStorage.setItem(SAVE + "2", JSON.stringify({ land: LV.land, lap, active: Math.max(400, Math.round(active)), score, best: bestTime })); } catch { /* ignore */ } }
 // you come back to the start of the land you were in, with the swarm you had
 let lvlI = params.has("lvl") ? Math.min(LEVELS.length - 1, Math.max(0, Number(params.get("lvl")) - 1)) : firstOf(saved.land);
 let LV: Level = LEVELS[lvlI];
@@ -152,12 +158,83 @@ function ground(clientX: number, clientY: number, out: Float32Array) {
   const t = ay / (ay - by); if (!(t > 0)) return false;
   out[0] = ax + (bx - ax) * t; out[1] = az + (bz - az) * t; return true;
 }
+let burnAcc = 0;
+const padNear: number[] = [];
+function keepPad(x: number, z: number) {
+  for (const b of padNear) { const B = city.buildings[b], h = (32 * 0.28 * (city.s2Arr[b * 4] || 1)) / 2 + 0.9; if (Math.abs(x - B.x) < h && Math.abs(z - B.z) < h) return true; }
+  return false;
+}
 function xform(out: Float32Array, m: Float32Array, v: Float32Array) {
   for (let i = 0; i < 4; i++) out[i] = m[i] * v[0] + m[4 + i] * v[1] + m[8 + i] * v[2] + m[12 + i] * v[3];
 }
 let down = false;
 countNInit();
 function countNInit() { const el = document.getElementById("countN"); if (el) el.textContent = String(Number(params.get("start") ?? 800)); }
+// ---------------------------------------------------------------- score: everything you do is worth points; they fly up where it happened
+let score = 0, landScore = 0, landStart = 0, shownScore = 0;
+let bestTime: number[] = [];
+const pops: { x: number; y: number; z: number; t: number; txt: string; big: boolean }[] = [];
+function addScore(n: number, x: number, y: number, z: number, big = false) {
+  n = Math.round(n); score += n; landScore += n;
+  pops.push({ x, y, z, t: 0, txt: `+${n.toLocaleString("en")}`, big }); if (pops.length > 24) pops.shift();
+}
+// ---------------------------------------------------------------- the leaderboard: one shared list of best scores (falls back to this device only)
+const LB_URL = location.hostname.endsWith("workers.dev") ? "/api/lb" : "https://kidgames.soroosh-ra.workers.dev/api/lb";
+const ME = (() => {
+  let id = "", name = "";
+  try { id = localStorage.getItem("glowmites-id") || ""; name = localStorage.getItem("glowmites-name") || ""; } catch { /* */ }
+  if (!id) { id = Array.from({ length: 16 }, () => "abcdefghijklmnopqrstuvwxyz0123456789"[Math.floor(Math.random() * 36)]).join(""); try { localStorage.setItem("glowmites-id", id); } catch { /* */ } }
+  if (!name) { name = `Mite ${1000 + Math.floor(Math.random() * 9000)}`; try { localStorage.setItem("glowmites-name", name); } catch { /* */ } }
+  return { id, name };
+})();
+type Row = { id: string; n: string; s: number; l: number };
+let lbRows: Row[] = [], lastSent = 0;
+async function lbCall(post: boolean): Promise<Row[] | null> {
+  try {
+    const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), 5000);
+    const r = await fetch(LB_URL, post ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: ME.id, name: ME.name, score: Math.round(score), land: district }), signal: ctl.signal } : { signal: ctl.signal });
+    clearTimeout(tm); if (!r.ok) return null; lbRows = await r.json(); if (post) lastSent = score; return lbRows;
+  } catch { return null; }
+}
+const myRank = () => { const i = lbRows.findIndex((e) => e.id === ME.id.slice(0, 6)); return i >= 0 ? i + 1 : 0; };
+addEventListener("visibilitychange", () => { if (document.hidden && score > lastSent) void lbCall(true); });
+const lbEl = document.getElementById("lb")!;
+let lbWasOver = false;
+function showBoard() {
+  lbWasOver = roundOver; roundOver = true;
+  const fmt = (n: number) => n.toLocaleString("en");
+  const render = (rows: Row[] | null) => {
+    const list = (rows && rows.length ? rows : [{ id: ME.id.slice(0, 6), n: ME.name, s: Math.round(score), l: district }]).slice(0, 30);
+    lbEl.innerHTML = `<div class="box"><button class="x">✕</button><h2>🏆 Leaderboard</h2>
+      <div class="meRow"><input maxlength="16" value="${ME.name.replace(/"/g, "")}"/><b>⭐ ${fmt(Math.round(score))}</b></div>
+      ${rows ? "" : `<p class="off">offline: only your own score</p>`}
+      <div class="list">${list.map((e, i) => `<div class="r${e.id === ME.id.slice(0, 6) ? " me" : ""}"><span>${i < 3 ? ["🥇", "🥈", "🥉"][i] : i + 1}</span><em>${e.n.replace(/[<>&]/g, "")}</em><i>${LAND_ICON[(e.l - 1) % 5] ?? ""}</i><b>${fmt(e.s)}</b></div>`).join("")}</div></div>`;
+    lbEl.querySelector(".x")!.addEventListener("click", () => { lbEl.classList.remove("show"); roundOver = lbWasOver; });
+    const inp = lbEl.querySelector("input")!;
+    inp.addEventListener("change", () => { ME.name = inp.value.trim().slice(0, 16) || ME.name; try { localStorage.setItem("glowmites-name", ME.name); } catch { /* */ } void lbCall(true).then(render); });
+  };
+  render(lbRows.length ? lbRows : null); lbEl.classList.add("show");
+  void lbCall(score > lastSent).then(render);
+}
+document.getElementById("lbBtn")!.addEventListener("click", showBoard);
+// ---------------------------------------------------------------- a land is free: what you scored, how fast, where you stand
+const winEl = document.getElementById("win")!;
+function landCard() {
+  roundOver = true; poki.gameplayStop();
+  const t = Math.round(time - landStart), li = (LV.land - 1) % 5, prevBest = bestTime[li];
+  if (!prevBest || t < prevBest) bestTime[li] = t;
+  const mm = (x: number) => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}`;
+  winEl.innerHTML = `<div class="card"><div class="t">${LAND_ICON[li]} Land ${LV.land} is free!</div>
+    <div class="sc">⭐ +${landScore.toLocaleString("en")}</div>
+    <div class="row">⏱ ${mm(t)}${prevBest ? (t < prevBest ? " · new best!" : ` · best ${mm(prevBest)}`) : ""}</div>
+    <div class="row tot">Total ⭐ ${Math.round(score).toLocaleString("en")}</div>
+    <div class="row rk">🏆 …</div>
+    <div class="btns"><button class="lbb">🏆</button><button class="go">▶</button></div></div>`;
+  winEl.classList.add("show"); save();
+  void lbCall(true).then((r) => { const rk = winEl.querySelector(".rk"); if (rk) rk.textContent = r ? `🏆 #${myRank() || "–"} of ${r.length}` : "🏆 offline"; });
+  winEl.querySelector(".lbb")!.addEventListener("click", showBoard);
+  winEl.querySelector(".go")!.addEventListener("click", () => { poki.commercialBreak().then(() => { winEl.classList.remove("show"); roundOver = false; poki.gameplayStart(); }); });
+}
 // ---------------------------------------------------------------- the journey: one clear task at a time, lands joined by gates
 let mine = 0, goldMine = 0, castle = -1, bossK = -1, bestActive = 400, builtLand = -1, lap = 0, stepBusy = false, stepT = 0;
 const hard = new Float32Array(64).fill(1);
@@ -172,6 +249,7 @@ function startLevel(i: number, fresh = false) {
     active = Math.max(START_SIZE, keep);
     contactT.fill(0); hpOf.fill(1); hpPrev.fill(1); wasGone.fill(0); killer.fill(-1); combo = 0;
     giant = -1; parts = []; stompT = -1; giantState = "sleep"; progress = 0; landT = 0; firstBite = lvlI > 0;
+    landScore = 0; landStart = time;
     swarm.reset = true; swarm.open = false; hasTarget = false; lastMove = time;
     if (travel < 0) { leader[0] = 0; leader[2] = 0; target[0] = 0; target[2] = 0; camX = 0; camZ = 0; }
   }
@@ -195,6 +273,7 @@ function startLevel(i: number, fresh = false) {
   boardEl.style.display = bossK > 0 ? "" : "none";
   document.getElementById("fade")!.classList.remove("on");
   drawLands();
+  if (LV.goal === "gate" && !fresh) landCard();
   audio.chime(2);
   save();
   poki.gameplayStart();
@@ -230,6 +309,8 @@ function stepDone() {
   for (let k = 0; k < 4; k++) setTimeout(() => audio.chime(4 + k), k * 120);
   shake = Math.max(shake, 0.5);
   if (LV.goal === "giant") { city.bloom = 3.5; shake = 1; }
+  const bonus = { wreck: 300, gold: 300, rival: 2000, castle: 1000, giant: 5000, gate: 0 }[LV.goal] * district;
+  if (bonus) addScore(bonus, leader[0], leader[1] + 6, leader[2], true);
   setTimeout(() => startLevel(Math.min(LEVELS.length - 1, lvlI + 1)), 1300);
 }
 // the gate: walk up to it and the swarm marches through, out of this land and straight into the next
@@ -256,7 +337,7 @@ function enterStep() {
   if (leader[2] < WALL - 12) { travel = -1; swarm.open = false; }
 }
 function nextLand() { stepDone(); }
-const timerEl = document.getElementById("timer")!, boardEl = document.getElementById("board")!;
+const timerEl = document.getElementById("timer")!, boardEl = document.getElementById("board")!, scoreN = document.getElementById("scoreN")!;
 const hand = document.getElementById("hand")!, countN = document.getElementById("countN")!, countBox = document.getElementById("count")!, goalFill = document.getElementById("goalFill")!;
 // test builds only: five quick taps on the swarm counter skip to the next land
 const SKIP_TEST = import.meta.env.MODE !== "poki";
@@ -351,7 +432,7 @@ function sizeOf(k: number) { return k === 0 ? active : swarm.A[k]; }
 const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? START_SIZE);
 let meal = 0;
-queueMicrotask(() => { lap = saved.lap ?? 0; if (!params.has("start")) active = Math.max(START_SIZE, saved.active); startLevel(lvlI, true); });
+queueMicrotask(() => { lap = saved.lap ?? 0; score = saved.score ?? 0; shownScore = score; bestTime = saved.best ?? []; if (!params.has("start")) active = Math.max(START_SIZE, saved.active); startLevel(lvlI, true); });
 let landT = 0, firstBite = false;
 const contactT = new Float32Array(64), hpOf = new Float32Array(64).fill(1), killer = new Int8Array(64);
 let gContact = 0, gHp = 1;
@@ -499,6 +580,15 @@ function drawFx(dt: number) {
     fctx.restore();
   }
   void offs;
+  // the points fly up from where they were won
+  for (let k = pops.length - 1; k >= 0; k--) {
+    const q = pops[k]; q.t += dt; if (q.t > 1.3) { pops.splice(k, 1); continue; }
+    project(q.x, q.y + q.t * 3, q.z, pr); if (pr[2] <= 0) continue;
+    const a = Math.min(1, (1.3 - q.t) * 2.5), sz = (q.big ? 34 : 22) * dpr * (q.t < 0.15 ? 0.6 + q.t * 2.7 : 1);
+    fctx.save(); fctx.globalAlpha = a; fctx.textAlign = "center"; fctx.font = `900 ${Math.round(sz)}px system-ui, sans-serif`;
+    fctx.lineWidth = 4 * dpr; fctx.strokeStyle = "rgba(40,20,0,0.85)"; fctx.strokeText(q.txt, pr[0], pr[1]);
+    fctx.fillStyle = q.txt.startsWith("🔥") ? "#ff7a4a" : q.big ? "#ffe27a" : "#fff3c4"; fctx.fillText(q.txt, pr[0], pr[1]); fctx.restore();
+  }
   leftEl.textContent = ""; void left;
   // the giant's own bar at the top: it flashes on every hit
   const up = giant >= 0 && !giantGone() && giantState !== "fallen" && giantState !== "sleep";
@@ -532,7 +622,8 @@ function frame(now: number) {
   if (giant < 0 && LV.goal === "giant" && roundT > 0.3) {
     // it rises on the far side of the swarm from the camera, so the player sees it come up out of the ground
     const ang = Math.atan2(leader[2] - cam[2], leader[0] - cam[0]);
-    gX = Math.max(-50, Math.min(50, leader[0] + Math.cos(ang) * 34)); gZ = Math.max(-50, Math.min(50, leader[2] + Math.sin(ang) * 34));
+    gX = leader[0] + Math.cos(ang) * 34; gZ = leader[2] + Math.sin(ang) * 34;
+    { const r = Math.hypot(gX, gZ), lim = wallAt(gX, gZ) - 14; if (r > lim) { gX *= lim / r; gZ *= lim / r; } }
     gM = landOf(district).giant / 2.4;
     GIANT_H = 32 * 0.28 * gM * 2.4;
     const lap = Math.floor((district - 1) / LANDS.length);
@@ -581,7 +672,7 @@ function frame(now: number) {
     for (let k = 0; k < parts.length; k++) if (!city.gone[parts[k]]) city.place(parts[k], partX[k], partZ[k], partY[k]);
   }
 
-  while (milestone < MILESTONES.length && active >= MILESTONES[milestone]) audio.chime(milestone++);
+  while (milestone < MILESTONES.length && active >= MILESTONES[milestone]) { addScore(MILESTONES[milestone] / 10, leader[0], leader[1] + 5, leader[2]); audio.chime(milestone++); }
   audio.swarm(active, Math.hypot(leaderVel[0], leaderVel[2]));
   // left alone (no touch, no mouse move) the swarm gathers into a shape; the next touch bursts it back
   const fighting = giant >= 0 && !giantGone() && giantState !== "fallen";
@@ -610,14 +701,18 @@ function frame(now: number) {
   else if (aiming && (down || !("ontouchstart" in window))) { pick(aimX, aimY); stickMag = 1; }
   stickEl.style.display = stick ? "block" : "none";
   if (stick) { stickEl.style.transform = `translate(${stX}px,${stY}px)`; knobEl.style.transform = `translate(${stCX - stX}px,${stCY - stY}px)`; }
-  { const r = Math.hypot(target[0], target[2]), lim = WALL - 4; if (r > lim && travel < 0) { target[0] *= lim / r; target[2] *= lim / r; } }
+  { const r = Math.hypot(target[0], target[2]), lim = wallAt(target[0], target[2]) - 4; if (r > lim && travel < 0) { target[0] *= lim / r; target[2] *= lim / r; } }
   const speed = 8.5 + Math.sqrt(active) * 0.025;
   const dx = target[0] - leader[0], dz = target[2] - leader[2], d = Math.hypot(dx, dz);
   // the seed is the finger: it gets there fast, easing in at the end
   dashT = Math.max(0, dashT - dt);
-  const vmax = speed * (dashT > 0 ? 3.2 : stick ? 0.5 + 1.4 * stickMag : 1.25);
+  // what the swarm is over: water slows it, ice makes it skate (fast, slippery), lava burns it
+  const wet = terrain.at(leader[0], leader[2]) < WATER - 0.05, inMain = Math.hypot(leader[0] - terrain.pond.x, leader[2] - terrain.pond.z) < terrain.pond.r * 1.3;
+  const liq = wet && travel < 0 ? (inMain ? world.liquid : 0) : -1;
+  if (liq === 2 && active > 60 && !roundOver) { const loss = active * 0.05 * dt; burnAcc += loss; active = Math.max(60, active - loss); if (burnAcc > active * 0.02 + 20) { pops.push({ x: leader[0], y: leader[1] + 4, z: leader[2], t: 0, txt: `🔥 -${Math.round(burnAcc)}`, big: false }); burnAcc = 0; audio.thump(0.3); } }
+  const vmax = speed * (dashT > 0 ? 3.2 : stick ? 0.5 + 1.4 * stickMag : 1.25) * (liq === 0 ? 0.65 : liq === 1 ? 1.35 : 1);
   const vx = d > 0.01 ? (dx / d) * Math.min(d * (dashT > 0 ? 8 : 3.5), vmax) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * (dashT > 0 ? 8 : 3.5), vmax) : 0;
-  const acc = Math.min(1, dt * (stick ? 12 : 7));
+  const acc = Math.min(1, dt * (stick ? 12 : 7) * (liq === 1 ? 0.18 : 1));
   leaderVel[0] += (vx - leaderVel[0]) * acc; leaderVel[2] += (vz - leaderVel[2]) * acc;
   leader[0] += leaderVel[0] * dt; leader[2] += leaderVel[2] * dt;
   leader[1] = terrain.floor(leader[0], leader[2]);
@@ -625,6 +720,14 @@ function frame(now: number) {
   // health: the swarm touching something drains it at a steady, readable rate (a fast pass drains more, a punch most);
   // at zero it comes down and crumbles away. The pieces eaten along the way count too.
   const swarmR = 3 + Math.sqrt(active) * 0.05;
+  // the ground itself is eaten: the swarm digs a shallow trail as it goes (never under what still stands)
+  if (active > 0 && travel < 0 && !roundOver) {
+    padNear.length = 0;
+    for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b] || isPart(b)) continue; const B = city.buildings[b]; if (Math.abs(B.x - leader[0]) < swarmR + 8 && Math.abs(B.z - leader[2]) < swarmR + 8) padNear.push(b); }
+    terrain.dig(leader[0], leader[2], swarmR * 0.85, dt * (0.18 + 0.035 * Math.hypot(leaderVel[0], leaderVel[2])), keepPad);
+    if ((gov.frames & 1) === 0) terrain.flush();
+  }
+  world.swarmXZ[0] = leader[0]; world.swarmXZ[1] = leader[2];
   const hitRate = (1 + 1.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 4 : 0)) * (1 + Math.sqrt(active) / 150);
   for (let b = 0; b < city.buildings.length; b++) {
     if (city.gone[b] || isPart(b)) continue;
@@ -644,11 +747,11 @@ function frame(now: number) {
         // whoever did most of the work gets the prize: a burst of new mites
         let kb = 0; for (let k = 1; k < 4; k++) if (contactBy[b * 4 + k] > contactBy[b * 4 + kb]) kb = k;
         killer[b] = kb; const prize = 40 + B.solid * 0.05;
-        if (kb === 0) mine++;
+        if (kb === 0) { mine++; const cb = time - lastKill < 4 ? combo + 1 : 1; addScore((50 + B.solid * 0.05) * cb, B.x, city.s2Arr[b * 4 + 1] + 3, B.z); }
         if (kb === 0) meal += prize; else rv.meal[kb] += prize * (kb === bossK ? 0.4 : 1.3 * catchUp(kb));
         if (b === gold) {
           const bonus = Math.round(Math.max(700, sizeOf(kb) * 0.45) * (kb === 0 ? 1 : catchUp(kb)));
-          if (kb === 0) { meal += bonus; goldMine++; audio.chime(9); shake = Math.max(shake, 1); } else rv.meal[kb] += bonus;
+          if (kb === 0) { meal += bonus; goldMine++; audio.chime(9); shake = Math.max(shake, 1); addScore(500 * district, B.x, city.s2Arr[b * 4 + 1] + 5, B.z, true); } else rv.meal[kb] += bonus;
           comboEl.textContent = kb === 0 ? `🌟 +${bonus}` : `🌟 ✖`; comboEl.style.color = kb === 0 ? "" : TEAM_CSS[kb];
           comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop");
           gold = -1; goldNext = roundT + 1.2;
@@ -694,7 +797,7 @@ function frame(now: number) {
         for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b]) continue; const B = city.buildings[b]; const d = Math.hypot(B.x - lx, B.z - lz); const sc = (B.solid + 400) / (d + 8) * (b === gold ? 9 : 1); if (sc > bs) { bs = sc; best = b; } }
         if (best >= 0) { tx = city.buildings[best].x; tz = city.buildings[best].z; } else { tx = (Math.random() - 0.5) * 80; tz = (Math.random() - 0.5) * 80; }
       }
-      const r = Math.hypot(tx, tz); if (r > WALL - 6) { tx *= (WALL - 6) / r; tz *= (WALL - 6) / r; }
+      const r = Math.hypot(tx, tz), lim = wallAt(tx, tz) - 6; if (r > lim) { tx *= lim / r; tz *= lim / r; }
       rv.tx[k] = tx; rv.tz[k] = tz;
     }
     const sp = (8.5 + Math.sqrt(A) * 0.025) * (A > sizeOf(0) ? 0.97 : 0.92);
@@ -770,6 +873,8 @@ function frame(now: number) {
   // the wordless HUD: the swarm count, and how much of the village has its colour back
   if ((gov.frames & 7) === 0) {
     const txt = active >= 10000 ? `${(active / 1000).toFixed(active >= 100000 ? 0 : 1)}k` : String(active);
+    shownScore += (score - shownScore) * 0.35; if (Math.abs(score - shownScore) < 1) shownScore = score;
+    const st = Math.round(shownScore).toLocaleString("en"); if (scoreN.textContent !== st) scoreN.textContent = st;
     if (countN.textContent !== txt) { countN.textContent = txt; countBox.classList.remove("pop"); void countBox.offsetWidth; countBox.classList.add("pop"); }
     const tot = 0, eat = 0;
     void tot; void eat;

@@ -1,7 +1,7 @@
 // The world (phase 1): a dusk sky and a grey stone plain that the swarm lights up from below.
 import { FULLSCREEN_VS, bindTex, program, type GL, type Program } from "./gl.ts";
 import { WORLD } from "./swarm.ts";
-import { HEIGHT_GLSL, WATER, type Terrain } from "./terrain.ts";
+import { HEIGHT_GLSL, SHAPE, WATER, wallF, type Terrain } from "./terrain.ts";
 
 const SKY_FS = `#version 300 es
 precision highp float;
@@ -57,6 +57,9 @@ uniform vec3 uCam;
 uniform vec3 uStoneA, uStoneB, uFog, uGrassA, uGrassB;
 uniform vec4 uHint; // x, z, radius, strength: a pulsing ring that says "eat this" (onboarding)
 uniform float uTime, uWall;
+uniform vec2 uShape; // lobes, depth
+uniform vec3 uNextA, uNextB, uPrevGrass; // the land ahead (north) and the land behind (south, already alive)
+uniform float uPrevOn;
 in vec3 vW;
 in vec3 vN;
 out vec4 o;
@@ -108,11 +111,15 @@ void main() {
   float sun = max(0.0, dot(normalize(vN), normalize(vec3(0.4, 1.0, 0.3))));
   lit *= 0.38 + 0.8 * sun;
   if (vW.y < WATER) lit *= mix(0.45, 0.85, smoothstep(WATER - 2.0, WATER, vW.y));
-  // beyond the wall the land is still grey: the next land waits out there
-  float rr = length(p);
-  lit = mix(lit, stone * (0.35 + 0.6 * sun), smoothstep(uWall + 1.0, uWall + 3.0, rr));
+  // beyond the wall: ahead (north) the next land in its own stone, behind (south) the land you freed, green
+  float an = atan(p.y, p.x), wf = 1.0 - uShape.y * (1.0 - cos(uShape.x * (an + 1.5708))) * 0.5;
+  float rr = length(p) / wf;
+  vec3 nextC = mix(uNextA, uNextB, n) * mix(0.6, 1.0, crack) * (0.55 + 0.7 * sun);
+  vec3 prevC = mix(uPrevGrass * 0.8, uPrevGrass * 1.1, m1) * mix(0.75, 1.0, crack) * (0.45 + 0.6 * sun);
+  vec3 outC = mix(nextC, mix(stone * (0.35 + 0.6 * sun), prevC, uPrevOn), smoothstep(-25.0, 25.0, p.y));
+  lit = mix(lit, outC, smoothstep(uWall + 1.0, uWall + 3.0, rr));
   float dist = length(vW - uCam);
-  lit = mix(lit, uFog, smoothstep(70.0, 230.0, dist));
+  lit = mix(lit, uFog, smoothstep(90.0, 260.0, dist));
   o = vec4(lit, 1.0);
 }`;
 
@@ -133,6 +140,7 @@ precision highp float;
 uniform sampler2D uColor, uHeight, uLight;
 uniform vec4 uPond;
 uniform float uWorld, uTime, uLiquid; // 0 water, 1 ice, 2 lava
+uniform vec2 uSwarm;
 uniform vec3 uCam, uFog, uSkyLow;
 in vec3 vW;
 out vec4 o;
@@ -156,6 +164,11 @@ void main() {
   vec3 c = mix(deep, sky, 0.25 + fres * 0.7) + vec3(1.0, 0.6, 0.25) * glow * 0.6;
   c += smoothstep(0.25, 0.0, depth) * vec3(0.5, 0.55, 0.6) * 0.5; // a pale rim where it meets the shore
   float spark = pow(max(0.0, sin(w.x * 3.1) * sin(w.y * 2.7)), 30.0) * (0.35 + 0.65 * rest);
+  // the swarm on the surface: splashes, foam and rings where it flies low over the water
+  float swd = 1.0 - exp(-texture(uLight, uv).r * 0.006);
+  float ringS = 0.5 + 0.5 * sin(length(vW.xz - uSwarm) * 3.0 - uTime * 9.0);
+  float foam = swd * (0.55 + 0.45 * vn(vW.xz * 4.0 + uTime * 2.0)) + swd * ringS * 0.5 * smoothstep(30.0, 2.0, length(vW.xz - uSwarm));
+  c = mix(c, vec3(0.92, 0.97, 1.0), clamp(foam, 0.0, 1.0) * 0.75);
   float rip = smoothstep(0.92, 1.0, sin(length(vW.xz - uPond.xy) * 2.2 - uTime * 1.6)) * 0.18; // slow rings across the pond
   c += rip;
   c += spark * 0.8;
@@ -170,12 +183,14 @@ void main() {
     float pulse = 0.75 + 0.25 * sin(uTime * 2.0 + f * 12.0);
     vec3 hot = mix(vec3(2.6, 0.7, 0.12), vec3(3.6, 2.2, 0.6), fbm(q * 4.0 - uTime * 0.2)) * pulse;
     vec3 crustC = vec3(0.10, 0.05, 0.05) + vec3(0.5, 0.12, 0.03) * (1.0 - plate) * 0.6;
-    c = mix(hot, crustC, plate) + vec3(3.0, 1.4, 0.3) * seam * 0.8;
+    plate *= 1.0 - swd * 0.9; // the crust breaks where the swarm skims it: bright lava bursts up
+    c = mix(hot, crustC, plate) + vec3(3.0, 1.4, 0.3) * seam * 0.8 + vec3(3.0, 1.2, 0.2) * swd * ringS;
     c *= smoothstep(0.0, 0.5, depth) * 0.6 + 0.4;
     a = smoothstep(0.0, 0.08, depth);
   } else if (uLiquid > 0.5) { // ice: pale, opaque, with white cracks
     float crack = smoothstep(0.96, 1.0, abs(sin(vW.x * 0.9 + sin(vW.z * 0.7) * 2.0)));
     c = mix(vec3(0.55, 0.60, 0.66), vec3(0.75, 0.90, 1.0), rest) * (0.85 + 0.25 * fres) + crack * 0.4 + vec3(1.0, 0.6, 0.25) * glow * 0.5;
+    c += vec3(0.7, 0.9, 1.0) * swd * (0.4 + 0.6 * step(0.9, vn(vW.xz * 6.0 + floor(uTime * 6.0)))); // frost sparkles under the swarm
     a = smoothstep(0.0, 0.08, depth);
   }
   c = mix(c, uFog, smoothstep(70.0, 230.0, length(vW - uCam)));
@@ -245,10 +260,12 @@ void main() {
   o = vec4(c, 1.0);
 }`;
 export const WALL = 64;
+export { SHAPE, wallF };
+export function wallAt(x: number, z: number) { return WALL * wallF(Math.atan2(z, x)); }
 export type Palette = { skyLow: number[]; skyTop: number[]; horizon: number[]; stoneA: number[]; stoneB: number[]; fog: number[]; grassA: number[]; grassB: number[] };
 
 export class World {
-  pal!: Palette;
+  pal!: Palette; nextPal?: Palette; prevPal?: Palette;
   hint = new Float32Array(4);
   sky: Program; ground: Program; water: Program; box: Program; vao: WebGLVertexArrayObject; boxVao: WebGLVertexArrayObject;
   boxBuf: WebGLBuffer; boxN = 0;
@@ -270,32 +287,36 @@ export class World {
   }
   /** the wall and the grey country beyond it (different for every land) */
   liquid = 0;
-  scenery(seed: number, next: number) {
+  scenery(seed: number, next: number, prev = -1) {
     let a = seed * 48271 + 11;
     const rnd = () => { a = (a * 16807) % 2147483647; return a / 2147483647; };
     const out: number[] = [];
     const box = (x: number, y: number, z: number, yaw: number, hx: number, hy: number, hz: number, kind: number) => out.push(x, y + hy, z, yaw, hx, hy, hz, kind);
-    const R = WALL + 2.2;
+    const R = WALL + 2.2, nextK = next;
     // the wall: a ring of stone with battlements, and round-ish towers with pointed roofs
     const SEG = 112;
     const gate = (an: number) => Math.abs(Math.cos(an)) < 0.06; // north and south gates
+    const at = (an: number) => [Math.cos(an) * R * wallF(an), Math.sin(an) * R * wallF(an)];
     for (let i = 0; i < SEG; i++) {
-      const an = (i / SEG) * Math.PI * 2, x = Math.cos(an) * R, z = Math.sin(an) * R, yaw = -an + Math.PI / 2;
+      const an = ((i + 0.5) / SEG) * Math.PI * 2;
       if (gate(an)) continue;
-      box(x, 0, z, yaw, (Math.PI * R) / SEG + 0.05, 2.6, 1.0, 0);
+      const [x0, z0] = at((i / SEG) * Math.PI * 2), [x1, z1] = at(((i + 1) / SEG) * Math.PI * 2);
+      const x = (x0 + x1) / 2, z = (z0 + z1) / 2, len = Math.hypot(x1 - x0, z1 - z0), yaw = -Math.atan2(z1 - z0, x1 - x0);
+      box(x, 0, z, yaw, len / 2 + 0.15, 2.6, 1.0, 0);
       const ox = Math.cos(an) * 0.75, oz = Math.sin(an) * 0.75;
       box(x - ox, 5.2, z - oz, yaw, 0.7, 0.45, 0.25, 5);
     }
     for (let i = 0; i < 16; i++) {
-      const an = ((i + 0.5) / 16) * Math.PI * 2, x = Math.cos(an) * R, z = Math.sin(an) * R;
+      const an = ((i + 0.5) / 16) * Math.PI * 2, [x, z] = at(an);
       box(x, 0, z, an, 2.2, 4.2, 2.2, 5); box(x, 8.4, z, an + 0.785, 2.7, 0.35, 2.7, 5); box(x, 9.1, z, an, 2.4, 2.6, 2.4, 3);
     }
     // gatehouses: two big towers either side of each gate
     for (const sz of [-1, 1]) for (const sx of [-1, 1]) { const x = sx * 6.2, z = sz * Math.sqrt(R * R - 38); box(x, 0, z, 0, 2.4, 5.2, 2.4, 5); box(x, 10.4, z, 0.785, 2.9, 0.4, 2.9, 5); box(x, 11.2, z, 0, 2.6, 3.2, 2.6, 3); }
     // beyond: the next land, still grey (its shapes show what is coming), and far mountains
     for (let k = 0; k < 900; k++) {
-      const an = rnd() * Math.PI * 2, r = R + 5 + Math.pow(rnd(), 0.8) * 120, x = Math.cos(an) * r, z = Math.sin(an) * r;
+      const an = rnd() * Math.PI * 2, r = R * wallF(an) + 5 + Math.pow(rnd(), 0.8) * 120, x = Math.cos(an) * r, z = Math.sin(an) * r;
       const yaw = rnd() * Math.PI;
+      next = z < 0 ? nextK : prev >= 0 ? prev : nextK;
       if (Math.abs(x) < 7 && Math.abs(z) > R - 2 && Math.abs(z) < R + 40) continue; // the road out of each gate stays open
       if (next === 1 && rnd() < 0.55) { const hgt = 1.5 + rnd() * 3; box(x, 0, z, yaw, 0.45, hgt, 0.45, 4); box(x, hgt * 2, z, yaw, 1.6 + rnd() * 1.6, 0.5, 1.6 + rnd() * 1.6, 7); continue; }
       if (next === 3 && rnd() < 0.6) { const hgt = 2 + rnd() * 3; box(x, 0, z, yaw, 0.25, 0.7, 0.25, 4); box(x, 1.0, z, yaw, 1.2 + rnd() * 0.6, hgt, 1.2 + rnd() * 0.6, 8); continue; }
@@ -334,6 +355,9 @@ export class World {
     gl.uniform1f(g.uSize, 400); gl.uniform1f(g.uWorld, WORLD); gl.uniform3fv(g.uCam, cam);
     gl.uniform3fv(g.uStoneA, P.stoneA); gl.uniform3fv(g.uStoneB, P.stoneB); gl.uniform3fv(g.uFog, P.fog); gl.uniform3fv(g.uGrassA, P.grassA); gl.uniform3fv(g.uGrassB, P.grassB);
     gl.uniform4fv(g.uHint, this.hint); gl.uniform1f(g.uTime, t); gl.uniform1f(g.uWall, WALL + 2.2);
+    gl.uniform2f(g.uShape, SHAPE.k, SHAPE.a);
+    const N = this.nextPal ?? P; gl.uniform3fv(g.uNextA, N.stoneA.map((v) => v * 1.25)); gl.uniform3fv(g.uNextB, N.stoneB.map((v) => v * 1.25));
+    gl.uniform3fv(g.uPrevGrass, (this.prevPal ?? P).grassA); gl.uniform1f(g.uPrevOn, this.prevPal ? 1 : 0);
     bindTex(gl, 0, light, g.uLight); bindTex(gl, 1, color, g.uColor); bindTex(gl, 2, this.terrain.tex, g.uHeight);
     gl.uniform1f(g.uGrid, 1); gl.drawArrays(gl.TRIANGLES, 0, GN * GN * 6);
     gl.uniform1f(g.uGrid, 0); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -347,12 +371,13 @@ export class World {
     gl.bindVertexArray(this.vao);
   }
   /** the pond (transparent: after the solid things, before the swarm) */
+  swarmXZ = [0, 0];
   drawWater(vp: Float32Array, cam: Float32Array, light: WebGLTexture, color: WebGLTexture, t: number) {
     const gl = this.gl, w = this.water.u;
     gl.bindVertexArray(this.vao);
     gl.useProgram(this.water.p);
     gl.uniformMatrix4fv(w.uVP, false, vp);
-    gl.uniform1f(w.uWorld, WORLD); gl.uniform1f(w.uTime, t); gl.uniform3fv(w.uCam, cam); gl.uniform3fv(w.uFog, this.pal.fog); gl.uniform3fv(w.uSkyLow, this.pal.skyLow);
+    gl.uniform1f(w.uWorld, WORLD); gl.uniform1f(w.uTime, t); gl.uniform3fv(w.uCam, cam); gl.uniform3fv(w.uFog, this.pal.fog); gl.uniform3fv(w.uSkyLow, this.pal.skyLow); gl.uniform2f(w.uSwarm, this.swarmXZ[0], this.swarmXZ[1]);
     bindTex(gl, 0, color, w.uColor); bindTex(gl, 1, this.terrain.tex, w.uHeight); bindTex(gl, 2, light, w.uLight);
     gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
     // the land's own pond (water, ice or lava), and a second pond that is always clear water

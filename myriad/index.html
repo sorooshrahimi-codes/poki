@@ -115,6 +115,37 @@
       #lands .dots i.done { background: #8dff7a; }
       #lands .dots i.now { background: #ffd23c; box-shadow: 0 0 6px #ffd23c; }
       #intro { top: 30%; }
+      #score { position: fixed; left: max(14px, env(safe-area-inset-left)); top: max(8px, env(safe-area-inset-top)); font-size: 26px; font-weight: 900; color: #ffe27a; text-shadow: 0 0 14px rgba(255, 170, 60, 0.8), 0 2px 5px rgba(0,0,0,.7); pointer-events: none; }
+      #count { top: calc(max(8px, env(safe-area-inset-top)) + 36px) !important; font-size: 17px !important; gap: 6px !important; }
+      #count i { width: 9px !important; height: 9px !important; }
+      #lbBtn { position: fixed; left: max(12px, env(safe-area-inset-left)); bottom: max(14px, env(safe-area-inset-bottom)); width: 52px; height: 52px; border-radius: 50%; border: 0; font-size: 26px; background: rgba(20, 16, 40, 0.65); box-shadow: 0 0 0 2px rgba(255, 215, 106, 0.5); cursor: pointer; z-index: 3; }
+      #goal { top: calc(max(8px, env(safe-area-inset-top)) + 70px) !important; }
+      #goalTxt { top: calc(max(8px, env(safe-area-inset-top)) + 86px) !important; }
+      #board { top: calc(max(8px, env(safe-area-inset-top)) + 128px) !important; }
+      #lb, #win { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); z-index: 8; opacity: 1; pointer-events: auto; }
+      #lb.show, #win.show { display: flex; }
+      #lb { z-index: 9; }
+      #lb .box, #win .card { position: relative; width: min(88vw, 400px); max-height: 82vh; display: flex; flex-direction: column; gap: 8px; padding: 18px 18px 20px; border-radius: 26px; background: linear-gradient(#2a1f4a, #140f26); box-shadow: 0 0 0 3px #ffd76a, 0 0 50px rgba(255, 190, 90, 0.45); animation: bump 0.35s; }
+      #lb h2 { margin: 0; text-align: center; font-size: 26px; color: #ffe27a; }
+      #lb .x { position: absolute; right: -10px; top: -10px; width: 42px; height: 42px; border-radius: 50%; border: 0; font-size: 18px; color: #fff; background: #4a3d6a; cursor: pointer; }
+      #lb .meRow { display: flex; gap: 8px; align-items: center; }
+      #lb input { flex: 1; min-width: 0; font: 800 18px system-ui; color: #fff; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,215,106,0.5); border-radius: 12px; padding: 6px 10px; }
+      #lb .meRow b { font-size: 18px; color: #ffe27a; white-space: nowrap; }
+      #lb .off { margin: 0; text-align: center; opacity: 0.6; font-size: 14px; }
+      #lb .list { overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+      #lb .r { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 12px; background: rgba(255,255,255,0.06); font-size: 17px; font-weight: 800; }
+      #lb .r span { width: 30px; text-align: center; }
+      #lb .r em { flex: 1; font-style: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #lb .r b { color: #ffe27a; }
+      #lb .r.me { background: rgba(255, 215, 106, 0.25); box-shadow: 0 0 0 2px #ffd76a; }
+      #win .card { align-items: center; text-align: center; }
+      #win .t { font-size: 28px; font-weight: 900; color: #ffe27a; text-shadow: 0 0 16px rgba(255,170,60,.8); }
+      #win .sc { font-size: 44px; font-weight: 900; }
+      #win .row { font-size: 20px; font-weight: 800; opacity: 0.9; }
+      #win .tot { color: #ffe27a; }
+      #win .btns { display: flex; gap: 18px; margin-top: 8px; }
+      #win .btns button { width: 92px; height: 92px; border-radius: 50%; border: 0; font-size: 38px; color: #fff; cursor: pointer; background: radial-gradient(circle at 35% 30%, #fff8, #fff0 40%), linear-gradient(#7dff6a, #23b23a); box-shadow: 0 0 30px rgba(120, 255, 110, 0.6), 0 5px 0 #0e5a1a; }
+      #win .btns .lbb { width: 72px; height: 72px; font-size: 30px; align-self: center; background: radial-gradient(circle at 35% 30%, #fff8, #fff0 40%), linear-gradient(#ffcf6a, #ff8a3d); box-shadow: 0 0 24px rgba(255, 170, 80, 0.6), 0 5px 0 #8a3b00; }
       #intro div { font-size: 72px; }
       #intro p { font-size: 26px; font-weight: 900; color: #fff; }
       #intro.show { animation: intro 2.2s ease-out forwards; }
@@ -125,7 +156,10 @@
     <canvas id="gl"></canvas>
     <canvas id="fx"></canvas>
     <canvas id="hud" width="300" height="120"></canvas>
+    <div id="score">⭐ <span id="scoreN">0</span></div>
     <div id="count"><i></i><span id="countN">300</span></div>
+    <button id="lbBtn">🏆</button>
+    <div id="lb"></div>
     <div id="goal"><b id="goalFill"></b></div>
     <div id="left"></div>
     <div id="timer">1:00</div>

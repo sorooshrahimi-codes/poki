@@ -3,7 +3,7 @@
 // the swarm as it flows over them (the same density field that lights the world pushes the grass).
 import { bindTex, program, type GL, type Program } from "./gl.ts";
 import { WORLD } from "./swarm.ts";
-import { HEIGHT_GLSL } from "./terrain.ts";
+import { HEIGHT_GLSL, SHAPE } from "./terrain.ts";
 
 export const SIDE = 260; // blades per side of the patch
 export const STEP = 0.24; // world units between blades
@@ -12,7 +12,7 @@ const VS = `#version 300 es
 precision highp float;
 uniform sampler2D uColor, uDen, uHeight;
 uniform mat4 uVP;
-uniform vec2 uOrigin, uCamXZ;
+uniform vec2 uOrigin, uCamXZ, uShape;
 uniform float uTime, uWorld;
 out vec3 vCol;
 out float vTip;
@@ -33,7 +33,7 @@ void main() {
   // far blades shrink away (and the square patch fades at its rim), so no dark speckle shows from afar
   vec2 rim = abs(cell / float(${SIDE}) - 0.5) * 2.0;
   float far = (1.0 - smoothstep(0.6, 0.95, max(rim.x, rim.y))) * (1.0 - smoothstep(20.0, 31.0, length(world - uCamXZ)));
-  float h = rest < 0.04 || gy < WATER + 0.05 || length(world) > 63.5 ? 0.0 : mix(0.05, 0.42 + 0.55 * r2, rest) * far;
+  float h = rest < 0.04 || gy < WATER + 0.05 || length(world) > 63.5 * (1.0 - uShape.y * (1.0 - cos(uShape.x * (atan(world.y, world.x) + 1.5708))) * 0.5) ? 0.0 : mix(0.05, 0.42 + 0.55 * r2, rest) * far;
   // the blade: 5 vertices (a tapering strip), bent by wind and pushed by the swarm
   int k = gl_VertexID;
   float t = float(k / 2) / 2.0;
@@ -89,7 +89,7 @@ export class Grass {
     // the patch is centred a little ahead of the camera target, snapped to the blade grid
     const half = (SIDE * STEP) / 2;
     gl.uniform2f(u.uOrigin, Math.floor((cx - half) / STEP) * STEP, Math.floor((cz - half) / STEP) * STEP);
-    gl.uniform2f(u.uCamXZ, cx, cz); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uWorld, WORLD); gl.uniform3fv(u.uCam, cam);
+    gl.uniform2f(u.uCamXZ, cx, cz); gl.uniform2f(u.uShape, SHAPE.k, SHAPE.a); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uWorld, WORLD); gl.uniform3fv(u.uCam, cam);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 5, Math.floor(SIDE * SIDE * density));
   }
 }
