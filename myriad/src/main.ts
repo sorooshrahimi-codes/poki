@@ -258,13 +258,14 @@ let playerDead = 0, safeT = 0, burn = 0;
 const rv = { tx: new Float32Array(NT), tz: new Float32Array(NT), think: new Float32Array(NT), dead: new Float32Array(NT), meal: new Float32Array(NT), aggr: new Float32Array(NT), best: new Float32Array(NT) };
 const contactT = new Float32Array(64), hpOf = new Float32Array(64).fill(1), killer = new Int8Array(64);
 const contactBy = new Float32Array(64 * NT);
+for (let k = 0; k < NT; k++) { const h = TEAM_CSS[k]; world.ringC.set([parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255], k * 3); }
 const sizeOf = (k: number) => (k === 0 ? active : swarm.A[k]);
 const posX = (k: number) => (k === 0 ? leader[0] : swarm.L[k * 3]), posZ = (k: number) => (k === 0 ? leader[2] : swarm.L[k * 3 + 2]);
 const nameOf = (k: number) => (k === 0 ? "You" : NAMES[k]);
 /** body radius: the drawn body stops growing at the GPU cap */
 const bodyR = (n: number) => 3 + Math.sqrt(Math.min(n, 98304)) * 0.05;
 /** bigger swarms are slower: the small can always run */
-const speedOf = (n: number) => Math.max(5.5, 11.5 - Math.sqrt(Math.min(n, 98304)) * 0.02);
+const speedOf = (n: number) => Math.max(7.5, 15 - Math.sqrt(Math.min(n, 98304)) * 0.024);
 function qaLog(m: string) { if (QA) console.log(`[gm] t=${roundT.toFixed(1)} size=${Math.round(active)} ${m}`); }
 
 const winEl = document.getElementById("win")!, introEl = document.getElementById("intro")!, comboEl = document.getElementById("combo")!;
@@ -293,7 +294,7 @@ function newRound() {
   active = Number(params.get("start") ?? START_SIZE); meal = 0; bestSize = active; kills = 0; deaths = 0; playerDead = 0; safeT = 0; gold = -1; goldNext = 12;
   leader[0] = 0; leader[2] = 0; target[0] = 0; target[2] = 0; camX = 0; camZ = 0; hasTarget = false;
   for (let k = 1; k < NT; k++) {
-    const a = (k / (NT - 1)) * Math.PI * 2 + 0.3, r = 0.62 * wallAt(Math.cos(a), Math.sin(a));
+    const a = (k / (NT - 1)) * Math.PI * 2 + 0.3, r = 0.42 * wallAt(Math.cos(a), Math.sin(a));
     swarm.L[k * 3] = Math.cos(a) * r; swarm.L[k * 3 + 2] = Math.sin(a) * r; swarm.L[k * 3 + 1] = terrain.floor(swarm.L[k * 3], swarm.L[k * 3 + 2]);
     swarm.LV.fill(0, k * 3, k * 3 + 3); swarm.A[k] = START_SIZE; rv.think[k] = 0; rv.dead[k] = 0; rv.meal[k] = 0; rv.best[k] = START_SIZE;
     rv.aggr[k] = 0.6 + Math.random() * 0.8; // some hunt, some graze
@@ -403,12 +404,12 @@ function drawFx(dt: number) {
       fctx.fillStyle = threat ? "rgba(140,20,20,0.75)" : prey ? "rgba(20,110,40,0.75)" : "rgba(10,8,24,0.6)";
       fctx.beginPath(); fctx.roundRect(pr[0] - w / 2, pr[1] - 12 * dpr, w, 24 * dpr, 12 * dpr); fctx.fill();
       fctx.fillStyle = TEAM_CSS[k]; fctx.fillText(t, pr[0], pr[1] + dpr);
-    } else if (k > 0 && (threat || prey) && Math.hypot(posX(k) - leader[0], posZ(k) - leader[2]) < 70) {
+    } else if (k > 0 && Math.hypot(posX(k) - leader[0], posZ(k) - leader[2]) < 90) {
       // off screen but close: an edge arrow, red for danger, green for a meal
       let ax = pr[0] - W / 2, ay = pr[1] - H / 2; const a = Math.atan2(ay, ax);
       const m = Math.min((W / 2 - 30 * dpr) / Math.abs(Math.cos(a) || 1e-3), (H / 2 - (ay < 0 ? 120 : 90) * dpr) / Math.abs(Math.sin(a) || 1e-3));
       ax = W / 2 + Math.cos(a) * m; ay = H / 2 + Math.sin(a) * m;
-      fctx.save(); fctx.translate(ax, ay); fctx.rotate(a); const s2 = 16 * dpr; fctx.fillStyle = threat ? "#ff4d4d" : "#6dff6d";
+      fctx.save(); fctx.translate(ax, ay); fctx.rotate(a); const s2 = (threat || prey ? 16 : 11) * dpr; fctx.fillStyle = threat ? "#ff4d4d" : prey ? "#6dff6d" : TEAM_CSS[k];
       fctx.beginPath(); fctx.moveTo(s2, 0); fctx.lineTo(-s2 * 0.7, s2 * 0.75); fctx.lineTo(-s2 * 0.3, 0); fctx.lineTo(-s2 * 0.7, -s2 * 0.75); fctx.closePath(); fctx.fill(); fctx.restore();
     }
   }
@@ -499,7 +500,7 @@ function frame(now: number) {
       const cx = innerWidth / 2, cy = innerHeight * 0.55;
       if (ground(cx, cy, g0) && ground(cx + sx / sl * 60, cy + sy / sl * 60, g1)) {
         const wx = g1[0] - g0[0], wz = g1[1] - g0[1], wl = Math.hypot(wx, wz) || 1;
-        mag = Math.min(1, sl / 55); target[0] = leader[0] + wx / wl * 30; target[2] = leader[2] + wz / wl * 30; hasTarget = true;
+        mag = Math.min(1.2, sl / 40); target[0] = leader[0] + wx / wl * 30; target[2] = leader[2] + wz / wl * 30; hasTarget = true;
       }
     } else { target[0] = leader[0]; target[2] = leader[2]; }
   } else if (aiming && (down || !("ontouchstart" in window))) pick(aimX, aimY);
@@ -514,7 +515,7 @@ function frame(now: number) {
   const dx = target[0] - leader[0], dz = target[2] - leader[2], d = Math.hypot(dx, dz);
   const vmax = canMove ? speed * mag * (liq === 0 ? 0.65 : liq === 1 ? 1.3 : 1) : 0;
   const vx = d > 0.01 ? (dx / d) * Math.min(d * 3.5, vmax) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * 3.5, vmax) : 0;
-  const acc = Math.min(1, dt * (stick ? 10 : 7) * (liq === 1 ? 0.2 : 1));
+  const acc = Math.min(1, dt * (stick ? 16 : 9) * (liq === 1 ? 0.2 : 1));
   leaderVel[0] += (vx - leaderVel[0]) * acc; leaderVel[2] += (vz - leaderVel[2]) * acc;
   leader[0] += leaderVel[0] * dt; leader[2] += leaderVel[2] * dt; leader[1] = terrain.floor(leader[0], leader[2]);
   world.swarmXZ[0] = leader[0]; world.swarmXZ[1] = leader[2];
@@ -590,10 +591,11 @@ function frame(now: number) {
   city.feed(swarm.state.tex[0], swarm.state.tex[1], swarm.span(), dt, time);
   if (city.bloom > 0) { city.bloom -= dt; city.flood(dt * 0.45); }
   world.hint[3] = 0;
+  for (let k = 0; k < NT; k++) { const A = sizeOf(k), on = A >= 1 && started && !(k === 0 && playerDead > 0); world.rings[k * 4] = posX(k); world.rings[k * 4 + 1] = posZ(k); world.rings[k * 4 + 2] = bodyR(A) * 1.05 + 1; world.rings[k * 4 + 3] = on ? 1 : 0; }
   if (!touched && started && roundT > -1) hand.classList.remove("gone");
 
   // ---- camera: behind and above the swarm, pulling back as it grows
-  const want = 17 + Math.sqrt(Math.min(active, TEAM_CAP[0])) * 0.13 + sh.blend * sh.scale * 1.2;
+  const want = 27 + Math.sqrt(Math.min(active, TEAM_CAP[0])) * 0.15 + sh.blend * sh.scale * 1.2;
   const open = Math.min(1, time / 3.2), ease = open * open * (3 - 2 * open);
   const wantD = (2.2 + (want - 2.2) * ease) * userZoom;
   camD += (wantD - camD) * Math.min(1, dt * (time < 3.2 ? 6 : 3));

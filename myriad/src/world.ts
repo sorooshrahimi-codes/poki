@@ -56,6 +56,8 @@ uniform float uWorld, uGrid;
 uniform vec3 uCam;
 uniform vec3 uStoneA, uStoneB, uFog, uGrassA, uGrassB;
 uniform vec4 uHint; // x, z, radius, strength: a pulsing ring that says "eat this" (onboarding)
+uniform vec4 uRing[7]; // every swarm: x, z, radius, on
+uniform vec3 uRingC[7];
 uniform float uTime, uWall;
 uniform vec2 uShape; // lobes, depth
 uniform vec3 uNextA, uNextB, uPrevGrass; // the land ahead (north) and the land behind (south, already alive)
@@ -106,6 +108,13 @@ void main() {
     float dh = length(p - uHint.xy), ph = fract(uTime * 0.8);
     float ring = exp(-pow((dh - uHint.z * (0.7 + ph * 0.6)) * 2.2, 2.0)) * (1.0 - ph);
     lit += vec3(1.0, 0.8, 0.35) * ring * uHint.w * 1.4;
+  }
+  // a ring of its own colour on the ground around every swarm, so each one can be told apart from afar
+  for (int k = 0; k < 7; k++) {
+    if (uRing[k].w < 0.5) continue;
+    float dr = length(p - uRing[k].xy), rr0 = uRing[k].z;
+    float band = smoothstep(rr0 + 0.9, rr0, dr) * smoothstep(rr0 - 1.4, rr0 - 0.2, dr);
+    lit = mix(lit, uRingC[k] * 1.6, band * 0.85) + uRingC[k] * smoothstep(rr0, 0.0, dr) * 0.10;
   }
   // hills catch the light (strong, so the land reads as land); the pond's floor is dark silt
   float sun = max(0.0, dot(normalize(vN), normalize(vec3(0.4, 1.0, 0.3))));
@@ -269,6 +278,7 @@ export type Palette = { skyLow: number[]; skyTop: number[]; horizon: number[]; s
 export class World {
   pal!: Palette; nextPal?: Palette; prevPal?: Palette;
   hint = new Float32Array(4);
+  rings = new Float32Array(28); ringC = new Float32Array(21);
   sky: Program; ground: Program; water: Program; box: Program; vao: WebGLVertexArrayObject; boxVao: WebGLVertexArrayObject;
   boxBuf: WebGLBuffer; boxN = 0;
   gl: GL; terrain: Terrain;
@@ -356,7 +366,7 @@ export class World {
     gl.uniformMatrix4fv(g.uVP, false, vp);
     gl.uniform1f(g.uSize, 400); gl.uniform1f(g.uWorld, WORLD); gl.uniform3fv(g.uCam, cam);
     gl.uniform3fv(g.uStoneA, P.stoneA); gl.uniform3fv(g.uStoneB, P.stoneB); gl.uniform3fv(g.uFog, P.fog); gl.uniform3fv(g.uGrassA, P.grassA); gl.uniform3fv(g.uGrassB, P.grassB);
-    gl.uniform4fv(g.uHint, this.hint); gl.uniform1f(g.uTime, t); gl.uniform1f(g.uWall, WALL + 2.2);
+    gl.uniform4fv(g.uHint, this.hint); gl.uniform4fv(g.uRing, this.rings); gl.uniform3fv(g.uRingC, this.ringC); gl.uniform1f(g.uTime, t); gl.uniform1f(g.uWall, WALL + 2.2);
     gl.uniform2f(g.uShape, SHAPE.k, SHAPE.a);
     const N = this.nextPal ?? P; gl.uniform3fv(g.uNextA, N.stoneA.map((v) => v * 1.25)); gl.uniform3fv(g.uNextB, N.stoneB.map((v) => v * 1.25));
     gl.uniform3fv(g.uPrevGrass, (this.prevPal ?? P).grassA); gl.uniform1f(g.uPrevOn, this.prevPal ? 1 : 0);
