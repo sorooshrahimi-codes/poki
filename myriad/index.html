@@ -125,6 +125,14 @@
       #lb, #win { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); z-index: 8; opacity: 1; pointer-events: auto; }
       #lb.show, #win.show { display: flex; }
       #lb, #evo { z-index: 9; }
+      #intro h1 { margin: 0; font-size: 30px; font-weight: 900; color: #fff; white-space: nowrap; }
+      #intro.long.show { animation: intro 3.6s ease-out forwards; }
+      #lands .wp { position: absolute; right: 0; top: 100%; translate: 0 22px; font-style: normal; font-size: 14px; font-weight: 900; color: #8dff7a; white-space: nowrap; text-shadow: 0 2px 4px #000; }
+      #win .story { gap: 12px; }
+      #win .story .t { font-size: 34px; letter-spacing: 2px; }
+      #win .story .st { display: flex; align-items: center; gap: 12px; text-align: left; }
+      #win .story .st span { font-size: 40px; }
+      #win .story .st p { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.3; }
       #gems { position: fixed; left: calc(max(14px, env(safe-area-inset-left)) + 96px); top: calc(max(8px, env(safe-area-inset-top)) + 38px); font-size: 16px; font-weight: 900; color: #9be7ff; text-shadow: 0 2px 5px rgba(0,0,0,.7); pointer-events: none; }
       #gems.pop { animation: bump 0.35s; }
       #evoBtn { position: fixed; left: calc(max(12px, env(safe-area-inset-left)) + 62px); bottom: max(14px, env(safe-area-inset-bottom)); width: 52px; height: 52px; border-radius: 50%; border: 0; font-size: 26px; background: rgba(40, 16, 60, 0.7); box-shadow: 0 0 0 2px rgba(200, 160, 255, 0.6), 0 0 18px rgba(170, 110, 255, 0.5); cursor: pointer; z-index: 3; }

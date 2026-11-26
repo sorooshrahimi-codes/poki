@@ -10,7 +10,7 @@ import { Grass } from "./grass.ts";
 import { Audio } from "./audio.ts";
 import { Terrain } from "./terrain.ts";
 import { loadShape, nextShape } from "./shapes.ts";
-import { LEVELS, GOAL_ICON, LAND_ICON, firstOf, goalSentence, stepsOf, type Level } from "./saga.ts";
+import { LEVELS, GOAL_ICON, LAND_ICON, LAND_NAME, firstOf, goalSentence, stepsOf, type Level } from "./saga.ts";
 import { WATER } from "./terrain.ts";
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
@@ -225,7 +225,8 @@ function landCard() {
   const t = Math.round(time - landStart), li = (LV.land - 1) % 5, prevBest = bestTime[li];
   if (!prevBest || t < prevBest) bestTime[li] = t;
   const mm = (x: number) => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, "0")}`;
-  winEl.innerHTML = `<div class="card"><div class="t">${LAND_ICON[li]} Land ${LV.land} is free!</div>
+  winEl.innerHTML = `<div class="card"><div class="t">${LAND_ICON[li]} ${LAND_NAME[li]} is alive again!</div>
+    <div class="row">🌍 World ${worldPct()}% alive</div>
     <div class="sc">⭐ +${landScore.toLocaleString("en")}</div>
     <div class="row">⏱ ${mm(t)}${prevBest ? (t < prevBest ? " · new best!" : ` · best ${mm(prevBest)}`) : ""}</div>
     <div class="row tot">Total ⭐ ${Math.round(score).toLocaleString("en")}</div>
@@ -335,8 +336,10 @@ function startLevel(i: number, fresh = false) {
   if (LV.goal === "rival") {
     // one blue swarm, somewhere across the land: smaller at first, later bigger than you
     bossK = 1; swarm.A[1] = Math.max(300, Math.round(active * LV.n)); rv.dead[1] = 0; rv.meal[1] = 0; rivalCap = swarm.A[1] * 1.2;
-    const a = Math.atan2(-leader[2], -leader[0]) + (Math.random() - 0.5);
-    swarm.L[3] = Math.cos(a) * 40; swarm.L[5] = Math.sin(a) * 40; swarm.L[4] = terrain.floor(swarm.L[3], swarm.L[5]);
+    // it appears in front of you, in view (the camera looks north), and stays in its patch
+    let rx = leader[0] + (Math.random() - 0.5) * 20, rz = leader[2] - 24 - Math.random() * 6;
+    { const r = Math.hypot(rx, rz), lim = wallAt(rx, rz) - 10; if (r > lim) { rx *= lim / r; rz *= lim / r; } }
+    swarm.L[3] = rx; swarm.L[5] = rz; swarm.L[4] = terrain.floor(swarm.L[3], swarm.L[5]);
   }
   if (LV.goal === "castle") {
     // a big new tower rises out of the ground, away from the swarm, tough for a swarm of any size
@@ -353,8 +356,9 @@ function startLevel(i: number, fresh = false) {
     let bs = -1; if (castle < 0) for (let b = 0; b < city.buildings.length; b++) if (!city.gone[b] && !isPart(b) && city.buildings[b].collapseAt < 0 && hpOf[b] > 0.95 && city.buildings[b].solid > bs) { bs = city.buildings[b].solid; castle = b; }
     if (castle >= 0) { hard[castle] = 5 * LV.n * (0.6 + Math.sqrt(Math.min(active, 131072)) / 250); contactT[castle] = 0; for (let k = 0; k < 4; k++) contactBy[castle * 4 + k] = 0; }
   }
-  roundT = -1.6; roundOver = false;
-  introEl.innerHTML = `<div>${GOAL_ICON[LV.goal]}</div><p>${goalSentence(LV)}</p>`;
+  roundT = fresh ? -3.2 : -1.6; roundOver = false;
+  introEl.innerHTML = (fresh ? `<h1>${LAND_ICON[(LV.land - 1) % 5]} ${LAND_NAME[(LV.land - 1) % 5]}</h1><small>land ${LV.land} of 5 · bring it back to life</small>` : "") + `<div>${GOAL_ICON[LV.goal]}</div><p>${goalSentence(LV)}</p>`;
+  introEl.classList.toggle("long", fresh);
   introEl.classList.remove("show"); void introEl.offsetWidth; introEl.classList.add("show");
   boardEl.style.display = bossK > 0 ? "" : "none";
   document.getElementById("fade")!.classList.remove("on");
@@ -364,6 +368,21 @@ function startLevel(i: number, fresh = false) {
   save();
   poki.gameplayStart();
 }
+/** how much of the world is alive again: finished lands, plus this land's finished tasks */
+function worldPct() {
+  const st = stepsOf(LV.land), done = st.filter((x) => LEVELS.indexOf(x) < lvlI).length;
+  return Math.min(100, Math.round(((LV.land - 1) + done / st.length) * 20 + lap * 0));
+}
+/** the first time: the story in three lines, so the goal is clear from the start */
+function storyCard(go: () => void) {
+  winEl.innerHTML = `<div class="card story"><div class="t">GLOWMITES</div>
+    <div class="st"><span>🪨</span><p>The Grey turned the whole world to stone.</p></div>
+    <div class="st"><span>✨</span><p>You are a tiny swarm of glowing mites. Eat the grey and grow!</p></div>
+    <div class="st"><span>🌍</span><p>Bring all 5 lands back to life, beat each land's stone giant, and climb the 🏆 leaderboard.</p></div>
+    <div class="btns"><button class="go">▶</button></div></div>`;
+  winEl.classList.add("show"); roundOver = true;
+  winEl.querySelector(".go")!.addEventListener("click", () => { winEl.classList.remove("show"); try { localStorage.setItem("glowmites-story", "1"); } catch { /* */ } audio.start(); go(); });
+}
 /** the lands in a row at the top: done ones glow, the current one is big, with a dot per task */
 function drawLands() {
   const cur = LV.land;
@@ -371,7 +390,7 @@ function drawLands() {
     const d = k + 1, st = stepsOf(d), on = d === cur;
     const dots = on ? `<span class="egg">${"🥚".repeat(eggCount(meta.eggs[k]))}${"◌".repeat(3 - eggCount(meta.eggs[k]))}</span><span class="dots">${st.map((s) => `<i class="${LEVELS.indexOf(s) < lvlI ? "done" : LEVELS.indexOf(s) === lvlI ? "now" : ""}"></i>`).join("")}</span>` : "";
     return `<div class="${d < cur || lap > 0 ? "done" : ""}${on ? " on" : ""}">${ic}${dots}</div>`;
-  }).join(`<b></b>`);
+  }).join(`<b></b>`) + `<em class="wp">🌍 ${worldPct()}%</em>`;
 }
 /** how far the current task is done, 0..1 */
 function goalProgress() {
@@ -543,7 +562,7 @@ function sizeOf(k: number) { return k === 0 ? active : swarm.A[k]; }
 const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? START_SIZE);
 let meal = 0;
-queueMicrotask(() => { applyEvo(); gemsN.textContent = String(meta.gems); lap = saved.lap ?? 0; score = saved.score ?? 0; shownScore = score; bestTime = saved.best ?? []; if (!params.has("start")) active = Math.max(START_SIZE, saved.active); startLevel(lvlI, true); });
+queueMicrotask(() => { applyEvo(); gemsN.textContent = String(meta.gems); lap = saved.lap ?? 0; score = saved.score ?? 0; shownScore = score; bestTime = saved.best ?? []; if (!params.has("start")) active = Math.max(START_SIZE, saved.active); startLevel(lvlI, true);  let seen = false; try { seen = !!localStorage.getItem("glowmites-story"); } catch { /* */ } if (!seen && !params.has("lvl") && !BOT) storyCard(() => { roundOver = false; introEl.classList.remove("show"); void introEl.offsetWidth; introEl.classList.add("show"); roundT = -3.2; }); });
 let landT = 0, firstBite = false;
 const contactT = new Float32Array(64), hpOf = new Float32Array(64).fill(1), killer = new Int8Array(64);
 let gContact = 0, gHp = 1;
@@ -952,7 +971,7 @@ function frame(now: number) {
       let tx = NaN, tz = NaN, flee = false;
       for (let j = 0; j < 4; j++) { if (j === k) continue; const B = sizeOf(j); if (B < 1) continue;
         const jx = j === 0 ? leader[0] : swarm.L[j * 3], jz = j === 0 ? leader[2] : swarm.L[j * 3 + 2], d = Math.hypot(jx - lx, jz - lz);
-        if (B > A * 1.15 && d < 22 + Math.sqrt(B) * 0.04) { tx = lx + (lx - jx); tz = lz + (lz - jz); flee = true; break; }
+        if (B > A * 1.15 && d < 22 + Math.sqrt(B) * 0.04 && k !== bossK) { tx = lx + (lx - jx); tz = lz + (lz - jz); flee = true; break; }
         if (A > B * 1.15 && (d < (j === 0 ? 45 : 32) || (k === bossK && j === 0)) && Number.isNaN(tx) && roundT > (k === bossK ? 3 : 8) && !(j === 0 && safeT > 0)) { tx = jx; tz = jz; } }
       if (!flee && Number.isNaN(tx)) {
         let best = -1, bs = -1;
@@ -962,7 +981,7 @@ function frame(now: number) {
       const r = Math.hypot(tx, tz), lim = wallAt(tx, tz) - 6; if (r > lim) { tx *= lim / r; tz *= lim / r; }
       rv.tx[k] = tx; rv.tz[k] = tz;
     }
-    const sp = (8.5 + Math.sqrt(A) * 0.025) * (A > sizeOf(0) ? 0.97 : 0.92);
+    const sp = (8.5 + Math.sqrt(A) * 0.025) * (k === bossK ? 0.5 : A > sizeOf(0) ? 0.97 : 0.92);
     const ddx = rv.tx[k] - lx, ddz = rv.tz[k] - lz, dd = Math.hypot(ddx, ddz);
     const wx = dd > 0.01 ? (ddx / dd) * Math.min(dd * 3, sp * 1.2) : 0, wz = dd > 0.01 ? (ddz / dd) * Math.min(dd * 3, sp * 1.2) : 0;
     swarm.LV[k * 3] += (wx - swarm.LV[k * 3]) * Math.min(1, dt * 5); swarm.LV[k * 3 + 2] += (wz - swarm.LV[k * 3 + 2]) * Math.min(1, dt * 5);
@@ -1008,7 +1027,9 @@ function frame(now: number) {
   const want = 15 + Math.sqrt(Math.min(active, TEAM_CAP[0])) * 0.13 + (fighting ? 14 : 0) + sh.blend * sh.scale * 1.2;
   // opening: close and low on the glowing seed, rising and pulling back over ~3 s
   const open = Math.min(1, time / 3.2), ease = open * open * (3 - 2 * open);
-  const wantD = (2.2 + (want - 2.2) * ease) * userZoom;
+  // pull back a little so the current target is in view as well
+  let frameD = 0; { const o = travel < 0 ? objective() : null; if (o) { const d = Math.hypot(o.x - leader[0], o.z - leader[2]); if (d < 70) frameD = Math.min(want * 0.7, Math.max(0, d * 0.85 - want * 0.6)); } }
+  const wantD = (2.2 + (want + frameD - 2.2) * ease) * userZoom;
   camD += (wantD - camD) * Math.min(1, dt * (time < 3.2 ? 6 : 3));
   camX += (leader[0] - camX) * Math.min(1, dt * 2.2); camZ += (leader[2] - camZ) * Math.min(1, dt * 2.2);
   // a slow orbit gives parallax: the swarm reads as a volume, not a decal

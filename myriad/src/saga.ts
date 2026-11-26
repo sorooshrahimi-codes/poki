@@ -5,6 +5,7 @@ export type Goal = "wreck" | "gold" | "castle" | "rival" | "giant" | "gate";
 export type Level = { land: number; goal: Goal; n: number; seed: number };
 
 export const LAND_ICON = ["🌼", "🍄", "🏰", "❄️", "🌋"];
+export const LAND_NAME = ["Flower Meadow", "Mushroom Forest", "Castle Hills", "Ice Valley", "Fire Mountain"];
 export const LEVELS: Level[] = [];
 for (let d = 1; d <= 5; d++) {
   const seed = 1000 + d * 37;
