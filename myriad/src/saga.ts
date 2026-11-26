@@ -42,6 +42,18 @@ export function goalText(L: Level) {
   }
 }
 
+/** the goal in a few plain words, for the level card and the intro */
+export function goalSentence(L: Level) {
+  switch (L.goal) {
+    case "wreck": return `Destroy ${L.n} buildings`;
+    case "gold": return `Grab ${L.n} golden stars 🌟`;
+    case "grow": return `Grow your swarm to ${L.n.toLocaleString("en")}`;
+    case "race": return `Be in the top 3 biggest swarms`;
+    case "castle": return `Bring down the big castle 🏰`;
+    case "boss": return `Grow bigger than the red boss, then eat it`;
+  }
+}
+
 // ---------------------------------------------------------------- saved progress: stars per level
 const KEY = "glowmites-saga";
 export const prog: { stars: number[] } = { stars: [] };
@@ -56,9 +68,9 @@ export function unlocked() { let u = 0; while (u < LEVELS.length - 1 && (prog.st
 // ---------------------------------------------------------------- the map: a winding road, level 1 at the bottom
 const LAND_ICON = ["🌼", "🍄", "🏰", "❄️", "🌋"];
 const LAND_BG = ["#1d3a1c", "#1c2d3a", "#3a2a1a", "#22324a", "#3a1614"];
-export function renderMap(el: HTMLElement, onPick: (i: number) => void) {
-  const STEP = 96, PAD = 140, H = PAD * 2 + STEP * (LEVELS.length - 1), W = Math.min(innerWidth, 520);
-  const xy = (i: number) => ({ x: W / 2 + Math.sin(i * 0.95) * W * 0.28, y: H - PAD - i * STEP });
+export function renderMap(el: HTMLElement, onPick: (i: number) => void, from = -1) {
+  const STEP = 96, PAD = 140, PADB = 230, H = PAD + PADB + STEP * (LEVELS.length - 1), W = Math.min(innerWidth, 520);
+  const xy = (i: number) => ({ x: W / 2 + Math.sin(i * 0.95) * W * 0.28, y: H - PADB - i * STEP });
   const u = unlocked();
   let svg = `<svg width="${W}" height="${H}" style="position:absolute;left:50%;top:0;translate:-50% 0">`;
   for (let l = 0; l < 5; l++) {
@@ -73,9 +85,23 @@ export function renderMap(el: HTMLElement, onPick: (i: number) => void) {
     html += `<div class="node${lock ? " lock" : ""}${i === u ? " cur" : ""}${L.goal === "boss" ? " boss" : ""}" data-i="${i}" style="left:${p.x}px;top:${p.y}px">`
       + `<b>${i + 1}</b><span class="gi">${lock ? "🔒" : GOAL_ICON[L.goal]}</span><span class="st">${lock ? "" : "★".repeat(s) + "☆".repeat(3 - s)}</span></div>`;
   });
-  html += `</div>`;
+  const me = from >= 0 ? from : u, mp = xy(me);
+  html += `<div class="me" style="left:${mp.x - 46}px;top:${mp.y - 30}px">✨</div></div>`;
+  const total = prog.stars.reduce((a, b) => a + (b || 0), 0);
+  html += `<div class="top"><div class="logo">GLOWMITES</div><div class="tot">★ ${total}/${LEVELS.length * 3}</div></div>`;
+  html += `<button class="play">▶ <span>${u + 1}</span></button>`;
   el.innerHTML = html;
+  el.querySelector(".play")!.addEventListener("click", () => onPick(unlocked()));
   el.querySelectorAll<HTMLElement>(".node").forEach((n) => n.addEventListener("click", () => { const i = Number(n.dataset.i); if (i <= unlocked()) onPick(i); }));
   // scroll so the current level sits in the middle
-  requestAnimationFrame(() => { el.scrollTop = xy(u).y - el.clientHeight / 2; });
+  requestAnimationFrame(() => { el.scrollTop = xy(me).y - el.clientHeight / 2; });
+  // after a win the marker walks along the road to the new level, then that level opens
+  if (from >= 0 && u !== from) {
+    const m = el.querySelector<HTMLElement>(".me")!, q = xy(u);
+    setTimeout(() => {
+      m.style.transition = "left 1.1s ease-in-out, top 1.1s ease-in-out"; m.style.left = `${q.x - 46}px`; m.style.top = `${q.y - 30}px`;
+      el.scrollTo({ top: q.y - el.clientHeight / 2, behavior: "smooth" });
+    }, 500);
+    setTimeout(() => onPick(u), 1900);
+  }
 }

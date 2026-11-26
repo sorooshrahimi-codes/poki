@@ -79,6 +79,27 @@
       #map .node.boss { width: 82px; height: 82px; background: radial-gradient(circle at 35% 30%, #fff8, #fff0 45%), linear-gradient(#ff6a6a, #b0202a); box-shadow: 0 0 26px rgba(255, 60, 60, 0.7), 0 5px 0 #5a0000; }
       #map .node.lock { background: linear-gradient(#555a66, #2c2f38); box-shadow: 0 4px 0 #15161a; opacity: 0.75; }
       #map .node.cur { animation: bump 1s ease-in-out infinite; box-shadow: 0 0 0 4px #fff, 0 0 34px rgba(255, 220, 120, 0.9); }
+      #intro p { margin: 2px 0; font-size: 22px; font-weight: 800; max-width: 80vw; text-align: center; }
+      #map { background: rgba(8, 6, 22, 0.94); }
+      #map .top { position: fixed; left: 0; right: 0; top: 0; padding: max(10px, env(safe-area-inset-top)) 16px 10px; display: flex; align-items: center; justify-content: space-between; background: linear-gradient(#0a0818, #0a081800); z-index: 2; pointer-events: none; }
+      #map .logo { font-size: 30px; font-weight: 900; letter-spacing: 2px; color: #ffe27a; text-shadow: 0 0 18px rgba(255, 170, 60, 0.9), 0 3px 0 #8a3b00; }
+      #map .tot { font-size: 22px; font-weight: 900; color: #ffd76a; }
+      #map .play { position: fixed; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); translate: -50% 0; z-index: 2; font-size: 40px; font-weight: 900; color: #fff; padding: 14px 46px; border-radius: 50px; border: 0; cursor: pointer;
+        background: radial-gradient(circle at 35% 30%, #fff8, #fff0 40%), linear-gradient(#7dff6a, #23b23a); box-shadow: 0 0 40px rgba(120, 255, 110, 0.7), 0 6px 0 #0e5a1a; animation: bump 1.1s ease-in-out infinite; }
+      #map .me { position: absolute; translate: -50% -50%; font-size: 40px; z-index: 1; pointer-events: none; filter: drop-shadow(0 0 14px #ffd76a); animation: pulse 1s ease-in-out infinite; }
+      #card { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); z-index: 8; }
+      #card.show { display: flex; }
+      #card .box { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 34px 26px; border-radius: 30px; background: linear-gradient(#2a1f4a, #140f26); box-shadow: 0 0 0 3px #ffd76a, 0 0 50px rgba(255, 190, 90, 0.5); animation: bump 0.35s; }
+      #card small { font-size: 22px; font-weight: 900; opacity: 0.8; letter-spacing: 1px; }
+      #card .big { font-size: 84px; filter: drop-shadow(0 0 18px rgba(255, 220, 120, 0.8)); }
+      #card p { margin: 0; font-size: 24px; font-weight: 800; text-align: center; max-width: 72vw; }
+      #card em { font-style: normal; font-size: 22px; font-weight: 800; opacity: 0.8; }
+      #card .go { margin-top: 10px; font-size: 44px; width: 120px; height: 120px; border-radius: 50%; border: 0; color: #fff; cursor: pointer; background: radial-gradient(circle at 35% 30%, #fff8, #fff0 40%), linear-gradient(#7dff6a, #23b23a); box-shadow: 0 0 40px rgba(120, 255, 110, 0.7), 0 6px 0 #0e5a1a; }
+      #card .x { position: absolute; right: -10px; top: -10px; width: 44px; height: 44px; border-radius: 50%; border: 0; font-size: 20px; color: #fff; background: #4a3d6a; cursor: pointer; }
+      #stick { position: fixed; left: 0; top: 0; width: 0; height: 0; display: none; pointer-events: none; }
+      #stick::before { content: ""; position: absolute; left: -70px; top: -70px; width: 140px; height: 140px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.06); }
+      #stick i { position: absolute; left: -26px; top: -26px; width: 52px; height: 52px; border-radius: 50%; background: radial-gradient(circle, #fff6c8, #ffb648aa 60%, #ffb64800); }
+      #home { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); width: 54px; height: 54px; border-radius: 50%; border: 0; font-size: 26px; background: rgba(20, 16, 40, 0.6); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2); cursor: pointer; z-index: 3; }
     </style>
   </head>
   <body>
@@ -98,6 +119,9 @@
     <div id="hand">👆</div>
     <div id="win"><div id="rank"></div><div id="path"></div><div id="row"><button id="mapBtn">🗺️</button><button id="boost">🎬🐜</button><button id="next">▶</button></div></div>
     <div id="map"></div>
+    <div id="card"></div>
+    <div id="stick"><i></i></div>
+    <button id="home">🗺️</button>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

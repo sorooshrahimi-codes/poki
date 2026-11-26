@@ -10,7 +10,7 @@ import { Grass } from "./grass.ts";
 import { Audio } from "./audio.ts";
 import { Terrain } from "./terrain.ts";
 import { loadShape, nextShape } from "./shapes.ts";
-import { LEVELS, goalText, renderMap, saveStars, unlocked, type Level } from "./saga.ts";
+import { LEVELS, GOAL_ICON, goalSentence, goalText, renderMap, saveStars, unlocked, type Level } from "./saga.ts";
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
 const hudCanvas = document.getElementById("hud") as HTMLCanvasElement;
@@ -141,6 +141,18 @@ function pick(clientX: number, clientY: number) {
   target[0] = ax + (bx - ax) * t; target[2] = az + (bz - az) * t;
   hasTarget = true; lastInput = time;
 }
+let stickMag = 1;
+const g0 = new Float32Array(2), g1 = new Float32Array(2);
+/** where the screen point meets the flat ground (y = 0); false if it looks at the sky */
+function ground(clientX: number, clientY: number, out: Float32Array) {
+  const x = (clientX / innerWidth) * 2 - 1, y = 1 - (clientY / innerHeight) * 2;
+  ndc[0] = x; ndc[1] = y; ndc[2] = -1; ndc[3] = 1; xform(tmp4, inv, ndc);
+  const ax = tmp4[0] / tmp4[3], ay = tmp4[1] / tmp4[3], az = tmp4[2] / tmp4[3];
+  ndc[2] = 1; xform(tmp4, inv, ndc);
+  const bx = tmp4[0] / tmp4[3], by = tmp4[1] / tmp4[3], bz = tmp4[2] / tmp4[3];
+  const t = ay / (ay - by); if (!(t > 0)) return false;
+  out[0] = ax + (bx - ax) * t; out[1] = az + (bz - az) * t; return true;
+}
 function xform(out: Float32Array, m: Float32Array, v: Float32Array) {
   for (let i = 0; i < 4; i++) out[i] = m[i] * v[0] + m[4 + i] * v[1] + m[8 + i] * v[2] + m[12 + i] * v[3];
 }
@@ -168,13 +180,13 @@ function startLevel(i: number) {
     if (castle >= 0) hard[castle] = LV.n;
   }
   leader[0] = 0; leader[2] = 0; target[0] = 0; target[2] = 0; camX = 0; camZ = 0; swarm.reset = true; swarm.open = false; travel = -1; hasTarget = false; lastMove = time;
-  roundT = -2.4; // the goal is shown first; the clock starts after it
-  introEl.innerHTML = `<small>${i + 1}</small><div>${goalText(LV)}</div><em>⏱ ${LV.time}</em>`;
+  roundT = -3.2; // the goal is shown first; the clock starts after it
+  introEl.innerHTML = `<small>LEVEL ${i + 1}</small><div>${goalText(LV)}</div><p>${goalSentence(LV)}</p><em>⏱ ${LV.time}s</em>`;
   introEl.classList.remove("show"); void introEl.offsetWidth; introEl.classList.add("show");
   boardEl.style.display = LV.rivals > 0 || bossK > 0 ? "" : "none";
   document.getElementById("fade")!.classList.remove("on");
   document.getElementById("win")!.classList.remove("show");
-  mapEl.classList.remove("show");
+  mapEl.classList.remove("show"); cardEl.classList.remove("show");
   audio.chime(2);
   poki.gameplayStart();
 }
@@ -222,9 +234,24 @@ function afterAd(fn: () => void) {
   if (adBusy) return; adBusy = true; audio.setMuted(true);
   poki.commercialBreak().then(() => { adBusy = false; audio.setMuted(false); fn(); });
 }
-document.getElementById("next")!.addEventListener("click", () => afterAd(() => startLevel(lastWin ? Math.min(LEVELS.length - 1, lvlI + 1) : lvlI)));
+document.getElementById("next")!.addEventListener("click", () => afterAd(() => { if (lastWin && lvlI < LEVELS.length - 1) showMap(lvlI); else startLevel(lvlI); }));
 document.getElementById("mapBtn")!.addEventListener("click", () => afterAd(showMap));
-function showMap() { document.getElementById("win")!.classList.remove("show"); renderMap(mapEl, (i) => startLevel(i)); mapEl.classList.add("show"); }
+/** the home screen: the road of levels. `from` walks your marker from that level to the next one first */
+function showMap(from = -1) {
+  roundOver = true; poki.gameplayStop();
+  document.getElementById("win")!.classList.remove("show"); introEl.classList.remove("show");
+  mapEl.classList.add("show");
+  renderMap(mapEl, (i) => showCard(i), from);
+}
+const cardEl = document.getElementById("card")!;
+function showCard(i: number) {
+  const L = LEVELS[i];
+  cardEl.innerHTML = `<div class="box"><small>LEVEL ${i + 1}</small><div class="big">${GOAL_ICON[L.goal]}</div><p>${goalSentence(L)}</p><em>⏱ ${L.time}s</em><button class="go">▶</button><button class="x">✕</button></div>`;
+  cardEl.classList.add("show"); audio.start();
+  cardEl.querySelector(".go")!.addEventListener("click", () => { cardEl.classList.remove("show"); startLevel(i); });
+  cardEl.querySelector(".x")!.addEventListener("click", () => cardEl.classList.remove("show"));
+}
+document.getElementById("home")!.addEventListener("click", () => { if (!roundOver) showMap(); });
 document.getElementById("boost")!.addEventListener("click", (e) => {
   // a rewarded ad: try again with a far bigger swarm
   if (adBusy) return; adBusy = true; audio.setMuted(true);
@@ -245,12 +272,15 @@ countBox.addEventListener("pointerdown", () => { if (!SKIP_TEST) return; const n
 let touched = false;
 // pointers: one finger (or the mouse) steers; two fingers pinch to zoom; the wheel zooms too
 const ptrs = new Map<number, { x: number; y: number }>();
+let stick = false, stX = 0, stY = 0, stCX = 0, stCY = 0;
+const stickEl = document.getElementById("stick")!, knobEl = stickEl.firstElementChild as HTMLElement;
 let pinch0 = 0, zoom0 = 1, userZoom = 1, aimX = 0, aimY = 0, aiming = false;
 canvas.addEventListener("pointerdown", (e) => {
   audio.start();
   ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
-  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); zoom0 = userZoom; aiming = false; }
-  else { down = true; aiming = true; aimX = e.clientX; aimY = e.clientY; tapT = time; tapX = e.clientX; tapY = e.clientY; }
+  if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch0 = Math.hypot(a.x - b.x, a.y - b.y); zoom0 = userZoom; aiming = false; stick = false; }
+  else { down = true; aiming = true; aimX = e.clientX; aimY = e.clientY; tapT = time; tapX = e.clientX; tapY = e.clientY;
+    if (e.pointerType !== "mouse") { stick = true; stX = e.clientX; stY = e.clientY; stCX = stX; stCY = stY; } }
   lastMove = time;
   if (!touched) { touched = true; hand.classList.add("gone"); }
   if (!document.getElementById("win")!.classList.contains("show")) poki.gameplayStart();
@@ -263,12 +293,19 @@ addEventListener("pointermove", (e) => {
     userZoom = Math.min(2.6, Math.max(0.4, zoom0 * pinch0 / Math.max(20, Math.hypot(a.x - b.x, a.y - b.y))));
     return;
   }
+  if (stick && ptrs.size === 1) {
+    // a floating stick: the drag from where the finger landed is the direction; drag further, go faster
+    stCX = e.clientX; stCY = e.clientY; lastMove = time;
+    const dx = stCX - stX, dy = stCY - stY, d = Math.hypot(dx, dy), R = 70;
+    if (d > R) { stX = stCX - dx / d * R; stY = stCY - dy / d * R; }
+    return;
+  }
   if (down || e.pointerType === "mouse") { aiming = true; aimX = e.clientX; aimY = e.clientY; lastMove = time; }
 });
 const lift = (e: PointerEvent) => {
   // a quick tap is a punch: the whole swarm lunges at that spot and hits hard
-  if (ptrs.size === 1 && time - tapT < 0.28 && Math.hypot(e.clientX - tapX, e.clientY - tapY) < 24) { pick(e.clientX, e.clientY); dashT = 0.5; shake = Math.max(shake, 0.35); audio.thump(0.45); }
-  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; if (ptrs.size === 0) down = false; };
+  if (ptrs.size === 1 && e.pointerType === "mouse" && time - tapT < 0.28 && Math.hypot(e.clientX - tapX, e.clientY - tapY) < 24) { pick(e.clientX, e.clientY); dashT = 0.5; shake = Math.max(shake, 0.35); audio.thump(0.45); }
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch0 = 0; if (ptrs.size === 0) { down = false; stick = false; } };
 addEventListener("pointerup", lift);
 addEventListener("pointercancel", lift);
 canvas.addEventListener("wheel", (e) => { e.preventDefault(); userZoom = Math.min(2.6, Math.max(0.4, userZoom * Math.exp(e.deltaY * 0.0012))); }, { passive: false });
@@ -320,7 +357,7 @@ function sizeOf(k: number) { return k === 0 ? active : swarm.A[k]; }
 const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? START_SIZE);
 let meal = 0;
-queueMicrotask(() => startLevel(lvlI));
+queueMicrotask(() => { if (params.has("lvl")) startLevel(lvlI); else { roundOver = true; showMap(); } });
 let landT = 0, firstBite = false;
 const contactT = new Float32Array(64), hpOf = new Float32Array(64).fill(1), killer = new Int8Array(64);
 let gContact = 0, gHp = 1;
@@ -458,12 +495,6 @@ function drawFx(dt: number) {
     }
     fctx.restore();
   }
-  // a crown floats over whoever is biggest right now
-  if (LV.rivals > 0 || bossK > 0) { let top = 0; for (let k = 1; k < 4; k++) if (sizeOf(k) > sizeOf(top)) top = k;
-    if (top === bossK) { /* the boss wears no crown: it is the boss */ }
-    const x = top === 0 ? leader[0] : swarm.L[top * 3], z = top === 0 ? leader[2] : swarm.L[top * 3 + 2], y = (top === 0 ? leader[1] : swarm.L[top * 3 + 1]) + 3 + Math.sqrt(sizeOf(top)) * 0.03;
-    project(x, y, z, pr);
-    if (sizeOf(top) > 0 && pr[2] > 0) { fctx.save(); fctx.textAlign = "center"; fctx.font = `${Math.round((top === 0 ? 34 : 28) * dpr)}px sans-serif`; fctx.fillText("👑", pr[0], pr[1] + 4 * dpr * Math.sin(time * 4)); fctx.restore(); } }
   leftEl.textContent = ""; void left;
   // the giant's own bar at the top: it flashes on every hit
   const up = giant >= 0 && !giantGone() && giantState !== "fallen" && giantState !== "sleep";
@@ -569,15 +600,30 @@ function frame(now: number) {
   sh.blend = shapeOn && idle ? Math.min(1, sh.blend + dt * 2.2) : Math.max(0, sh.blend - dt * 3);
   sh.scale = 2.4 + Math.sqrt(active) * 0.07;
   if (shapeOn && idle) { target[0] = leader[0]; target[2] = leader[2]; }
-  else if (aiming && (down || !("ontouchstart" in window))) pick(aimX, aimY);
+  else if (stick) {
+    const sx = stCX - stX, sy = stCY - stY, sl = Math.hypot(sx, sy);
+    if (sl > 6) {
+      // turn the screen direction into a ground direction: two ground points under the middle of the screen
+      const cx = innerWidth / 2, cy = innerHeight * 0.55;
+      if (ground(cx, cy, g0) && ground(cx + sx / sl * 60, cy + sy / sl * 60, g1)) {
+        const wx = g1[0] - g0[0], wz = g1[1] - g0[1], wl = Math.hypot(wx, wz) || 1;
+        stickMag = Math.min(1, sl / 55);
+        target[0] = leader[0] + wx / wl * 30; target[2] = leader[2] + wz / wl * 30; hasTarget = true;
+      }
+    } else { target[0] = leader[0] + leaderVel[0] * 0.15; target[2] = leader[2] + leaderVel[2] * 0.15; stickMag = 0; }
+  }
+  else if (aiming && (down || !("ontouchstart" in window))) { pick(aimX, aimY); stickMag = 1; }
+  stickEl.style.display = stick ? "block" : "none";
+  if (stick) { stickEl.style.transform = `translate(${stX}px,${stY}px)`; knobEl.style.transform = `translate(${stCX - stX}px,${stCY - stY}px)`; }
   { const r = Math.hypot(target[0], target[2]), lim = WALL - 4; if (r > lim && travel < 0) { target[0] *= lim / r; target[2] *= lim / r; } }
   const speed = 8.5 + Math.sqrt(active) * 0.025;
   const dx = target[0] - leader[0], dz = target[2] - leader[2], d = Math.hypot(dx, dz);
   // the seed is the finger: it gets there fast, easing in at the end
   dashT = Math.max(0, dashT - dt);
-  const vmax = speed * (dashT > 0 ? 3.2 : 1.25);
+  const vmax = speed * (dashT > 0 ? 3.2 : stick ? 0.5 + 1.4 * stickMag : 1.25);
   const vx = d > 0.01 ? (dx / d) * Math.min(d * (dashT > 0 ? 8 : 3.5), vmax) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * (dashT > 0 ? 8 : 3.5), vmax) : 0;
-  leaderVel[0] += (vx - leaderVel[0]) * Math.min(1, dt * 7); leaderVel[2] += (vz - leaderVel[2]) * Math.min(1, dt * 7);
+  const acc = Math.min(1, dt * (stick ? 12 : 7));
+  leaderVel[0] += (vx - leaderVel[0]) * acc; leaderVel[2] += (vz - leaderVel[2]) * acc;
   leader[0] += leaderVel[0] * dt; leader[2] += leaderVel[2] * dt;
   leader[1] = terrain.floor(leader[0], leader[2]);
 
