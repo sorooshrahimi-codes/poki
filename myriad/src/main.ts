@@ -976,4 +976,4 @@ function frame(now: number) {
 requestAnimationFrame(frame);
 poki.init().then(() => poki.loadingFinished());
 
-if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { startLevel, stepDone, freeGold, get roundT() { return roundT; }, set roundT(v: number) { roundT = v; }, get travel() { return travel; }, gov, city, swarm, leader, target, poke: () => { lastMove = time; }, terrain, get active() { return active; }, set active(v: number) { active = v; } };
+if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { startLevel, stepDone, freeGold, hpOf, contactT, hard, get castle() { return castle; }, get roundT() { return roundT; }, set roundT(v: number) { roundT = v; }, get travel() { return travel; }, gov, city, swarm, leader, target, poke: () => { lastMove = time; }, terrain, get active() { return active; }, set active(v: number) { active = v; } };
