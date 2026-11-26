@@ -1,21 +1,32 @@
-# بسته‌ی کامل سه بازی برای پوکی
+# بسته‌ی کامل دو بازی برای پوکی
 
 مخزن: `sorooshrahimi-codes/poki`، شاخه‌ی `ccr-712f8ebd-3t9t7z`، پوشه‌ی `packages/`
 
 ## لینک بازی‌ها (بدون لاگین، روی Cloudflare)
 | بازی | لینک |
 |---|---|
-| هر سه بازی | https://kidgames.soroosh-ra.workers.dev/ |
+| صفحه‌ی معرفی هر دو بازی (تریلر، پوستر، فایل‌ها) | https://kidgames.soroosh-ra.workers.dev/ |
 | Deep Luck | https://kidgames.soroosh-ra.workers.dev/deep-luck/ |
 | Critter Vac | https://kidgames.soroosh-ra.workers.dev/critter-vac/ |
-| Glowmites | https://kidgames.soroosh-ra.workers.dev/glowmites/ |
 
 یک Worker کوچک روی Cloudflare (کد: `site/_worker_source.js`) فایل‌ها را از همین مخزن گیت‌هاب سرو می‌کند. برای همین مخزن باید **Public** بماند.
 
 ## ویدیوها (همین حالا کار می‌کنند)
 - Deep Luck: https://cdn.jsdelivr.net/gh/sorooshrahimi-codes/poki@17172afeedd7ddf5986fb8f377a91454356a631e/packages/deep-luck/trailer_web.mp4
 - Critter Vac: https://cdn.jsdelivr.net/gh/sorooshrahimi-codes/poki@17172afeedd7ddf5986fb8f377a91454356a631e/packages/critter-vac/trailer_web.mp4
-- Glowmites: در حال ساخت
+
+---
+
+## پوستر و تریلر تازه (پوشه‌ی `packages/promo/`)
+| فایل | کاربرد |
+|---|---|
+| `deep-luck_poster_1080x1350.jpg`، `critter-vac_poster_1080x1350.jpg` | پوستر عمودی با لوگو، شعار و دکمه‌ی بازی (اینستاگرام، معرفی) |
+| `*_keyart_1080.jpg` | تصویر مربعی با لوگو |
+| `*_banner_1920x1080.jpg` | بنر افقی با لوگو و سه ویژگی |
+| `*_trailer_1280x720.mp4` و `*_trailer_web.mp4` | تریلر با کارت پایانی (لوگو + لینک بازی) |
+| `email_*.jpg` | تصویرهای داخل ایمیل |
+
+ایمیل به پوکی: `EMAIL_TO_POKI.html` (پیش‌نویسش در جیمیل ساخته شده، در همان رشته‌ی ایمیل پوکی).
 
 ---
 
@@ -56,25 +67,6 @@
 
 **Why a good fit for Poki**
 > The core is one simple, satisfying action: hold to suck up cute critters, which kids and adults understand in a second, with no reading needed. Levels are short, the vacuum visibly evolves, and huge funny giant fights give a big payoff every few minutes. 72 critters to collect, a home to build and a rival to race keep players coming back. Runs on phone and desktop, 9 languages, Poki SDK integrated with ads only at natural breaks.
-
----
-
-## ③ Glowmites
-- فایل بازی برای آپلود: `packages/glowmites/glowmites-poki.zip` (حدود ۴۰ کیلوبایت؛ همه‌چیز در لحظه ساخته می‌شود)
-- ۳ عکس فرم و پوستر: در حال ساخت → `packages/glowmites/screenshots/`
-
-| فیلد فرم | جواب |
-|---|---|
-| Game title | Glowmites |
-| Engine | AI/Claude/ChatGPT |
-| Build or video | Playable browser build |
-| Released elsewhere? | No |
-
-**Describe your game**
-> Lead a glowing swarm of up to 200,000 tiny mites through a world turned to grey stone. Every bite hatches new mites, so the swarm grows from a few hundred into a living storm that topples houses, towers and trees, with every piece falling by real physics, while grass, water and colour come back wherever it passes. Free five walled lands, each with its own giant to bring down: race over buildings to hit harder, tap to punch, and chain destructions for combos.
-
-**Why a good fit for Poki**
-> It looks like nothing else on the web: hundreds of thousands of creatures at a smooth 60 fps on ordinary phones, in a download of about 100 KB. The core is one finger, no text at all, and the first five seconds already show the swarm growing and the world changing colour. Health bars, combos, a boss bar and arrows to the next target keep it clear and goal-driven, while five lands, five giants and endless laps give long play. Poki SDK integrated, ads only between lands, progress saved.
 
 ---
 
