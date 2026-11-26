@@ -91,7 +91,7 @@ function makeLand(d: number, seed = d) {
   world.scenery(d, d % LANDS.length, d > 1 ? (d - 2) % LANDS.length : -1);
   world.nextPal = LANDS[d % LANDS.length].pal; world.prevPal = d > 1 ? LANDS[(d - 2) % LANDS.length].pal : undefined;
   world.liquid = L.liquid; terrain.amp = L.amp;
-  const out = list.slice(0, 56); // (64 volumes: the land, plus six for the giant)
+  const out = list.slice(0, 55); // (64 volumes: the land, a new tower, six for the giant)
   // the hills, with a level pad under every building (sunk a little, so it sits in the ground)
   const ys = terrain.build(seed, out.map((b) => ({ x: b.x, z: b.z, half: (32 * 0.28 * (b.scale ?? 1)) / 2 + 0.6 })));
   out.forEach((b, k) => (b.y = ys[k] - 0.12));
@@ -265,9 +265,19 @@ function startLevel(i: number, fresh = false) {
     swarm.L[3] = Math.cos(a) * 40; swarm.L[5] = Math.sin(a) * 40; swarm.L[4] = terrain.floor(swarm.L[3], swarm.L[5]);
   }
   if (LV.goal === "castle") {
-    // the biggest thing still standing, made far tougher: grow first, then bring it down
-    let bs = -1; for (let b = 0; b < city.buildings.length; b++) if (!city.gone[b] && !isPart(b) && city.buildings[b].collapseAt < 0 && hpOf[b] > 0.95 && city.buildings[b].solid > bs) { bs = city.buildings[b].solid; castle = b; }
-    if (castle >= 0) { hard[castle] = LV.n; contactT[castle] = 0; for (let k = 0; k < 4; k++) contactBy[castle * 4 + k] = 0; }
+    // a big new tower rises out of the ground, away from the swarm, tough for a swarm of any size
+    for (let t = 0; t < 40 && castle < 0; t++) {
+      const a = Math.random() * Math.PI * 2, r = (0.35 + Math.random() * 0.4) * wallAt(Math.cos(a), Math.sin(a)), x = Math.cos(a) * r, z = Math.sin(a) * r;
+      if (Math.hypot(x - leader[0], z - leader[2]) < 25 || Math.hypot(x - terrain.pond.x, z - terrain.pond.z) < terrain.pond.r + 8 || Math.hypot(x - terrain.pond2.x, z - terrain.pond2.z) < terrain.pond2.r + 8) continue;
+      const kind = landOf(district).mix[0][0];
+      const nb = city.add({ x, z, kind, seed: 777 + lvlI * 31 + t }, 1.7 + 0.1 * LV.land, terrain.floor(x, z) - 0.12, 0.6);
+      if (nb < 0) break;
+      castle = nb; contactT[nb] = 0; hpOf[nb] = 1; hpPrev[nb] = 1; wasGone[nb] = 0; killer[nb] = -1; shake = Math.max(shake, 0.8); audio.thump(1.2);
+    }
+    if (castle >= 0) { hard[castle] = LV.n * (0.6 + Math.sqrt(Math.min(active, 131072)) / 250); contactT[castle] = 0; for (let k = 0; k < 4; k++) contactBy[castle * 4 + k] = 0; }
+    // (no room for a new one: the biggest thing still standing)
+    let bs = -1; if (castle < 0) for (let b = 0; b < city.buildings.length; b++) if (!city.gone[b] && !isPart(b) && city.buildings[b].collapseAt < 0 && hpOf[b] > 0.95 && city.buildings[b].solid > bs) { bs = city.buildings[b].solid; castle = b; }
+    if (castle >= 0) { hard[castle] = LV.n * (0.6 + Math.sqrt(Math.min(active, 131072)) / 250); contactT[castle] = 0; for (let k = 0; k < 4; k++) contactBy[castle * 4 + k] = 0; }
   }
   roundT = -1.6; roundOver = false;
   introEl.innerHTML = `<div>${GOAL_ICON[LV.goal]}</div><p>${goalSentence(LV)}</p>`;
