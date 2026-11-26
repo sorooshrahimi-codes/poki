@@ -304,6 +304,8 @@ function newRound() {
   winEl.classList.remove("show");
   audio.chime(2); qaLog(`ROUND start map=${district}`);
 }
+// a land to look at behind the title card
+city.build(makeLand(district, 1000 + Math.floor(Math.random() * 9000)));
 function endRound() {
   roundOver = true; poki.gameplayStop();
   const order = [...Array(NT).keys()].sort((a, b) => sizeOf(b) - sizeOf(a)), place = order.indexOf(0) + 1;
