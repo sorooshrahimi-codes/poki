@@ -12,7 +12,7 @@ const VS = `#version 300 es
 precision highp float;
 uniform sampler2D uColor, uDen, uHeight;
 uniform mat4 uVP;
-uniform vec2 uOrigin;
+uniform vec2 uOrigin, uCamXZ;
 uniform float uTime, uWorld;
 out vec3 vCol;
 out float vTip;
@@ -30,7 +30,10 @@ void main() {
   vec2 uv = world / uWorld + 0.5;
   float rest = clamp(texture(uColor, uv).r * 1.6 - (r3 * 0.5), 0.0, 1.0);
   float gy = groundH(world);
-  float h = rest < 0.04 || gy < WATER + 0.05 || length(world) > 63.5 ? 0.0 : mix(0.05, 0.42 + 0.55 * r2, rest);
+  // far blades shrink away (and the square patch fades at its rim), so no dark speckle shows from afar
+  vec2 rim = abs(cell / float(${SIDE}) - 0.5) * 2.0;
+  float far = (1.0 - smoothstep(0.6, 0.95, max(rim.x, rim.y))) * (1.0 - smoothstep(20.0, 31.0, length(world - uCamXZ)));
+  float h = rest < 0.04 || gy < WATER + 0.05 || length(world) > 63.5 ? 0.0 : mix(0.05, 0.42 + 0.55 * r2, rest) * far;
   // the blade: 5 vertices (a tapering strip), bent by wind and pushed by the swarm
   int k = gl_VertexID;
   float t = float(k / 2) / 2.0;
@@ -70,7 +73,6 @@ void main() {
   float sw = texture(uLight, vW.xz / uWorld + 0.5).r;
   float glow = 1.0 - exp(-sw * 0.012);
   vec3 c = vCol * (0.55 + 0.6 * vTip + glow * 1.4) + vec3(1.0, 0.5, 0.15) * glow * 0.3 * vTip;
-  c = mix(c, vec3(0.20, 0.16, 0.22), smoothstep(60.0, 140.0, length(vW - uCam)));
   o = vec4(c, 1.0);
 }`;
 
@@ -87,7 +89,7 @@ export class Grass {
     // the patch is centred a little ahead of the camera target, snapped to the blade grid
     const half = (SIDE * STEP) / 2;
     gl.uniform2f(u.uOrigin, Math.floor((cx - half) / STEP) * STEP, Math.floor((cz - half) / STEP) * STEP);
-    gl.uniform1f(u.uTime, t); gl.uniform1f(u.uWorld, WORLD); gl.uniform3fv(u.uCam, cam);
+    gl.uniform2f(u.uCamXZ, cx, cz); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uWorld, WORLD); gl.uniform3fv(u.uCam, cam);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 5, Math.floor(SIDE * SIDE * density));
   }
 }

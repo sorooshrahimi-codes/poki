@@ -100,6 +100,25 @@
       #stick::before { content: ""; position: absolute; left: -70px; top: -70px; width: 140px; height: 140px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.06); }
       #stick i { position: absolute; left: -26px; top: -26px; width: 52px; height: 52px; border-radius: 50%; background: radial-gradient(circle, #fff6c8, #ffb648aa 60%, #ffb64800); }
       #home { position: fixed; right: max(12px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); width: 54px; height: 54px; border-radius: 50%; border: 0; font-size: 26px; background: rgba(20, 16, 40, 0.6); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.2); cursor: pointer; z-index: 3; }
+      #hand small { position: absolute; left: 50%; top: 66px; translate: -50% 0; white-space: nowrap; font-size: 20px; font-weight: 900; text-shadow: 0 2px 6px #000; }
+      #timer { display: none; }
+      #goal { top: calc(max(12px, env(safe-area-inset-top)) + 46px); width: min(70vw, 420px); }
+      #goalTxt { top: calc(max(12px, env(safe-area-inset-top)) + 62px); font-size: 19px; }
+      #board { top: calc(max(12px, env(safe-area-inset-top)) + 104px); }
+      #lands { position: fixed; right: max(10px, env(safe-area-inset-right)); top: max(10px, env(safe-area-inset-top)); display: flex; align-items: center; gap: 3px; pointer-events: none; }
+      #lands div { position: relative; font-size: 20px; filter: grayscale(1) brightness(0.6); }
+      #lands div.done { filter: none; opacity: 0.85; }
+      #lands div.on { filter: drop-shadow(0 0 10px rgba(255, 220, 120, 0.9)); font-size: 30px; }
+      #lands b { width: 8px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.3); }
+      #lands .dots { position: absolute; left: 50%; top: 100%; translate: -50% 2px; display: flex; gap: 3px; }
+      #lands .dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.3); }
+      #lands .dots i.done { background: #8dff7a; }
+      #lands .dots i.now { background: #ffd23c; box-shadow: 0 0 6px #ffd23c; }
+      #intro { top: 30%; }
+      #intro div { font-size: 72px; }
+      #intro p { font-size: 26px; font-weight: 900; color: #fff; }
+      #intro.show { animation: intro 2.2s ease-out forwards; }
+      #fade.flash { background: #fff6dc; opacity: 0.85; transition: opacity 0.05s; }
     </style>
   </head>
   <body>
@@ -116,12 +135,10 @@
     <div id="boss"><b id="bossFill"></b></div>
     <div id="combo"></div>
     <div id="fade"></div>
-    <div id="hand">👆</div>
-    <div id="win"><div id="rank"></div><div id="path"></div><div id="row"><button id="mapBtn">🗺️</button><button id="boost">🎬🐜</button><button id="next">▶</button></div></div>
-    <div id="map"></div>
-    <div id="card"></div>
+    <div id="hand">👆<small>Drag to move</small></div>
+    <div id="win"></div>
+    <div id="lands"></div>
     <div id="stick"><i></i></div>
-    <button id="home">🗺️</button>
     <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

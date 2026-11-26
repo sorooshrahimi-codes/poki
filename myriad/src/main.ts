@@ -10,7 +10,7 @@ import { Grass } from "./grass.ts";
 import { Audio } from "./audio.ts";
 import { Terrain } from "./terrain.ts";
 import { loadShape, nextShape } from "./shapes.ts";
-import { LEVELS, GOAL_ICON, goalSentence, goalText, renderMap, saveStars, unlocked, type Level } from "./saga.ts";
+import { LEVELS, GOAL_ICON, LAND_ICON, firstOf, goalSentence, stepsOf, type Level } from "./saga.ts";
 
 const canvas = document.getElementById("gl") as HTMLCanvasElement;
 const hudCanvas = document.getElementById("hud") as HTMLCanvasElement;
@@ -92,14 +92,13 @@ function makeLand(d: number, seed = d) {
 }
 // progress is kept: the land you are on and how big the swarm has grown
 const SAVE = "glowmites-save";
-let saved: { land: number; active: number } = { land: 1, active: 800 };
-try { const j = JSON.parse(localStorage.getItem(SAVE) || "null"); if (j && j.land >= 1) saved = j; } catch { /* private mode */ }
-function save() { try { localStorage.setItem(SAVE, JSON.stringify({ land: district, active })); } catch { /* ignore */ } }
-let lvlI = Math.min(LEVELS.length - 1, Math.max(0, params.has("lvl") ? Number(params.get("lvl")) - 1 : unlocked()));
+let saved: { land: number; active: number; lap?: number } = { land: 1, active: 400 };
+try { const j = JSON.parse(localStorage.getItem(SAVE + "2") || "null"); if (j && j.land >= 1 && j.land <= 5) saved = j; } catch { /* private mode */ }
+function save() { try { localStorage.setItem(SAVE + "2", JSON.stringify({ land: LV.land, lap, active: Math.max(400, Math.round(active)) })); } catch { /* ignore */ } }
+// you come back to the start of the land you were in, with the swarm you had
+let lvlI = params.has("lvl") ? Math.min(LEVELS.length - 1, Math.max(0, Number(params.get("lvl")) - 1)) : firstOf(saved.land);
 let LV: Level = LEVELS[lvlI];
 let district = LV.land;
-void saved;
-city.build(makeLand(district, LV.seed));
 
 
 // ---------------------------------------------------------------- sizing (capped pixel count keeps the fill cost bounded)
@@ -159,109 +158,104 @@ function xform(out: Float32Array, m: Float32Array, v: Float32Array) {
 let down = false;
 countNInit();
 function countNInit() { const el = document.getElementById("countN"); if (el) el.textContent = String(Number(params.get("start") ?? 800)); }
-// ---------------------------------------------------------------- the saga: one short level at a time
-let mine = 0, goldMine = 0, castle = -1, bossK = -1, bestActive = 400;
+// ---------------------------------------------------------------- the journey: one clear task at a time, lands joined by gates
+let mine = 0, goldMine = 0, castle = -1, bossK = -1, bestActive = 400, builtLand = -1, lap = 0, stepBusy = false, stepT = 0;
 const hard = new Float32Array(64).fill(1);
-const mapEl = document.getElementById("map")!, introEl = document.getElementById("intro")!, goalTxt = document.getElementById("goalTxt")!;
-function startLevel(i: number) {
-  lvlI = i; LV = LEVELS[i]; district = LV.land; roundLen = LV.time;
-  city.build(makeLand(district, LV.seed)); resetRound();
-  if (boostNext) { active = START_SIZE * 5; boostNext = false; }
-  contactT.fill(0); hpOf.fill(1); hpPrev.fill(1); wasGone.fill(0); killer.fill(-1); hard.fill(1); combo = 0;
-  giant = -1; parts = []; stompT = -1; giantState = "sleep"; won = false; progress = 0; landT = 0; firstBite = i > 0;
-  if (i > 0) hand.classList.add("gone");
-  mine = 0; goldMine = 0; castle = -1; bossK = -1; bestActive = START_SIZE;
-  // which rivals play: none, some, or one giant red boss
-  for (let k = 1; k < 4; k++) if (k > LV.rivals) { swarm.A[k] = 0; rv.dead[k] = Infinity; }
-  if (LV.goal === "boss") { bossK = 2; swarm.A[2] = LV.n; rv.dead[2] = 0; swarm.L[6] = 0; swarm.L[8] = -36; }
+const introEl = document.getElementById("intro")!, goalTxt = document.getElementById("goalTxt")!, landsEl = document.getElementById("lands")!;
+function startLevel(i: number, fresh = false) {
+  lvlI = i; LV = LEVELS[i]; roundLen = Infinity; stepBusy = false; stepT = 0;
+  if (fresh || LV.land + lap * 5 !== builtLand) {
+    // a new land: built fresh, the swarm keeps its size
+    district = LV.land + lap * 5; builtLand = district;
+    const keep = active;
+    city.build(makeLand(district, LV.seed + lap * 999)); resetRound();
+    active = Math.max(START_SIZE, keep);
+    contactT.fill(0); hpOf.fill(1); hpPrev.fill(1); wasGone.fill(0); killer.fill(-1); combo = 0;
+    giant = -1; parts = []; stompT = -1; giantState = "sleep"; progress = 0; landT = 0; firstBite = lvlI > 0;
+    swarm.reset = true; swarm.open = false; hasTarget = false; lastMove = time;
+    if (travel < 0) { leader[0] = 0; leader[2] = 0; target[0] = 0; target[2] = 0; camX = 0; camZ = 0; }
+  }
+  won = false; hard.fill(1);
+  mine = 0; goldMine = 0; castle = -1; bossK = -1; gold = -1; goldNext = 0; bestActive = Math.max(bestActive, active);
+  for (let k = 1; k < 4; k++) { swarm.A[k] = 0; rv.dead[k] = Infinity; }
+  if (LV.goal === "rival") {
+    // one blue swarm, somewhere across the land: smaller at first, later bigger than you
+    bossK = 1; swarm.A[1] = Math.max(300, Math.round(active * LV.n)); rv.dead[1] = 0; rv.meal[1] = 0;
+    const a = Math.atan2(-leader[2], -leader[0]) + (Math.random() - 0.5);
+    swarm.L[3] = Math.cos(a) * 40; swarm.L[5] = Math.sin(a) * 40; swarm.L[4] = terrain.floor(swarm.L[3], swarm.L[5]);
+  }
   if (LV.goal === "castle") {
-    // the biggest thing in the land, made far tougher: grow first, then bring it down
-    let bs = -1; for (let b = 7; b < city.buildings.length; b++) if (city.buildings[b].solid > bs) { bs = city.buildings[b].solid; castle = b; }
+    // the biggest thing still standing, made far tougher: grow first, then bring it down
+    let bs = -1; for (let b = 0; b < city.buildings.length; b++) if (!city.gone[b] && !isPart(b) && city.buildings[b].collapseAt < 0 && city.buildings[b].solid > bs) { bs = city.buildings[b].solid; castle = b; }
     if (castle >= 0) hard[castle] = LV.n;
   }
-  leader[0] = 0; leader[2] = 0; target[0] = 0; target[2] = 0; camX = 0; camZ = 0; swarm.reset = true; swarm.open = false; travel = -1; hasTarget = false; lastMove = time;
-  roundT = -3.2; // the goal is shown first; the clock starts after it
-  introEl.innerHTML = `<small>LEVEL ${i + 1}</small><div>${goalText(LV)}</div><p>${goalSentence(LV)}</p><em>⏱ ${LV.time}s</em>`;
+  roundT = -1.6; roundOver = false;
+  introEl.innerHTML = `<div>${GOAL_ICON[LV.goal]}</div><p>${goalSentence(LV)}</p>`;
   introEl.classList.remove("show"); void introEl.offsetWidth; introEl.classList.add("show");
-  boardEl.style.display = LV.rivals > 0 || bossK > 0 ? "" : "none";
+  boardEl.style.display = bossK > 0 ? "" : "none";
   document.getElementById("fade")!.classList.remove("on");
-  document.getElementById("win")!.classList.remove("show");
-  mapEl.classList.remove("show"); cardEl.classList.remove("show");
+  drawLands();
   audio.chime(2);
+  save();
   poki.gameplayStart();
 }
-/** how far the goal is done, 0..1 */
+/** the lands in a row at the top: done ones glow, the current one is big, with a dot per task */
+function drawLands() {
+  const cur = LV.land;
+  landsEl.innerHTML = LAND_ICON.map((ic, k) => {
+    const d = k + 1, st = stepsOf(d), on = d === cur;
+    const dots = on ? `<span class="dots">${st.map((s) => `<i class="${LEVELS.indexOf(s) < lvlI ? "done" : LEVELS.indexOf(s) === lvlI ? "now" : ""}"></i>`).join("")}</span>` : "";
+    return `<div class="${d < cur || lap > 0 ? "done" : ""}${on ? " on" : ""}">${ic}${dots}</div>`;
+  }).join(`<b></b>`);
+}
+/** how far the current task is done, 0..1 */
 function goalProgress() {
   switch (LV.goal) {
     case "wreck": return mine / LV.n;
     case "gold": return goldMine / LV.n;
-    case "grow": return active / LV.n;
-    case "castle": return castle >= 0 ? (city.gone[castle] ? 1 : 1 - hpOf[castle]) : 0;
-    case "boss": return bossK > 0 ? (rv.dead[bossK] > 0 && swarm.A[bossK] < 1 ? 1 : active / (active + swarm.A[bossK])) : 0;
-    case "race": return Math.max(0, roundT) / roundLen;
+    case "castle": return castle >= 0 ? (city.gone[castle] ? 1 : 1 - hpOf[castle]) : 1;
+    case "rival": return bossK > 0 ? (rv.dead[bossK] > 0 && swarm.A[bossK] < 1 ? 1 : 0) : 0;
+    case "giant": return giant >= 0 ? (giantGone() ? 1 : 1 - gHp) : 0;
+    case "gate": return 0;
   }
 }
 function checkGoal() {
-  if (roundT < 0) return;
-  const p = goalProgress();
-  if (LV.goal === "race") { if (roundT >= roundLen) { const place = [1, 2, 3].filter((k) => sizeOf(k) > active).length; finishLevel(place < 3, 3 - place); } return; }
-  const done = LV.goal === "boss" ? p >= 1 : p >= 1;
-  if (done) { const left = 1 - roundT / roundLen; finishLevel(true, left > 0.4 ? 3 : left > 0.15 ? 2 : 1); }
-  else if (roundT >= roundLen) finishLevel(false, 0);
+  if (roundT < 0 || stepBusy || LV.goal === "gate") return;
+  if (LV.goal === "castle" && castle < 0) { stepDone(); return; }
+  if (goalProgress() >= 1) stepDone();
 }
-let lastWin = false;
-function finishLevel(win: boolean, stars: number) {
-  roundOver = true; won = true; lastWin = win; poki.gameplayStop();
-  if (win) { shake = 0.8; city.bloom = 2.5; saveStars(lvlI, stars); for (let i = 0; i < 3 + stars; i++) setTimeout(() => audio.chime(3 + i), i * 140); }
-  else audio.thump(0.8);
-  const fmt = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
-  let body = `<div class="lv">${lvlI + 1}</div><div class="st">${win ? "★".repeat(stars) + "☆".repeat(3 - stars) : "⏱"}</div>`;
-  if (LV.goal === "race" || LV.rivals > 0 || bossK > 0) {
-    const medal = ["🥇", "🥈", "🥉", "4"];
-    const ks = [0, 1, 2, 3].filter((k) => k === 0 || k <= LV.rivals || k === bossK);
-    body += ks.map((k) => ({ k, n: sizeOf(k) })).sort((a, b) => b.n - a.n).map((o, i) => `<div class="row${o.k === 0 ? " me" : ""}"><span>${medal[i]}</span><span>${o.k === 0 ? "✨" : o.k === bossK ? "👾" : RIVAL_NAMES[o.k]}</span><b>${fmt(o.n)}</b></div>`).join("");
-  } else body += `<div class="row me"><span>${goalText(LV)}</span><b>${Math.min(100, Math.round(goalProgress() * 100))}%</b></div>`;
-  document.getElementById("rank")!.innerHTML = body;
-  const nextBtn = document.getElementById("next")!;
-  nextBtn.textContent = win ? "▶" : "↻";
-  document.getElementById("boost")!.classList.toggle("off", win);
-  document.getElementById("boost")!.classList.remove("used");
-  save();
-  setTimeout(() => document.getElementById("win")!.classList.add("show"), win ? 1200 : 600);
+function stepDone() {
+  if (stepBusy) return; stepBusy = true;
+  comboEl.style.color = "#8dff7a"; comboEl.textContent = "✔"; comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop");
+  for (let k = 0; k < 4; k++) setTimeout(() => audio.chime(4 + k), k * 120);
+  shake = Math.max(shake, 0.5);
+  if (LV.goal === "giant") { city.bloom = 3.5; shake = 1; }
+  setTimeout(() => startLevel(Math.min(LEVELS.length - 1, lvlI + 1)), 1300);
 }
-let adBusy = false, boostNext = false;
-function afterAd(fn: () => void) {
-  if (adBusy) return; adBusy = true; audio.setMuted(true);
-  poki.commercialBreak().then(() => { adBusy = false; audio.setMuted(false); fn(); });
+// the gate: walk up to it and the swarm marches through, out of this land and straight into the next
+const GATE_Z = -(WALL + 2), SHIFT = 2 * WALL + 24;
+function gateStep(dt: number) {
+  if (LV.goal !== "gate" || roundT < 0) return;
+  if (travel < 0 && Math.hypot(leader[0], leader[2] - GATE_Z) < 16) { travel = 0; audio.chime(8); }
+  if (travel >= 0 && travel < 100) {
+    travel += dt; swarm.open = true;
+    target[0] = 0; target[2] = GATE_Z - 30; hasTarget = true; aiming = false; stick = false;
+    if (leader[2] < GATE_Z - 10) {
+      // across: the next land is built ahead, and the swarm comes in through its south gate
+      const fl = document.getElementById("fade")!; fl.classList.add("flash"); setTimeout(() => fl.classList.remove("flash"), 350);
+      leader[2] += SHIFT; camZ += SHIFT; target[2] += SHIFT;
+      let ni = lvlI + 1; if (ni >= LEVELS.length) { ni = 0; lap++; }
+      travel = 100; startLevel(ni, true); travel = 100;
+    }
+  }
 }
-document.getElementById("next")!.addEventListener("click", () => afterAd(() => { if (lastWin && lvlI < LEVELS.length - 1) showMap(lvlI); else startLevel(lvlI); }));
-document.getElementById("mapBtn")!.addEventListener("click", () => afterAd(showMap));
-/** the home screen: the road of levels. `from` walks your marker from that level to the next one first */
-function showMap(from = -1) {
-  roundOver = true; poki.gameplayStop();
-  document.getElementById("win")!.classList.remove("show"); introEl.classList.remove("show");
-  mapEl.classList.add("show");
-  renderMap(mapEl, (i) => showCard(i), from);
+function enterStep() {
+  // walking in from the south gate until the swarm is inside the new land
+  if (travel < 100) return;
+  target[0] = 0; target[2] = WALL - 16; hasTarget = true; aiming = false; swarm.open = true;
+  if (leader[2] < WALL - 12) { travel = -1; swarm.open = false; }
 }
-const cardEl = document.getElementById("card")!;
-function showCard(i: number) {
-  const L = LEVELS[i];
-  cardEl.innerHTML = `<div class="box"><small>LEVEL ${i + 1}</small><div class="big">${GOAL_ICON[L.goal]}</div><p>${goalSentence(L)}</p><em>⏱ ${L.time}s</em><button class="go">▶</button><button class="x">✕</button></div>`;
-  cardEl.classList.add("show"); audio.start();
-  cardEl.querySelector(".go")!.addEventListener("click", () => { cardEl.classList.remove("show"); startLevel(i); });
-  cardEl.querySelector(".x")!.addEventListener("click", () => cardEl.classList.remove("show"));
-}
-document.getElementById("home")!.addEventListener("click", () => { if (!roundOver) showMap(); });
-document.getElementById("boost")!.addEventListener("click", (e) => {
-  // a rewarded ad: try again with a far bigger swarm
-  if (adBusy) return; adBusy = true; audio.setMuted(true);
-  const btn = e.currentTarget as HTMLElement;
-  poki.rewardedBreak().then((ok) => {
-    adBusy = false; audio.setMuted(false);
-    if (ok) { btn.classList.add("used"); boostNext = true; startLevel(lvlI); }
-  });
-});
-function nextLand() { finishLevel(true, 3); }
+function nextLand() { stepDone(); }
 const timerEl = document.getElementById("timer")!, boardEl = document.getElementById("board")!;
 const hand = document.getElementById("hand")!, countN = document.getElementById("countN")!, countBox = document.getElementById("count")!, goalFill = document.getElementById("goalFill")!;
 // test builds only: five quick taps on the swarm counter skip to the next land
@@ -357,7 +351,7 @@ function sizeOf(k: number) { return k === 0 ? active : swarm.A[k]; }
 const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? START_SIZE);
 let meal = 0;
-queueMicrotask(() => { if (params.has("lvl")) startLevel(lvlI); else { roundOver = true; showMap(); } });
+queueMicrotask(() => { lap = saved.lap ?? 0; if (!params.has("start")) active = Math.max(START_SIZE, saved.active); startLevel(lvlI, true); });
 let landT = 0, firstBite = false;
 const contactT = new Float32Array(64), hpOf = new Float32Array(64).fill(1), killer = new Int8Array(64);
 let gContact = 0, gHp = 1;
@@ -431,6 +425,24 @@ function project(x: number, y: number, z: number, out: Float32Array) {
   out[2] = w;
 }
 const pr = new Float32Array(3);
+const objO = { x: 0, y: 0, z: 0, r: 3, icon: "", b: -1 };
+/** where to go right now, for the arrow and the ring */
+function objective(): typeof objO | null {
+  const top = (b: number) => { const B = city.buildings[b], sc = city.s2Arr[b * 4] || 1; objO.x = B.x; objO.z = B.z; objO.y = city.s2Arr[b * 4 + 1] + B.h * 0.28 * sc + 1; objO.r = 2.5 + sc * 4.5; objO.b = b; };
+  objO.b = -1;
+  switch (LV.goal) {
+    case "wreck": {
+      let best = -1, bd = 1e9;
+      for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b] || isPart(b) || city.buildings[b].collapseAt >= 0) continue; const B = city.buildings[b]; const d = Math.hypot(B.x - leader[0], B.z - leader[2]) + B.solid * 0.002; if (d < bd) { bd = d; best = b; } }
+      if (best < 0) return null; top(best); objO.icon = "🏚️"; return objO;
+    }
+    case "gold": if (gold < 0 || city.gone[gold]) return null; top(gold); objO.icon = "🌟"; return objO;
+    case "castle": if (castle < 0 || city.gone[castle]) return null; top(castle); objO.icon = "🏰"; return objO;
+    case "rival": if (bossK < 0 || swarm.A[bossK] < 1) return null; objO.x = swarm.L[bossK * 3]; objO.z = swarm.L[bossK * 3 + 2]; objO.y = swarm.L[bossK * 3 + 1] + 3 + Math.sqrt(swarm.A[bossK]) * 0.03; objO.icon = swarm.A[bossK] > active ? "⚠️" : "🔵"; return objO;
+    case "giant": if (giant < 0 || giantGone()) return null; objO.x = gX; objO.z = gZ; objO.y = terrain.floor(gX, gZ) + GIANT_H + 2; objO.icon = "🗿"; return objO;
+    case "gate": if (travel >= 0) return null; objO.x = 0; objO.z = GATE_Z; objO.y = 6; objO.icon = "🚪"; return objO;
+  }
+}
 function drawFx(dt: number) {
   const dpr = Math.min(2, devicePixelRatio || 1), W = Math.round(innerWidth * dpr), H = Math.round(innerHeight * dpr);
   if (fx.width !== W || fx.height !== H) { fx.width = W; fx.height = H; }
@@ -464,37 +476,29 @@ function drawFx(dt: number) {
     fctx.fillStyle = `hsl(${Math.round(hp * 115)},90%,${50 + hpFlash[b] * 25}%)`; fctx.fillRect(x0, y0, bw * hp, bh);
     if (hpFlash[b] > 0) { fctx.fillStyle = `rgba(255,40,30,${hpFlash[b] * 0.7})`; fctx.fillRect(x0 - 2 * dpr, y0 - 2 * dpr, bw + 4 * dpr, bh + 4 * dpr); }
   }
-  // arrows at the edge of the screen to the nearest things still standing
-  offs.sort((a, c) => a.d - c.d);
-  for (let k = 0; k < Math.min(3, offs.length); k++) {
-    project(offs[k].x, 1, offs[k].z, pr);
-    let ax = pr[0] - W / 2, ay = pr[1] - H / 2;
-    if (pr[2] < 0) { ax = -ax; ay = -ay; }
-    const a = Math.atan2(ay, ax), m = Math.min((W / 2 - 40 * dpr) / Math.abs(Math.cos(a) || 1e-3), (H / 2 - 50 * dpr) / Math.abs(Math.sin(a) || 1e-3));
-    const px = W / 2 + Math.cos(a) * m, py = H / 2 + Math.sin(a) * m, s = (16 - k * 3) * dpr, pulse = 0.65 + 0.35 * Math.sin(time * 6 + k);
-    fctx.save(); fctx.translate(px, py); fctx.rotate(a);
-    fctx.fillStyle = `rgba(255,214,110,${pulse})`; fctx.shadowColor = "rgba(255,160,60,0.9)"; fctx.shadowBlur = 12 * dpr;
-    fctx.beginPath(); fctx.moveTo(s, 0); fctx.lineTo(-s * 0.7, s * 0.7); fctx.lineTo(-s * 0.35, 0); fctx.lineTo(-s * 0.7, -s * 0.7); fctx.closePath(); fctx.fill();
-    fctx.restore();
-  }
-  // the golden target: a big star over it, or a big gold arrow at the edge when it is off screen
-  for (const [mb, icon] of [[gold, "🌟"], [castle, "🏰"]] as [number, string][]) {
-    if (mb < 0 || city.gone[mb]) continue;
-    const B = city.buildings[mb], sc = city.s2Arr[mb * 4] || 1;
-    project(B.x, city.s2Arr[mb * 4 + 1] + B.h * 0.28 * sc + 2.5, B.z, pr);
-    const on = pr[2] > 0 && pr[0] > 0 && pr[0] < W && pr[1] > 0 && pr[1] < H, pulse = 1 + 0.15 * Math.sin(time * 7);
-    fctx.save(); fctx.textAlign = "center"; fctx.textBaseline = "middle"; fctx.shadowColor = "rgba(255,200,40,1)"; fctx.shadowBlur = 18 * dpr;
-    if (on) { fctx.font = `${Math.round(38 * dpr * pulse)}px sans-serif`; fctx.fillText(icon, pr[0], pr[1] - 10 * dpr * Math.sin(time * 3)); }
-    else {
+  // one clear marker: a big bouncing arrow over what to go for now, or at the screen edge pointing to it
+  const o = objective();
+  if (o && roundT > -0.6 && !stepBusy) {
+    project(o.x, o.y, o.z, pr);
+    const on = pr[2] > 0 && pr[0] > 0 && pr[0] < W && pr[1] > 30 * dpr && pr[1] < H;
+    const pulse = 1 + 0.12 * Math.sin(time * 7);
+    fctx.save(); fctx.textAlign = "center"; fctx.textBaseline = "middle"; fctx.shadowColor = "rgba(255,200,40,1)"; fctx.shadowBlur = 16 * dpr;
+    if (on) {
+      const by = pr[1] - (18 + 10 * Math.abs(Math.sin(time * 4))) * dpr;
+      fctx.fillStyle = "#ffd23c"; const s2 = 20 * dpr * pulse;
+      fctx.beginPath(); fctx.moveTo(pr[0], by + s2); fctx.lineTo(pr[0] - s2, by - s2 * 0.3); fctx.lineTo(pr[0] - s2 * 0.4, by - s2 * 0.3); fctx.lineTo(pr[0] - s2 * 0.4, by - s2 * 1.2); fctx.lineTo(pr[0] + s2 * 0.4, by - s2 * 1.2); fctx.lineTo(pr[0] + s2 * 0.4, by - s2 * 0.3); fctx.lineTo(pr[0] + s2, by - s2 * 0.3); fctx.closePath(); fctx.fill();
+      fctx.font = `${Math.round(30 * dpr * pulse)}px sans-serif`; fctx.fillText(o.icon, pr[0], by - s2 * 2.1);
+    } else {
       let ax = pr[0] - W / 2, ay = pr[1] - H / 2; if (pr[2] < 0) { ax = -ax; ay = -ay; }
-      const a = Math.atan2(ay, ax), m = Math.min((W / 2 - 46 * dpr) / Math.abs(Math.cos(a) || 1e-3), (H / 2 - 60 * dpr) / Math.abs(Math.sin(a) || 1e-3));
-      const px = W / 2 + Math.cos(a) * m, py = H / 2 + Math.sin(a) * m, s2 = 26 * dpr * pulse;
-      fctx.font = `${Math.round(30 * dpr)}px sans-serif`; fctx.fillText(icon, px - Math.cos(a) * 34 * dpr, py - Math.sin(a) * 34 * dpr);
+      const a = Math.atan2(ay, ax), m = Math.min((W / 2 - 46 * dpr) / Math.abs(Math.cos(a) || 1e-3), (H / 2 - 90 * dpr) / Math.abs(Math.sin(a) || 1e-3));
+      const px = W / 2 + Math.cos(a) * m, py = H / 2 + Math.sin(a) * m, s2 = 30 * dpr * pulse;
+      fctx.font = `${Math.round(30 * dpr)}px sans-serif`; fctx.fillText(o.icon, px - Math.cos(a) * 40 * dpr, py - Math.sin(a) * 40 * dpr);
       fctx.translate(px, py); fctx.rotate(a); fctx.fillStyle = "#ffd23c";
       fctx.beginPath(); fctx.moveTo(s2, 0); fctx.lineTo(-s2 * 0.7, s2 * 0.75); fctx.lineTo(-s2 * 0.3, 0); fctx.lineTo(-s2 * 0.7, -s2 * 0.75); fctx.closePath(); fctx.fill();
     }
     fctx.restore();
   }
+  void offs;
   leftEl.textContent = ""; void left;
   // the giant's own bar at the top: it flashes on every hit
   const up = giant >= 0 && !giantGone() && giantState !== "fallen" && giantState !== "sleep";
@@ -525,7 +529,7 @@ function frame(now: number) {
   // district progress (also drives the goal bar)
   { let tot = 0, eat = 0; for (let b = 0; b < city.buildings.length; b++) { if (isPart(b)) continue; const B = city.buildings[b]; tot += B.solid; eat += city.gone[b] ? B.solid : Math.min(B.solid, B.eaten); } progress = Math.min(1, (eat / Math.max(1, tot)) * 1.15); }
   swarm.shock[3] = 0;
-  if (giant < 0 && params.get("giant") === "1" && time > 1.5) {
+  if (giant < 0 && LV.goal === "giant" && roundT > 0.3) {
     // it rises on the far side of the swarm from the camera, so the player sees it come up out of the ground
     const ang = Math.atan2(leader[2] - cam[2], leader[0] - cam[0]);
     gX = Math.max(-50, Math.min(50, leader[0] + Math.cos(ang) * 34)); gZ = Math.max(-50, Math.min(50, leader[2] + Math.sin(ang) * 34));
@@ -576,30 +580,21 @@ function frame(now: number) {
     }
     for (let k = 0; k < parts.length; k++) if (!city.gone[parts[k]]) city.place(parts[k], partX[k], partZ[k], partY[k]);
   }
-  if (giant >= 0 && giantGone() && !won) {
-    won = true; shake = 1; city.bloom = 3.5;
-    save(); poki.gameplayStop();
-    finishLevel(true, 3);
-    for (let i = 0; i < 6; i++) setTimeout(() => audio.chime(4 + i), i * 160);
-  }
+
   while (milestone < MILESTONES.length && active >= MILESTONES[milestone]) audio.chime(milestone++);
   audio.swarm(active, Math.hypot(leaderVel[0], leaderVel[2]));
   // left alone (no touch, no mouse move) the swarm gathers into a shape; the next touch bursts it back
   const fighting = giant >= 0 && !giantGone() && giantState !== "fallen";
   const idle = !down && time - lastMove > 1.0 && time > 3 && !fighting && !won && travel < 0;
-  if (travel >= 0) {
-    travel += dt; swarm.open = true;
-    target[0] = 0; target[2] = -70; hasTarget = true; aiming = false;
-    if (travel > 2.2) document.getElementById("fade")!.classList.add("on");
-    if (travel > 2.8) nextLand();
-  }
+  gateStep(dt); enterStep();
   const sh = swarm.shape;
   if (idle && shapeOn && sh.blend > 0.95) { shapeT += dt; if (shapeT > 5) { shapeT = 0; shapeK = nextShape(shapeK); loadShape(shapeK, sh); } } // one shape melts into the next
   if (idle && !shapeOn) { shapeOn = true; shapeT = 0; loadShape(shapeK, sh); sh.pos[0] = leader[0]; sh.pos[2] = leader[2]; sh.pos[1] = terrain.floor(leader[0], leader[2]); }
   if (!idle && shapeOn && sh.blend < 0.05) { shapeOn = false; shapeK = nextShape(shapeK); }
   sh.blend = shapeOn && idle ? Math.min(1, sh.blend + dt * 2.2) : Math.max(0, sh.blend - dt * 3);
   sh.scale = 2.4 + Math.sqrt(active) * 0.07;
-  if (shapeOn && idle) { target[0] = leader[0]; target[2] = leader[2]; }
+  if (travel >= 0) { /* marching through a gate */ }
+  else if (shapeOn && idle) { target[0] = leader[0]; target[2] = leader[2]; }
   else if (stick) {
     const sx = stCX - stX, sy = stCY - stY, sl = Math.hypot(sx, sy);
     if (sl > 6) {
@@ -656,7 +651,7 @@ function frame(now: number) {
           if (kb === 0) { meal += bonus; goldMine++; audio.chime(9); shake = Math.max(shake, 1); } else rv.meal[kb] += bonus;
           comboEl.textContent = kb === 0 ? `🌟 +${bonus}` : `🌟 ✖`; comboEl.style.color = kb === 0 ? "" : TEAM_CSS[kb];
           comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop");
-          gold = -1; goldNext = roundT + (LV.goal === "gold" ? 1.5 : 7);
+          gold = -1; goldNext = roundT + 1.2;
         }
         city.remove(b);
       }
@@ -673,8 +668,8 @@ function frame(now: number) {
   if (!roundOver) roundT += dt;
   bestActive = Math.max(bestActive, active);
   // a new golden target: a big building, not too close to anyone, a little farther each time
-  if (gold >= 0 && city.gone[gold]) { gold = -1; goldNext = roundT + (LV.goal === "gold" ? 1.5 : 7); }
-  if (gold < 0 && !roundOver && (LV.goal === "gold" || LV.goal === "race") && roundT > (LV.goal === "gold" ? 0.5 : goldNext) && roundT < roundLen - 6) {
+  if (gold >= 0 && city.gone[gold]) { gold = -1; goldNext = roundT + 1.2; }
+  if (gold < 0 && !roundOver && !stepBusy && LV.goal === "gold" && roundT > Math.max(0.3, goldNext)) {
     let best = -1, bs = -1;
     for (let b = 0; b < city.buildings.length; b++) { if (city.gone[b] || isPart(b) || city.buildings[b].collapseAt >= 0) continue; const B = city.buildings[b];
       let near = 1e9; for (let k = 0; k < 4; k++) { const x = k === 0 ? leader[0] : swarm.L[k * 3], z = k === 0 ? leader[2] : swarm.L[k * 3 + 2]; near = Math.min(near, Math.hypot(B.x - x, B.z - z)); }
@@ -736,12 +731,8 @@ function frame(now: number) {
   // onboarding (wordless): a pulsing ring around the nearest little thing until the first bite brings it down
   landT += dt;
   world.hint[3] = 0;
-  { const mk = gold >= 0 ? gold : castle >= 0 && !city.gone[castle] ? castle : -1; if (mk >= 0) { const B = city.buildings[mk]; world.hint[0] = B.x; world.hint[1] = B.z; world.hint[2] = 3 + (city.s2Arr[mk * 4] || 1) * 4.5; world.hint[3] = 0.75 + 0.25 * Math.sin(time * 5); } }
-  if (!firstBite && lvlI === 0 && landT > 2.5) {
-    let best = -1, bd = 1e9;
-    for (let b = 0; b < Math.min(7, city.buildings.length); b++) { if (city.gone[b]) continue; const B = city.buildings[b]; const dd = Math.hypot(B.x - leader[0], B.z - leader[2]); if (dd < bd) { bd = dd; best = b; } }
-    if (best >= 0) { const B = city.buildings[best]; world.hint[0] = B.x; world.hint[1] = B.z; world.hint[2] = 3.2; world.hint[3] = Math.min(1, (landT - 2.5) * 0.7); if (touched && bd < 4) hand.classList.add("gone"); else if (!touched) hand.classList.remove("gone"); }
-  }
+  { const o = objective(); if (o && o.b >= 0 && LV.goal !== "giant") { world.hint[0] = o.x; world.hint[1] = o.z; world.hint[2] = o.r; world.hint[3] = 0.75 + 0.25 * Math.sin(time * 5); } }
+  if (!touched && landT > 1.5) hand.classList.remove("gone");
   if ((gov.frames & 255) === 0) save();
 
   // camera: behind and above the seed, pulling back as the swarm grows
@@ -782,20 +773,17 @@ function frame(now: number) {
     if (countN.textContent !== txt) { countN.textContent = txt; countBox.classList.remove("pop"); void countBox.offsetWidth; countBox.classList.add("pop"); }
     const tot = 0, eat = 0;
     void tot; void eat;
-    goalFill.style.width = `${(Math.min(1, Math.max(0, LV.goal === "race" ? 1 - roundT / roundLen : goalProgress())) * 100).toFixed(1)}%`;
-    const fmtG = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
-    const gt = LV.goal === "wreck" ? `🏚️ ${mine}/${LV.n}` : LV.goal === "gold" ? `🌟 ${goldMine}/${LV.n}` : LV.goal === "grow" ? `🐜 ${fmtG(active)}/${fmtG(LV.n)}` : LV.goal === "castle" ? "🏰" : LV.goal === "boss" ? "👾" : "🥇";
+    goalFill.style.width = `${(Math.min(1, Math.max(0, goalProgress())) * 100).toFixed(1)}%`;
+    const cnt = LV.goal === "wreck" ? ` ${Math.min(mine, LV.n)}/${LV.n}` : LV.goal === "gold" ? ` ${Math.min(goldMine, LV.n)}/${LV.n}` : "";
+    const gt = `${GOAL_ICON[LV.goal]} ${goalSentence(LV)}${cnt ? " ·" + cnt : ""}`;
     if (goalTxt.textContent !== gt) { goalTxt.textContent = gt; goalTxt.classList.remove("pop"); void goalTxt.offsetWidth; goalTxt.classList.add("pop"); }
-    const left = Math.max(0, Math.ceil(roundLen - Math.max(0, roundT)));
-    timerEl.textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
-    timerEl.classList.toggle("hurry", left <= 15 && !roundOver);
-    // the live ranking: four colour dots, biggest first
+    timerEl.textContent = "";
     const fmt = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
-    boardEl.innerHTML = [0, 1, 2, 3].filter((k) => k === 0 || k <= LV.rivals || k === bossK).map((k) => ({ k, n: sizeOf(k) })).sort((a, b) => b.n - a.n).map((o) => `<div class="${o.k === 0 ? "me" : ""}">${o.k === bossK ? "👾" : `<i style="background:${["#ffc35a", "#5aa6ff", "#ff5a60", "#6dff7a"][o.k]}"></i>`}${fmt(o.n)}</div>`).join("");
+    boardEl.innerHTML = [0, 1].filter((k) => k === 0 || k === bossK).map((k) => ({ k, n: sizeOf(k) })).sort((a, b) => b.n - a.n).map((o) => `<div class="${o.k === 0 ? "me" : ""}">${`<i style="background:${["#ffc35a", "#5aa6ff", "#ff5a60", "#6dff7a"][o.k]}"></i>`}${fmt(o.n)}</div>`).join("");
   }
   if (showHud && hudCanvas.style.display !== "none" && (gov.frames & 3) === 0) gov.graph(hud, `${active.toLocaleString()} mites  ${cw}x${ch} @${Math.round(tier.scale * 100)}%`);
 }
 requestAnimationFrame(frame);
 poki.init().then(() => poki.loadingFinished());
 
-if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { startLevel, showMap, finishLevel, gov, city, swarm, leader, target, poke: () => { lastMove = time; }, terrain, get active() { return active; }, set active(v: number) { active = v; } };
+if (import.meta.env.MODE === "qa") (window as unknown as { __my: unknown }).__my = { startLevel, stepDone, get roundT() { return roundT; }, set roundT(v: number) { roundT = v; }, get travel() { return travel; }, gov, city, swarm, leader, target, poke: () => { lastMove = time; }, terrain, get active() { return active; }, set active(v: number) { active = v; } };
