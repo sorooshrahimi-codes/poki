@@ -124,7 +124,30 @@
       #board { top: calc(max(8px, env(safe-area-inset-top)) + 128px) !important; }
       #lb, #win { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); z-index: 8; opacity: 1; pointer-events: auto; }
       #lb.show, #win.show { display: flex; }
-      #lb { z-index: 9; }
+      #lb, #evo { z-index: 9; }
+      #gems { position: fixed; left: calc(max(14px, env(safe-area-inset-left)) + 96px); top: calc(max(8px, env(safe-area-inset-top)) + 38px); font-size: 16px; font-weight: 900; color: #9be7ff; text-shadow: 0 2px 5px rgba(0,0,0,.7); pointer-events: none; }
+      #gems.pop { animation: bump 0.35s; }
+      #evoBtn { position: fixed; left: calc(max(12px, env(safe-area-inset-left)) + 62px); bottom: max(14px, env(safe-area-inset-bottom)); width: 52px; height: 52px; border-radius: 50%; border: 0; font-size: 26px; background: rgba(40, 16, 60, 0.7); box-shadow: 0 0 0 2px rgba(200, 160, 255, 0.6), 0 0 18px rgba(170, 110, 255, 0.5); cursor: pointer; z-index: 3; }
+      #evo { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); }
+      #evo.show { display: flex; }
+      #evo .box { position: relative; width: min(90vw, 400px); max-height: 86vh; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; padding: 16px 16px 18px; border-radius: 26px; background: linear-gradient(#2c1a4e, #140f26); box-shadow: 0 0 0 3px #c9a2ff, 0 0 50px rgba(170, 110, 255, 0.45); animation: bump 0.35s; }
+      #evo h2 { margin: 0; text-align: center; font-size: 28px; color: #e2ccff; }
+      #evo h3 { margin: 6px 0 0; font-size: 20px; text-align: center; }
+      #evo .x { position: absolute; right: 6px; top: 6px; width: 40px; height: 40px; border-radius: 50%; border: 0; font-size: 18px; color: #fff; background: #4a3d6a; cursor: pointer; }
+      #evo .evobar { height: 12px; border-radius: 7px; background: rgba(255,255,255,0.12); overflow: hidden; }
+      #evo .evobar b { display: block; height: 100%; background: linear-gradient(90deg, #8af, #c9a2ff, #ff9ad1); }
+      #evo .nx { margin: 0; text-align: center; font-size: 15px; opacity: 0.85; }
+      #evo .gem { text-align: center; font-size: 24px; font-weight: 900; color: #9be7ff; }
+      #evo .up { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 14px; background: rgba(255,255,255,0.07); }
+      #evo .up .ic { font-size: 28px; }
+      #evo .up .tx { flex: 1; display: flex; flex-direction: column; line-height: 1.15; }
+      #evo .up .tx b { font-size: 17px; } #evo .up .tx small { font-size: 13px; opacity: 0.75; } #evo .up .tx i { font-style: normal; color: #c9a2ff; letter-spacing: 2px; }
+      #evo .up button { font: 900 16px system-ui; color: #fff; border: 0; border-radius: 12px; padding: 9px 12px; cursor: pointer; background: linear-gradient(#5ad0ff, #2a7bff); box-shadow: 0 4px 0 #123c88; }
+      #evo .up button:disabled { opacity: 0.35; }
+      #evo .up em { font-style: normal; font-weight: 900; color: #ffe27a; }
+      #evo .eggs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; text-align: center; font-size: 22px; }
+      #evo .eggs span { display: block; font-size: 13px; }
+      #lands .egg { position: absolute; left: 50%; top: 100%; translate: -50% 10px; font-size: 10px; white-space: nowrap; }
       #lb .box, #win .card { position: relative; width: min(88vw, 400px); max-height: 82vh; display: flex; flex-direction: column; gap: 8px; padding: 18px 18px 20px; border-radius: 26px; background: linear-gradient(#2a1f4a, #140f26); box-shadow: 0 0 0 3px #ffd76a, 0 0 50px rgba(255, 190, 90, 0.45); animation: bump 0.35s; }
       #lb h2 { margin: 0; text-align: center; font-size: 26px; color: #ffe27a; }
       #lb .x { position: absolute; right: -10px; top: -10px; width: 42px; height: 42px; border-radius: 50%; border: 0; font-size: 18px; color: #fff; background: #4a3d6a; cursor: pointer; }
@@ -158,7 +181,10 @@
     <canvas id="hud" width="300" height="120"></canvas>
     <div id="score">⭐ <span id="scoreN">0</span></div>
     <div id="count"><i></i><span id="countN">300</span></div>
+    <div id="gems">💎 <span id="gemsN">0</span></div>
     <button id="lbBtn">🏆</button>
+    <button id="evoBtn">🧬</button>
+    <div id="evo"></div>
     <div id="lb"></div>
     <div id="goal"><b id="goalFill"></b></div>
     <div id="left"></div>

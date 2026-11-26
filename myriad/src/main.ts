@@ -230,12 +230,86 @@ function landCard() {
     <div class="row">⏱ ${mm(t)}${prevBest ? (t < prevBest ? " · new best!" : ` · best ${mm(prevBest)}`) : ""}</div>
     <div class="row tot">Total ⭐ ${Math.round(score).toLocaleString("en")}</div>
     <div class="row rk">🏆 …</div>
-    <div class="btns"><button class="lbb">🏆</button><button class="go">▶</button></div></div>`;
+    <div class="row">🥚 ${eggCount(meta.eggs[li])}/3 · 💎 ${meta.gems}</div>
+    <div class="btns"><button class="lbb">🏆</button><button class="lbb evb">🧬</button><button class="go">▶</button></div></div>`;
   winEl.classList.add("show"); save();
   void lbCall(true).then((r) => { const rk = winEl.querySelector(".rk"); if (rk) rk.textContent = r ? `🏆 #${myRank() || "–"} of ${r.length}` : "🏆 offline"; });
   winEl.querySelector(".lbb")!.addEventListener("click", showBoard);
+  winEl.querySelector(".evb")!.addEventListener("click", showEvo);
+  addGems(5 * LV.land, leader[0], leader[1] + 6, leader[2]);
   winEl.querySelector(".go")!.addEventListener("click", () => { poki.commercialBreak().then(() => { winEl.classList.remove("show"); roundOver = false; poki.gameplayStart(); }); });
 }
+// ---------------------------------------------------------------- the long game: crystals, upgrades that last, a swarm that evolves, eggs to find
+type Up = "speed" | "bite" | "reach" | "hatch" | "shield";
+const UPS: { k: Up; icon: string; name: string; what: string }[] = [
+  { k: "speed", icon: "⚡", name: "Speed", what: "+10% speed" },
+  { k: "bite", icon: "🦷", name: "Bite", what: "+20% damage" },
+  { k: "reach", icon: "🧲", name: "Reach", what: "+12% reach" },
+  { k: "hatch", icon: "🐣", name: "Hatch", what: "+15% new mites" },
+  { k: "shield", icon: "🔥", name: "Lava skin", what: "-18% lava burn" },
+];
+const UP_COST = [10, 20, 35, 55, 80];
+const EVO = [
+  { at: 0, name: "Spark", tint: [1, 1, 1, 0] }, { at: 3, name: "Firefly", tint: [0.55, 1, 0.35, 0.55] },
+  { at: 7, name: "Ember", tint: [1, 0.42, 0.15, 0.6] }, { at: 12, name: "Frost", tint: [0.45, 0.85, 1, 0.6] },
+  { at: 18, name: "Aurora", tint: [1, 1, 1, -0.65] }, { at: 25, name: "Phoenix", tint: [1, 1, 1, -1] },
+];
+const META_KEY = "glowmites-meta";
+const meta: { gems: number; up: Record<Up, number>; eggs: number[] } = { gems: 0, up: { speed: 0, bite: 0, reach: 0, hatch: 0, shield: 0 }, eggs: [0, 0, 0, 0, 0] };
+try { const j = JSON.parse(localStorage.getItem(META_KEY) || "null"); if (j) { meta.gems = j.gems || 0; Object.assign(meta.up, j.up || {}); if (Array.isArray(j.eggs)) meta.eggs = j.eggs.concat([0, 0, 0, 0, 0]).slice(0, 5); } } catch { /* */ }
+const saveMeta = () => { try { localStorage.setItem(META_KEY, JSON.stringify(meta)); } catch { /* */ } };
+const upLv = (k: Up) => meta.up[k] || 0;
+const upSum = () => UPS.reduce((a, u) => a + upLv(u.k), 0);
+const evoOf = (n: number) => { let i = 0; while (i + 1 < EVO.length && n >= EVO[i + 1].at) i++; return i; };
+const eggCount = (m: number) => (m & 1) + ((m >> 1) & 1) + ((m >> 2) & 1);
+const totalEggs = () => meta.eggs.reduce((a, m) => a + eggCount(m), 0);
+function applyEvo() { const t = EVO[evoOf(upSum())].tint; swarm.tint0.set(t); }
+function addGems(n: number, x: number, y: number, z: number) {
+  meta.gems += n; saveMeta(); pops.push({ x, y: y + 2, z, t: 0, txt: `💎 +${n}`, big: false }); gemsN.textContent = String(meta.gems);
+  gemsBox.classList.remove("pop"); void gemsBox.offsetWidth; gemsBox.classList.add("pop");
+}
+// eggs: three hidden in each land, inside buildings; bring the building down to free the egg
+let eggB: number[] = [-1, -1, -1];
+function hideEggs() {
+  const li = (LV.land - 1) % 5, found = meta.eggs[li];
+  const pool: number[] = []; for (let b = 7; b < city.buildings.length; b++) if (!city.gone[b]) pool.push(b);
+  for (let e = 0; e < 3; e++) { eggB[e] = -1; if (found & (1 << e) || !pool.length) continue; eggB[e] = pool.splice(Math.floor(Math.random() * pool.length), 1)[0]; }
+}
+function eggCheck(b: number, mineKill: boolean) {
+  const e = eggB.indexOf(b); if (e < 0) return;
+  if (!mineKill) { // a rival broke it: the egg rolls into another building
+    const pool: number[] = []; for (let c = 0; c < city.buildings.length; c++) if (!city.gone[c] && !isPart(c) && city.buildings[c].collapseAt < 0 && eggB.indexOf(c) < 0) pool.push(c);
+    eggB[e] = pool.length ? pool[Math.floor(Math.random() * pool.length)] : -1; return;
+  }
+  eggB[e] = -1; const li = (LV.land - 1) % 5; meta.eggs[li] |= 1 << e; saveMeta();
+  const B = city.buildings[b]; addGems(5, B.x, city.s2Arr[b * 4 + 1] + 4, B.z);
+  toast(`🥚 ${eggCount(meta.eggs[li])}/3`, "#fff3c4"); for (let k = 0; k < 3; k++) setTimeout(() => audio.chime(7 + k), k * 120);
+  drawLands();
+}
+const evoEl = document.getElementById("evo")!, gemsN = document.getElementById("gemsN")!, gemsBox = document.getElementById("gems")!;
+let evoWasOver = false;
+function showEvo() {
+  if (!evoEl.classList.contains("show")) { evoWasOver = roundOver; roundOver = true; }
+  const n = upSum(), ei = evoOf(n), nx = EVO[ei + 1];
+  const bar = nx ? (n - EVO[ei].at) / (nx.at - EVO[ei].at) : 1;
+  evoEl.innerHTML = `<div class="box"><button class="x">✕</button><h2>🧬 ${EVO[ei].name}</h2>
+    <div class="evobar"><b style="width:${(bar * 100).toFixed(0)}%"></b></div>
+    <p class="nx">${nx ? `next form: <b>${nx.name}</b> after ${nx.at - n} more upgrade${nx.at - n > 1 ? "s" : ""}` : "fully evolved!"}</p>
+    <div class="gem">💎 ${meta.gems}</div>
+    ${UPS.map((u) => { const l = upLv(u.k), c = UP_COST[l]; return `<div class="up"><span class="ic">${u.icon}</span><div class="tx"><b>${u.name}</b><small>${u.what}</small><i>${"●".repeat(l)}${"○".repeat(5 - l)}</i></div>
+      ${l >= 5 ? `<em>MAX</em>` : `<button data-k="${u.k}" ${meta.gems < c ? "disabled" : ""}>💎 ${c}</button>`}</div>`; }).join("")}
+    <h3>🥚 Eggs ${totalEggs()}/15</h3><div class="eggs">${LAND_ICON.map((ic, i) => `<div>${ic}<span>${[0, 1, 2].map((e) => meta.eggs[i] & (1 << e) ? "🥚" : "◌").join("")}</span></div>`).join("")}</div></div>`;
+  evoEl.classList.add("show");
+  evoEl.querySelector(".x")!.addEventListener("click", () => { evoEl.classList.remove("show"); roundOver = evoWasOver; });
+  evoEl.querySelectorAll<HTMLButtonElement>("button[data-k]").forEach((bt) => bt.addEventListener("click", () => {
+    const k = bt.dataset.k as Up, l = upLv(k), c = UP_COST[l]; if (l >= 5 || meta.gems < c) return;
+    const before = evoOf(upSum()); meta.gems -= c; meta.up[k] = l + 1; saveMeta(); gemsN.textContent = String(meta.gems); audio.chime(6);
+    const after = evoOf(upSum()); applyEvo();
+    if (after > before) { toast(`🧬 ${EVO[after].name}!`, "#c9a2ff"); for (let q = 0; q < 6; q++) setTimeout(() => audio.chime(4 + q), q * 130); }
+    showEvo();
+  }));
+}
+document.getElementById("evoBtn")!.addEventListener("click", showEvo);
 // ---------------------------------------------------------------- the journey: one clear task at a time, lands joined by gates
 let mine = 0, goldMine = 0, castle = -1, bossK = -1, bestActive = 400, builtLand = -1, lap = 0, stepBusy = false, stepT = 0;
 const hard = new Float32Array(64).fill(1);
@@ -251,7 +325,7 @@ function startLevel(i: number, fresh = false) {
     active = Math.max(START_SIZE, keep);
     contactT.fill(0); hpOf.fill(1); hpPrev.fill(1); wasGone.fill(0); killer.fill(-1); combo = 0;
     giant = -1; parts = []; stompT = -1; giantState = "sleep"; progress = 0; landT = 0; firstBite = lvlI > 0;
-    landScore = 0; landStart = time;
+    landScore = 0; landStart = time; hideEggs();
     swarm.reset = true; swarm.open = false; hasTarget = false; lastMove = time;
     if (travel < 0) { leader[0] = 0; leader[2] = 0; target[0] = 0; target[2] = 0; camX = 0; camZ = 0; }
   }
@@ -295,7 +369,7 @@ function drawLands() {
   const cur = LV.land;
   landsEl.innerHTML = LAND_ICON.map((ic, k) => {
     const d = k + 1, st = stepsOf(d), on = d === cur;
-    const dots = on ? `<span class="dots">${st.map((s) => `<i class="${LEVELS.indexOf(s) < lvlI ? "done" : LEVELS.indexOf(s) === lvlI ? "now" : ""}"></i>`).join("")}</span>` : "";
+    const dots = on ? `<span class="egg">${"🥚".repeat(eggCount(meta.eggs[k]))}${"◌".repeat(3 - eggCount(meta.eggs[k]))}</span><span class="dots">${st.map((s) => `<i class="${LEVELS.indexOf(s) < lvlI ? "done" : LEVELS.indexOf(s) === lvlI ? "now" : ""}"></i>`).join("")}</span>` : "";
     return `<div class="${d < cur || lap > 0 ? "done" : ""}${on ? " on" : ""}">${ic}${dots}</div>`;
   }).join(`<b></b>`);
 }
@@ -345,6 +419,7 @@ function stepDone() {
   if (LV.goal === "giant") { city.bloom = 3.5; shake = 1; }
   const bonus = { wreck: 300, gold: 300, rival: 2000, castle: 1000, giant: 5000, gate: 0 }[LV.goal] * district;
   if (bonus) addScore(bonus, leader[0], leader[1] + 6, leader[2], true);
+  if (LV.goal !== "gate") addGems(LV.goal === "giant" ? 5 * LV.land : 2 * LV.land, leader[0], leader[1] + 9, leader[2]);
   setTimeout(() => startLevel(Math.min(LEVELS.length - 1, lvlI + 1)), 1300);
 }
 // the gate: walk up to it and the swarm marches through, out of this land and straight into the next
@@ -468,7 +543,7 @@ function sizeOf(k: number) { return k === 0 ? active : swarm.A[k]; }
 const grow = params.get("grow") === "1";
 let active = grow ? 100 : Number(params.get("start") ?? START_SIZE);
 let meal = 0;
-queueMicrotask(() => { lap = saved.lap ?? 0; score = saved.score ?? 0; shownScore = score; bestTime = saved.best ?? []; if (!params.has("start")) active = Math.max(START_SIZE, saved.active); startLevel(lvlI, true); });
+queueMicrotask(() => { applyEvo(); gemsN.textContent = String(meta.gems); lap = saved.lap ?? 0; score = saved.score ?? 0; shownScore = score; bestTime = saved.best ?? []; if (!params.has("start")) active = Math.max(START_SIZE, saved.active); startLevel(lvlI, true); });
 let landT = 0, firstBite = false;
 const contactT = new Float32Array(64), hpOf = new Float32Array(64).fill(1), killer = new Int8Array(64);
 let gContact = 0, gHp = 1;
@@ -514,7 +589,7 @@ const BIRTH: number[][] = [[3, 1, 2, 4], [8, 9, 7, 10], [6, 14, 13, 6], [15, 11,
 const GIANT_BIRTH: number[][] = [[17, 19, 10, 6], [20, 21, 22, 20], [27, 12, 13, 14], [23, 23, 17, 25], [26, 25, 18, 25]];
 city.onEat = (b, amount) => {
   // every voxel eaten hatches new mites, for whichever swarm is eating it
-  { const B0 = city.buildings[b], k = teamAt(B0.x, B0.z, 8); if (k === 0) meal += amount * 0.7; else if (k > 0) rv.meal[k] += amount * (k === bossK ? 0.35 : 1.1 * catchUp(k)); if (k !== 0) return; }
+  { const B0 = city.buildings[b], k = teamAt(B0.x, B0.z, 8); if (k === 0) meal += amount * 0.7 * (1 + 0.15 * upLv("hatch")); else if (k > 0) rv.meal[k] += amount * (k === bossK ? 0.35 : 1.1 * catchUp(k)); if (k !== 0) return; }
   { const k = city.buildings[b].kind; const m = k === 5 ? GIANT_BIRTH[theme.giant % 5] : BIRTH[k]; if (m) swarm.birth.set(m); }
   audio.eat(amount);
   const B = city.buildings[b];
@@ -623,6 +698,14 @@ function drawFx(dt: number) {
     project(freeGold.x, terrain.floor(freeGold.x, freeGold.z) + 2 + 0.6 * Math.sin(time * 3), freeGold.z, pr);
     if (pr[2] > 0) { fctx.save(); fctx.textAlign = "center"; fctx.textBaseline = "middle"; fctx.shadowColor = "rgba(255,200,40,1)"; fctx.shadowBlur = 24 * dpr;
       fctx.translate(pr[0], pr[1]); fctx.scale(Math.cos(time * 2.5), 1); fctx.font = `${Math.round(Math.max(30, Math.min(90, 1800 / pr[2])) * dpr)}px sans-serif`; fctx.fillText("🌟", 0, 0); fctx.restore(); }
+  }
+  // eggs show themselves (a small wobbling egg over the building) once the swarm comes near
+  for (const eb of eggB) {
+    if (eb < 0 || city.gone[eb]) continue; const B = city.buildings[eb];
+    if (Math.hypot(B.x - leader[0], B.z - leader[2]) > 30) continue;
+    const sc = city.s2Arr[eb * 4] || 1; project(B.x, city.s2Arr[eb * 4 + 1] + B.h * 0.28 * sc + 1.5, B.z, pr); if (pr[2] <= 0) continue;
+    fctx.save(); fctx.textAlign = "center"; fctx.translate(pr[0], pr[1]); fctx.rotate(Math.sin(time * 6) * 0.25); fctx.shadowColor = "#fff6c8"; fctx.shadowBlur = 14 * dpr;
+    fctx.font = `${Math.round(24 * dpr)}px sans-serif`; fctx.fillText("🥚", 0, 0); fctx.restore();
   }
   // the points fly up from where they were won
   for (let k = pops.length - 1; k >= 0; k--) {
@@ -763,8 +846,8 @@ function frame(now: number) {
   // what the swarm is over: water slows it, ice makes it skate (fast, slippery), lava burns it
   const wet = terrain.at(leader[0], leader[2]) < WATER - 0.05, inMain = Math.hypot(leader[0] - terrain.pond.x, leader[2] - terrain.pond.z) < terrain.pond.r * 1.3;
   const liq = wet && travel < 0 ? (inMain ? world.liquid : 0) : -1;
-  if (liq === 2 && active > 60 && !roundOver) { const loss = active * 0.05 * dt; burnAcc += loss; active = Math.max(60, active - loss); if (burnAcc > active * 0.02 + 20) { pops.push({ x: leader[0], y: leader[1] + 4, z: leader[2], t: 0, txt: `🔥 -${Math.round(burnAcc)}`, big: false }); burnAcc = 0; audio.thump(0.3); } }
-  const vmax = speed * (dashT > 0 ? 3.2 : stick ? 0.5 + 1.4 * stickMag : 1.25) * (liq === 0 ? 0.65 : liq === 1 ? 1.35 : 1);
+  if (liq === 2 && active > 60 && !roundOver) { const loss = active * 0.05 * dt * (1 - 0.18 * upLv("shield")); burnAcc += loss; active = Math.max(60, active - loss); if (burnAcc > active * 0.02 + 20) { pops.push({ x: leader[0], y: leader[1] + 4, z: leader[2], t: 0, txt: `🔥 -${Math.round(burnAcc)}`, big: false }); burnAcc = 0; audio.thump(0.3); } }
+  const vmax = speed * (dashT > 0 ? 3.2 : stick ? 0.5 + 1.4 * stickMag : 1.25) * (liq === 0 ? 0.65 : liq === 1 ? 1.35 : 1) * (1 + 0.1 * upLv("speed"));
   const vx = d > 0.01 ? (dx / d) * Math.min(d * (dashT > 0 ? 8 : 3.5), vmax) : 0, vz = d > 0.01 ? (dz / d) * Math.min(d * (dashT > 0 ? 8 : 3.5), vmax) : 0;
   const acc = Math.min(1, dt * (stick ? 12 : 7) * (liq === 1 ? 0.18 : 1));
   leaderVel[0] += (vx - leaderVel[0]) * acc; leaderVel[2] += (vz - leaderVel[2]) * acc;
@@ -792,12 +875,12 @@ function frame(now: number) {
       if (pd.r === 0 && was > 0) { comboEl.style.color = "#7ad8ff"; comboEl.textContent = "💧 dry!"; comboEl.classList.remove("pop"); void comboEl.offsetWidth; comboEl.classList.add("pop"); addScore(400 * district, pd.x, 3, pd.z, true); }
     }
   }
-  const hitRate = (1 + 1.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 4 : 0)) * (1 + Math.sqrt(active) / 150);
+  const hitRate = (1 + 1.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 4 : 0)) * (1 + Math.sqrt(Math.min(active, 131072)) / 150) * (1 + 0.2 * upLv("bite"));
   for (let b = 0; b < city.buildings.length; b++) {
     if (city.gone[b] || isPart(b)) continue;
     const B = city.buildings[b];
     const sc = city.s2Arr[b * 4] || 1, half = (32 * 0.28 * sc) / 2;
-    if (active > 0 && Math.hypot(B.x - leader[0], B.z - leader[2]) < half + swarmR * 0.95) { contactT[b] += dt * hitRate; contactBy[b * 4] += dt * hitRate; }
+    if (active > 0 && Math.hypot(B.x - leader[0], B.z - leader[2]) < half + swarmR * 0.95 * (1 + 0.12 * upLv("reach"))) { contactT[b] += dt * hitRate; contactBy[b * 4] += dt * hitRate; }
     for (let k = 1; k < 4; k++) {
       const A = swarm.A[k]; if (A < 1) continue;
       const rr = bodyR(A), rate = 1.6 * (1 + Math.sqrt(A) / 150);
@@ -811,6 +894,7 @@ function frame(now: number) {
         // whoever did most of the work gets the prize: a burst of new mites
         let kb = 0; for (let k = 1; k < 4; k++) if (contactBy[b * 4 + k] > contactBy[b * 4 + kb]) kb = k;
         killer[b] = kb; const prize = 40 + B.solid * 0.05;
+        eggCheck(b, kb === 0);
         if (kb === 0) { mine++; const cb = time - lastKill < 4 ? combo + 1 : 1; addScore((50 + B.solid * 0.05) * cb, B.x, city.s2Arr[b * 4 + 1] + 3, B.z); }
         if (kb === 0) meal += prize; else rv.meal[kb] += prize * (kb === bossK ? 0.4 : 1.3 * catchUp(kb));
         if (b === gold) {

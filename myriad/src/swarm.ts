@@ -241,6 +241,7 @@ uniform sampler2D uPos, uVel;
 uniform mat4 uVP;
 uniform vec3 uCamR, uCamU;
 uniform float uS, uSize, uTime, uMinPx, uPxScale;
+uniform vec4 uTint0; // the player's swarm evolves: a tint (rgb, amount); amount < 0 means rainbow
 in vec2 aCorner;
 out vec2 vUv;
 out vec3 vCol;
@@ -277,6 +278,8 @@ void main() {
   // rival swarms glow in their own colour, so every swarm is told apart at a glance
   int tm = teamOf(float(i));
   if (tm > 0) vCol = mix(TEAMC[tm], vCol, 0.18);
+  else if (uTint0.a > 0.0) vCol = mix(vCol, uTint0.rgb, uTint0.a);
+  else if (uTint0.a < 0.0) { float hu = fract(r.x + uTime * 0.15); vCol = mix(vCol, clamp(abs(fract(hu + vec3(0.0, 0.667, 0.333)) * 6.0 - 3.0) - 1.0, 0.0, 1.0) * 1.1 + 0.15, -uTint0.a); }
   vBright = 0.7 + 0.6 * flap;
 }`;
 const MITE_FS = `#version 300 es
@@ -400,6 +403,7 @@ export class Swarm {
   /** A is each swarm's real size (it can pass what the GPU holds); AV is how many of its mites are drawn */
   AV = new Float32Array(4);
   drawCap = 1e9;
+  tint0 = new Float32Array([1, 1, 1, 0]);
   birth = new Float32Array([0, 0, 0, 0]);
   open = false;
   reset = false; // next step: every mite bursts out of the seed again (entering a new land)
@@ -462,7 +466,7 @@ export class Swarm {
     bindTex(gl, 0, this.state.tex[0], u.uPos); bindTex(gl, 1, this.state.tex[1], u.uVel);
     gl.uniformMatrix4fv(u.uVP, false, vp);
     gl.uniform3fv(u.uCamR, camR); gl.uniform3fv(u.uCamU, camU);
-    gl.uniform1f(u.uS, S); gl.uniform1f(u.uSize, 0.13); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uMinPx, 1.15); gl.uniform1f(u.uPxScale, pxScale);
+    gl.uniform1f(u.uS, S); gl.uniform1f(u.uSize, 0.13); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uMinPx, 1.15); gl.uniform1f(u.uPxScale, pxScale); gl.uniform4fv(u.uTint0, this.tint0);
     // opaque with a depth test: order-free, and near mites hide far ones, which gives the swarm volume
     gl.enable(gl.DEPTH_TEST); gl.depthMask(true);
     gl.bindVertexArray(this.quad);
