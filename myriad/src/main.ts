@@ -624,6 +624,65 @@ city.onEat = (b, amount) => {
   }
 };
 
+// ---------------------------------------------------------------- the map: a live minimap (this land and its neighbours) and the whole world on tap
+const miniC = document.getElementById("mini") as HTMLCanvasElement, mctx = miniC.getContext("2d")!;
+const worldEl = document.getElementById("world")!, worldC = worldEl.querySelector("canvas") as HTMLCanvasElement, wctx = worldC.getContext("2d")!;
+const LAND_CSS = ["#7ad35a", "#4fc7a0", "#d9a55a", "#9fd8ff", "#ff7a4a"];
+/** one land's outline at (cx, cy) with radius R (pixels), in its own shape */
+function landPath(c: CanvasRenderingContext2D, d: number, cx: number, cy: number, R: number) {
+  const [k, a] = SHAPES[(d - 1) % 5]; c.beginPath();
+  for (let i = 0; i <= 64; i++) { const an = (i / 64) * Math.PI * 2, f = 1 - a * (1 - Math.cos(k * (an + Math.PI / 2))) / 2; const x = cx + Math.cos(an) * R * f, y = cy + Math.sin(an) * R * f; if (i) c.lineTo(x, y); else c.moveTo(x, y); }
+  c.closePath();
+}
+/** draw the lands as a chain (north up), centred on world point (fx, fz) of the current land, s pixels per unit */
+function drawWorld(c: CanvasRenderingContext2D, W: number, H: number, fx: number, fz: number, s: number, full: boolean) {
+  c.clearRect(0, 0, W, H);
+  const cur = LV.land, ox = W / 2 - fx * s, oy = H / 2 - fz * s, pct = worldPct();
+  // the road through the gates
+  c.strokeStyle = "rgba(255,230,160,0.35)"; c.lineWidth = Math.max(2, s * 3); c.setLineDash([s * 4, s * 4]);
+  c.beginPath(); c.moveTo(ox, oy + (cur - 1) * SHIFT * s + WALL * s); c.lineTo(ox, oy - (5 - cur) * SHIFT * s - WALL * s); c.stroke(); c.setLineDash([]);
+  for (let d = 1; d <= 5; d++) {
+    const cy = oy - (d - cur) * SHIFT * s, R = WALL * s; if (cy + R < -10 || cy - R > H + 10) continue;
+    const done = d < cur || lap > 0, now = d === cur;
+    landPath(c, d, ox, cy, R);
+    c.fillStyle = done ? LAND_CSS[d - 1] + "cc" : now ? "rgba(120,120,140,0.55)" : "rgba(70,70,85,0.6)"; c.fill();
+    if (now) { // this land fills with colour as its tasks are done
+      c.save(); landPath(c, d, ox, cy, R); c.clip(); const st = stepsOf(d), f = st.filter((x) => LEVELS.indexOf(x) < lvlI).length / st.length;
+      c.fillStyle = LAND_CSS[d - 1] + "bb"; c.fillRect(ox - R, cy + R - 2 * R * f, 2 * R, 2 * R * f); c.restore();
+    }
+    landPath(c, d, ox, cy, R); c.strokeStyle = now ? "#ffe27a" : "rgba(255,255,255,0.35)"; c.lineWidth = now ? 2.5 : 1.5; c.stroke();
+    c.textAlign = "center"; c.textBaseline = "middle";
+    if (full) { c.font = `${Math.round(R * 0.5)}px sans-serif`; c.fillText(LAND_ICON[d - 1], ox, cy); c.font = `900 ${Math.round(Math.max(13, R * 0.17))}px system-ui`; c.fillStyle = "#fff"; c.fillText(LAND_NAME[d - 1] + (done ? " ✔" : ""), ox, cy + R * 0.45); c.fillStyle = "#fff3c4"; c.fillText(`🥚 ${eggCount(meta.eggs[d - 1])}/3`, ox, cy + R * 0.66); }
+    else if (!now) { c.font = `${Math.round(R * 0.6)}px sans-serif`; c.fillText(LAND_ICON[d - 1], ox, cy); }
+  }
+  // what is in this land right now
+  const P = (x: number, z: number) => [ox + x * s, oy + z * s];
+  const dot = (x: number, z: number, r: number, col: string) => { const [px, py] = P(x, z); c.beginPath(); c.arc(px, py, r, 0, Math.PI * 2); c.fillStyle = col; c.fill(); };
+  const o = objective(); if (o) { const [px, py] = P(o.x, o.z); const pr2 = 4 + 2 * Math.sin(time * 6); c.beginPath(); c.arc(px, py, pr2 + 3, 0, Math.PI * 2); c.strokeStyle = "#ffd23c"; c.lineWidth = 2; c.stroke(); }
+  if (bossK > 0 && swarm.A[bossK] >= 1) dot(swarm.L[bossK * 3], swarm.L[bossK * 3 + 2], 4 + Math.min(5, Math.sqrt(swarm.A[bossK]) * 0.01), "#4f9dff");
+  if (giant >= 0 && !giantGone()) { const [px, py] = P(gX, gZ); c.font = `${full ? 26 : 16}px sans-serif`; c.fillText("🗿", px, py); }
+  if (freeGold.on) { const [px, py] = P(freeGold.x, freeGold.z); c.font = `${full ? 22 : 13}px sans-serif`; c.fillText("🌟", px, py); }
+  if (gold >= 0 && !city.gone[gold]) { const B = city.buildings[gold], [px, py] = P(B.x, B.z); c.font = `${full ? 22 : 13}px sans-serif`; c.fillText("🌟", px, py); }
+  if (castle >= 0 && !city.gone[castle]) { const B = city.buildings[castle], [px, py] = P(B.x, B.z); c.font = `${full ? 22 : 13}px sans-serif`; c.fillText("🏰", px, py); }
+  { const [px, py] = P(leader[0], leader[2]); c.beginPath(); c.arc(px, py, full ? 9 : 5, 0, Math.PI * 2); c.fillStyle = "#ffe27a"; c.shadowColor = "#ffb648"; c.shadowBlur = 10; c.fill(); c.shadowBlur = 0; }
+  if (full) { c.font = "900 22px system-ui"; c.fillStyle = "#8dff7a"; c.textAlign = "center"; c.fillText(`🌍 World ${pct}% alive`, W / 2, 34); }
+}
+let worldWasOver = false;
+miniC.addEventListener("click", () => {
+  worldWasOver = roundOver; roundOver = true; worldEl.classList.add("show");
+  const dpr = Math.min(2, devicePixelRatio || 1); worldC.width = innerWidth * dpr; worldC.height = innerHeight * dpr; worldC.style.width = innerWidth + "px"; worldC.style.height = innerHeight + "px";
+  wctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // the whole chain fits on screen: centred between land 1 and land 5
+  const s = Math.min(innerWidth * 0.42 / WALL, (innerHeight - 90) / (4 * SHIFT + 2 * WALL));
+  drawWorld(wctx, innerWidth, innerHeight, 0, -(3 - LV.land) * SHIFT, s, true);
+});
+worldEl.addEventListener("click", () => { worldEl.classList.remove("show"); roundOver = worldWasOver; });
+function drawMini() {
+  const dpr = Math.min(2, devicePixelRatio || 1), W = 104, H = 132;
+  if (miniC.width !== W * dpr) { miniC.width = W * dpr; miniC.height = H * dpr; }
+  mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawWorld(mctx, W, H, 0, -14, 40 / WALL, false);
+}
 // ---------------------------------------------------------------- the readable layer: health bars, the boss bar, arrows to what is left, combos
 const fx = document.getElementById("fx") as HTMLCanvasElement, fctx = fx.getContext("2d")!;
 const bossEl = document.getElementById("boss")!, bossFill = document.getElementById("bossFill")!, leftEl = document.getElementById("left")!, comboEl = document.getElementById("combo")!;
@@ -823,7 +882,7 @@ function frame(now: number) {
   audio.swarm(active, Math.hypot(leaderVel[0], leaderVel[2]));
   // left alone (no touch, no mouse move) the swarm gathers into a shape; the next touch bursts it back
   const fighting = giant >= 0 && !giantGone() && giantState !== "fallen";
-  const idle = !down && time - lastMove > 1.0 && time > 3 && !fighting && !won && travel < 0;
+  const idle = !down && time - lastMove > 1.0 && time > 3 && !won && travel < 0 && !BOT;
   gateStep(dt); enterStep();
   const sh = swarm.shape;
   if (idle && shapeOn && sh.blend > 0.95) { shapeT += dt; if (shapeT > 5) { shapeT = 0; shapeK = nextShape(shapeK); loadShape(shapeK, sh); } } // one shape melts into the next
@@ -906,7 +965,8 @@ function frame(now: number) {
       if (Math.hypot(B.x - swarm.L[k * 3], B.z - swarm.L[k * 3 + 2]) < half + rr * 0.95) { contactT[b] += dt * rate; contactBy[b * 4 + k] += dt * rate; }
     }
     const T = (0.6 + B.solid / 2500) / Math.max(0.2, city.s2Arr[b * 4 + 2]) * 0.5 * hard[b];
-    hpOf[b] = Math.max(0, 1 - Math.max(B.eaten / (B.solid * 0.88), contactT[b] / T));
+    // never faster than about a second from full to nothing, so every fall can be seen
+    hpOf[b] = Math.max(0, hpOf[b] - dt * 0.9, 1 - Math.max(B.eaten / (B.solid * 0.88), contactT[b] / T));
     if (hpOf[b] <= 0) {
       if (B.collapseAt < 0) { B.collapseAt = time; city.fail(b); audio.thump(0.8); shake = Math.max(shake, 0.6); }
       else if (time - B.collapseAt > 0.7) {
@@ -1013,7 +1073,8 @@ function frame(now: number) {
   watchdog(dt);
   swarm.step(dt, time, leader, leaderVel, active, speed, cityLink);
   // a storm hits harder than a swarm at rest; a punch hits hardest
-  city.boost = 1 + 2.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 6 : 0);
+  // a huge swarm bites a little gentler per mite, so buildings still come down where you can watch them
+  city.boost = (1 + 2.5 * Math.min(1.3, Math.hypot(leaderVel[0], leaderVel[2]) / speed) + (dashT > 0 ? 6 : 0)) * Math.min(1, Math.sqrt(12000 / Math.max(1, Math.min(active, 131072))));
   city.feed(swarm.state.tex[0], swarm.state.tex[1], swarm.span(), dt, time);
   if (city.bloom > 0) { city.bloom -= dt; city.flood(dt * 0.45); }
   // onboarding (wordless): a pulsing ring around the nearest little thing until the first bite brings it down
@@ -1076,6 +1137,7 @@ function frame(now: number) {
     const fmt2 = (n: number) => n >= 10000 ? `${(n / 1000).toFixed(1)}k` : String(Math.round(n));
     boardEl.innerHTML = [0, 1].filter((k) => k === 0 || k === bossK).map((k) => ({ k, n: sizeOf(k) })).sort((a, b) => b.n - a.n).map((o) => `<div class="${o.k === 0 ? "me" : ""}">${`<i style="background:${["#ffc35a", "#5aa6ff", "#ff5a60", "#6dff7a"][o.k]}"></i>`}${fmt(o.n)}</div>`).join("");
   }
+  if ((gov.frames & 3) === 0) drawMini();
   if (showHud && hudCanvas.style.display !== "none" && (gov.frames & 3) === 0) gov.graph(hud, `${active.toLocaleString()} mites  ${cw}x${ch} @${Math.round(tier.scale * 100)}%`);
 }
 requestAnimationFrame(frame);

@@ -125,6 +125,10 @@
       #lb, #win { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); z-index: 8; opacity: 1; pointer-events: auto; }
       #lb.show, #win.show { display: flex; }
       #lb, #evo { z-index: 9; }
+      #mini { position: fixed; right: max(10px, env(safe-area-inset-right)); bottom: max(12px, env(safe-area-inset-bottom)); width: 104px; height: 132px; border-radius: 16px; background: rgba(10, 8, 24, 0.55); box-shadow: 0 0 0 2px rgba(255, 215, 106, 0.35); z-index: 3; cursor: pointer; }
+      #world { position: fixed; inset: 0; display: none; background: rgba(6, 5, 16, 0.94); z-index: 9; }
+      #world.show { display: block; }
+      #world p { position: absolute; bottom: 14px; width: 100%; text-align: center; margin: 0; opacity: 0.6; font-weight: 800; }
       #intro h1 { margin: 0; font-size: 30px; font-weight: 900; color: #fff; white-space: nowrap; }
       #intro.long.show { animation: intro 3.6s ease-out forwards; }
       #lands .wp { position: absolute; right: 0; top: 100%; translate: 0 22px; font-style: normal; font-size: 14px; font-weight: 900; color: #8dff7a; white-space: nowrap; text-shadow: 0 2px 4px #000; }
@@ -193,6 +197,8 @@
     <button id="lbBtn">🏆</button>
     <button id="evoBtn">🧬</button>
     <div id="evo"></div>
+    <canvas id="mini"></canvas>
+    <div id="world"><canvas></canvas><p>tap to close</p></div>
     <div id="lb"></div>
     <div id="goal"><b id="goalFill"></b></div>
     <div id="left"></div>
