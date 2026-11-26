@@ -1,17 +1,103 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Three games</title>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deep Luck & Critter Vac: two HTML5 games made for Poki</title>
+<meta name="description" content="Two finished, Poki-SDK-ready HTML5 games for kids and families: Deep Luck (fishing) and Critter Vac (vacuum the critters). Play, watch the trailers, download the press kit.">
+<meta property="og:title" content="Deep Luck & Critter Vac">
+<meta property="og:description" content="Two finished HTML5 games made for Poki. Play free in your browser.">
+<meta property="og:image" content="https://kidgames.soroosh-ra.workers.dev/press/deep-luck_banner_1920x1080.jpg">
 <style>
-body{margin:0;font-family:system-ui,sans-serif;background:#12101c;color:#fff;display:flex;flex-direction:column;align-items:center;padding:24px 12px}
-h1{font-size:22px;opacity:.8;margin:0 0 18px}
-.g{display:flex;flex-wrap:wrap;gap:18px;justify-content:center}
-a{display:block;width:260px;text-decoration:none;color:#fff;background:#1f1b2e;border-radius:18px;overflow:hidden;box-shadow:0 6px 20px #0008}
-img{width:100%;display:block}
-b{display:block;padding:12px 14px;font-size:20px}
-</style></head><body>
-<h1>Play</h1>
-<div class="g">
-<a href="./deep-luck/"><img src="deep-luck.jpg" alt=""><b>Deep Luck</b></a>
-<a href="./critter-vac/"><img src="critter-vac.jpg" alt=""><b>Critter Vac</b></a>
-<a href="./glowmites/"><img src="glowmites.jpg" alt=""><b>Glowmites</b></a>
-</div></body></html>
+  :root { --bg: #0f0d1c; --card: #1c1830; --gold: #ffd76a; --green: #2ec850; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: radial-gradient(circle at 50% -10%, #2b2152, var(--bg) 60%); color: #fff; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 16px 60px; }
+  header { text-align: center; padding: 18px 0 8px; }
+  header h1 { margin: 0; font-size: clamp(28px, 5vw, 46px); font-weight: 900; letter-spacing: .5px; }
+  header h1 span { color: var(--gold); }
+  header p { margin: 10px auto 0; max-width: 720px; font-size: 18px; line-height: 1.5; opacity: .85; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 18px 0 6px; }
+  .badges b { font-size: 14px; padding: 6px 12px; border-radius: 20px; background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
+  .game { margin-top: 38px; background: var(--card); border-radius: 26px; overflow: hidden; box-shadow: 0 12px 40px #0008; }
+  .game .top { display: grid; grid-template-columns: 1fr 1fr; }
+  .game video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+  .game .poster { width: 100%; display: block; }
+  .info { padding: 24px 26px 28px; }
+  .info h2 { margin: 0 0 6px; font-size: 34px; font-weight: 900; }
+  .info .tag { margin: 0 0 14px; font-size: 18px; color: var(--gold); font-weight: 700; }
+  .info p { line-height: 1.55; opacity: .9; margin: 0 0 12px; }
+  .info ul { margin: 0 0 18px; padding-left: 20px; line-height: 1.7; }
+  .btns { display: flex; flex-wrap: wrap; gap: 10px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: #fff; font-weight: 800; padding: 13px 22px; border-radius: 30px; background: rgba(255,255,255,.1); }
+  .btn.play { background: var(--green); font-size: 19px; box-shadow: 0 5px 0 #157a2e; }
+  .shots { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 8px; padding: 0 26px 26px; }
+  .shots img { width: 100%; border-radius: 12px; display: block; }
+  .kit { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 26px 26px; }
+  .kit a { color: var(--gold); font-size: 14px; text-decoration: none; padding: 6px 10px; border-radius: 10px; background: rgba(255,215,106,.08); }
+  section.how { margin-top: 40px; background: var(--card); border-radius: 26px; padding: 26px; }
+  section.how h2 { margin: 0 0 12px; }
+  section.how li { line-height: 1.7; }
+  footer { text-align: center; opacity: .5; margin-top: 40px; font-size: 14px; }
+  @media (max-width: 760px) { .game .top { grid-template-columns: 1fr; } .shots { grid-template-columns: 1fr 1fr; } .shots img:last-child { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Two games made for <span>Poki</span></h1>
+    <p>Deep Luck and Critter Vac are finished HTML5 games for kids and families. Each one is played with one thumb and needs no reading, runs on phones and desktop, and already has the Poki SDK built in.</p>
+    <div class="badges"><b>📱 Mobile + desktop</b><b>👆 One-touch controls</b><b>🌍 9 languages</b><b>🎬 Poki SDK integrated</b><b>⚡ Fast first load</b><b>📺 Ads only at natural breaks</b></div>
+  </header>
+
+  <div class="game">
+    <div class="top">
+      <video src="VIDEO_DL" poster="press/deep-luck_banner_1920x1080.jpg" controls playsinline muted autoplay loop preload="metadata"></video>
+      <div class="info">
+        <h2>🎣 Deep Luck</h2>
+        <div class="tag">Cast. Dive. Catch the Legend!</div>
+        <p>Tap to cast, steer the hook down past the fish, then catch everything on the way up. Every catch pulls your line closer to the giant Legend of each sea: hold on, strike on time and land it.</p>
+        <ul>
+          <li>Five seas, five giant Legend boss fish</li>
+          <li>Drifting ice, reef currents, erupting volcano vents</li>
+          <li>Golden and rainbow fish, catch-stealing sharks, 50+ creatures to collect</li>
+        </ul>
+        <div class="btns"><a class="btn play" href="./deep-luck/">▶ Play now</a><a class="btn" href="press/deep-luck_trailer_web.mp4">🎬 Trailer</a></div>
+      </div>
+    </div>
+    <div class="shots"><img src="press/deep-luck_shot1.jpg" alt="Deep Luck gameplay"><img src="press/deep-luck_shot2.jpg" alt="Deep Luck gameplay"><img src="press/deep-luck_mobile.jpg" alt="Deep Luck on a phone"></div>
+    <div class="kit"><a href="press/deep-luck_poster_1080x1350.jpg">Poster 1080×1350</a><a href="press/deep-luck_keyart_1080.jpg">Key art 1080×1080</a><a href="press/deep-luck_banner_1920x1080.jpg">Banner 1920×1080</a><a href="press/deep-luck-poki.zip">Build (zip)</a></div>
+  </div>
+
+  <div class="game">
+    <div class="top">
+      <video src="VIDEO_CV" poster="press/critter-vac_banner_1920x1080.jpg" controls playsinline muted autoplay loop preload="metadata"></video>
+      <div class="info">
+        <h2>🌀 Critter Vac</h2>
+        <div class="tag">Suck up critters. Catch the Moon!</div>
+        <p>A kid with a toy vacuum dreams of catching the Moon. Hold and aim to suck up adorable critters, grow your vacuum, and when a giant wakes up, win the tug of war and watch it stretch like taffy into your nozzle.</p>
+        <ul>
+          <li>Six places, from the meadow to the Moon</li>
+          <li>72 critters to collect and giant tug-of-war bosses</li>
+          <li>A vacuum that visibly evolves, and a cheeky rival to race</li>
+        </ul>
+        <div class="btns"><a class="btn play" href="./critter-vac/">▶ Play now</a><a class="btn" href="press/critter-vac_trailer_web.mp4">🎬 Trailer</a></div>
+      </div>
+    </div>
+    <div class="shots"><img src="press/critter-vac_shot1.jpg" alt="Critter Vac gameplay"><img src="press/critter-vac_shot2.jpg" alt="Critter Vac gameplay"><img src="press/critter-vac_mobile.jpg" alt="Critter Vac on a phone"></div>
+    <div class="kit"><a href="press/critter-vac_poster_1080x1350.jpg">Poster 1080×1350</a><a href="press/critter-vac_keyart_1080.jpg">Key art 1080×1080</a><a href="press/critter-vac_banner_1920x1080.jpg">Banner 1920×1080</a><a href="press/critter-vac-poki.zip">Build (zip)</a></div>
+  </div>
+
+  <section class="how">
+    <h2>How we made them for Poki</h2>
+    <ul>
+      <li>We started from Poki's most played genres and its audience: kids and families, mostly on phones, playing in short sessions.</li>
+      <li>Both games are understood in seconds with one finger, without any reading, and give a first reward within ten seconds.</li>
+      <li>We followed Poki's developer guidelines: gameplayStart and gameplayStop, commercial breaks only at natural pauses, rewarded ads only when the player chooses, progress saved, small builds with relative paths.</li>
+      <li>Every build was tested on phones and desktop browsers before submission.</li>
+    </ul>
+  </section>
+  <footer>Deep Luck · Critter Vac — HTML5 games for the web</footer>
+</div>
+</body>
+</html>
