@@ -11,11 +11,13 @@ export const S = 512; // 262,144 slots
 export const WORLD = 160; // world units across the density grid
 export const DEN = 256; // density grid resolution
 // four swarms share the slots: the player's (up to 131k) and three rivals (up to 43k each)
-export const TEAM_START = [0, 131072, 174592, 218112], TEAM_CAP = [131072, 43520, 43520, 43520];
+/** seven swarms share the slots: you (team 0) and six rivals */
+export const NT = 7, P_CAP = 98304, R_CAP = 27306;
+export const TEAM_START = [0, 1, 2, 3, 4, 5, 6].map((k) => (k === 0 ? 0 : P_CAP + (k - 1) * R_CAP)), TEAM_CAP = [0, 1, 2, 3, 4, 5, 6].map((k) => (k === 0 ? P_CAP : R_CAP));
 const TEAM_GLSL = `
-int teamOf(float id) { return id < 131072.0 ? 0 : min(3, 1 + int((id - 131072.0) / 43520.0)); }
-float teamStart(int t) { return t == 0 ? 0.0 : 131072.0 + float(t - 1) * 43520.0; }
-const vec3 TEAMC[4] = vec3[4](vec3(1.0, 0.75, 0.35), vec3(0.35, 0.65, 1.0), vec3(1.0, 0.3, 0.35), vec3(0.45, 1.0, 0.45));
+int teamOf(float id) { return id < ${P_CAP}.0 ? 0 : min(6, 1 + int((id - ${P_CAP}.0) / ${R_CAP}.0)); }
+float teamStart(int t) { return t == 0 ? 0.0 : 98304.0 + float(t - 1) * 27306.0; }
+const vec3 TEAMC[7] = vec3[7](vec3(1.0, 0.75, 0.35), vec3(0.35, 0.65, 1.0), vec3(1.0, 0.3, 0.35), vec3(0.45, 1.0, 0.45), vec3(0.85, 0.45, 1.0), vec3(0.3, 1.0, 0.95), vec3(1.0, 0.55, 0.85));
 `;
 
 const HASH = `
@@ -37,8 +39,8 @@ uniform vec4 uB[64];
 uniform vec4 uB2[64];
 uniform vec4 uS2[64];
 uniform vec4 uShock; // x, z, radius, strength (a stomp)
-uniform vec3 uLeaders[4], uLeaderVels[4];
-uniform vec4 uActiveT, uRadiusT, uSpeedT;
+uniform vec3 uLeaders[7], uLeaderVels[7];
+uniform float uActiveT[7], uRadiusT[7], uSpeedT[7];
 uniform float uDt, uTime, uS, uWorld, uRep, uLift;
 vec3 uLeader, uLeaderVel; float uActive, uRadius, uSpeed;
 uniform vec2 uDenTexel;
@@ -311,7 +313,7 @@ const CHIP_VS = `#version 300 es
 precision highp float;
 uniform sampler2D uPos, uAtlas;
 uniform mat4 uVP;
-uniform vec3 uCamR, uCamU, uLeaders[4];
+uniform vec3 uCamR, uCamU, uLeaders[7];
 uniform vec4 uB[64];
 uniform vec4 uS2[64];
 uniform float uS, uTime;
@@ -397,11 +399,11 @@ export class Swarm {
 
   shock = new Float32Array(4);
   /** per team: leader position (x,y,z), leader velocity, living mites, body radius, speed */
-  L = new Float32Array(12); LV = new Float32Array(12); A = new Float32Array(4); R = new Float32Array(4); SP = new Float32Array(4).fill(10);
+  L = new Float32Array(3 * NT); LV = new Float32Array(3 * NT); A = new Float32Array(NT); R = new Float32Array(NT); SP = new Float32Array(NT).fill(10);
   /** how many slots must be touched this frame (up to the end of the last living team) */
-  span() { const V = this.AV; for (let k = 0; k < 4; k++) V[k] = Math.min(this.A[k], TEAM_CAP[k], this.drawCap); let e = V[0]; for (let k = 1; k < 4; k++) if (V[k] > 0) e = TEAM_START[k] + V[k] + 1024; return Math.min(S * S, Math.max(e, V[0] + 1024)); }
+  span() { const V = this.AV; for (let k = 0; k < NT; k++) V[k] = Math.min(this.A[k], TEAM_CAP[k], this.drawCap); let e = V[0]; for (let k = 1; k < NT; k++) if (V[k] > 0) e = TEAM_START[k] + V[k] + 1024; return Math.min(S * S, Math.max(e, V[0] + 1024)); }
   /** A is each swarm's real size (it can pass what the GPU holds); AV is how many of its mites are drawn */
-  AV = new Float32Array(4);
+  AV = new Float32Array(NT);
   drawCap = 1e9;
   tint0 = new Float32Array([1, 1, 1, 0]);
   birth = new Float32Array([0, 0, 0, 0]);
@@ -419,9 +421,9 @@ export class Swarm {
     bindTex(gl, 3, world.grid, u.uGrid); bindTex(gl, 4, world.atlas, u.uAtlas);
     gl.uniform4fv(u.uB, world.b); gl.uniform4fv(u.uB2, world.b2); gl.uniform4fv(u.uS2, world.s2); gl.uniform4fv(u.uShock, this.shock);
     this.L.set(leader, 0); this.LV.set(leaderVel, 0); this.A[0] = active; this.SP[0] = speed;
-    for (let k = 0; k < 4; k++) { this.AV[k] = Math.min(this.A[k], TEAM_CAP[k], this.drawCap); this.R[k] = 3.0 + Math.sqrt(Math.min(this.A[k], 131072)) * 0.05; } // a wide head that sweeps a broad path
+    for (let k = 0; k < NT; k++) { this.AV[k] = Math.min(this.A[k], TEAM_CAP[k], this.drawCap); this.R[k] = 3.0 + Math.sqrt(Math.min(this.A[k], 131072)) * 0.05; } // a wide head that sweeps a broad path
     gl.uniform3fv(u.uLeaders, this.L); gl.uniform3fv(u.uLeaderVels, this.LV);
-    gl.uniform4fv(u.uActiveT, this.AV); gl.uniform4fv(u.uRadiusT, this.R); gl.uniform4fv(u.uSpeedT, this.SP);
+    gl.uniform1fv(u.uActiveT, this.AV); gl.uniform1fv(u.uRadiusT, this.R); gl.uniform1fv(u.uSpeedT, this.SP);
     gl.uniform1f(u.uDt, dt); gl.uniform1f(u.uTime, t); gl.uniform1f(u.uS, S); gl.uniform1f(u.uWorld, WORLD);
     gl.uniform1f(u.uRep, 1.0); gl.uniform1f(u.uLift, 1.7);
     bindTex(gl, 5, world.height, u.uHeight);
