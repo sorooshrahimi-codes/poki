@@ -20,8 +20,8 @@
   .badges { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 18px 0 6px; }
   .badges b { font-size: 14px; padding: 6px 12px; border-radius: 20px; background: rgba(255,255,255,.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
   .game { margin-top: 38px; background: var(--card); border-radius: 26px; overflow: hidden; box-shadow: 0 12px 40px #0008; }
-  .game .top { display: grid; grid-template-columns: 1fr 1fr; }
-  .game video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+  .game .top { display: grid; grid-template-columns: 1.25fr 1fr; align-items: center; }
+  .game video { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; display: block; background: #000; }
   .game .poster { width: 100%; display: block; }
   .info { padding: 24px 26px 28px; }
   .info h2 { margin: 0 0 6px; font-size: 34px; font-weight: 900; }
@@ -31,8 +31,8 @@
   .btns { display: flex; flex-wrap: wrap; gap: 10px; }
   .btn { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: #fff; font-weight: 800; padding: 13px 22px; border-radius: 30px; background: rgba(255,255,255,.1); }
   .btn.play { background: var(--green); font-size: 19px; box-shadow: 0 5px 0 #157a2e; }
-  .shots { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 8px; padding: 0 26px 26px; }
-  .shots img { width: 100%; border-radius: 12px; display: block; }
+  .shots { display: grid; grid-template-columns: 2fr 2fr 1fr; gap: 8px; padding: 0 26px 20px; }
+  .shots img { width: 100%; height: 190px; object-fit: cover; border-radius: 12px; display: block; }
   .kit { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 26px 26px; }
   .kit a { color: var(--gold); font-size: 14px; text-decoration: none; padding: 6px 10px; border-radius: 10px; background: rgba(255,215,106,.08); }
   section.how { margin-top: 40px; background: var(--card); border-radius: 26px; padding: 26px; }
