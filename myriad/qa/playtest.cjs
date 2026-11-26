@@ -21,9 +21,9 @@ const srv = http.createServer((q, r) => {
   });
   // a fresh player: no save, no leaderboard posts (blocked)
   await p.route("**/api/lb", (r) => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
-  await p.goto(`http://localhost:${port}/?bot=1&dtmax=0.1&hud=0&tier=4&draw=600`);
+  await p.goto(`http://localhost:${port}/?bot=1&dtmax=0.1&hud=0&tier=4&draw=600`, { waitUntil: "commit", timeout: 120000 });
   await p.evaluate(() => localStorage.clear());
-  await p.reload();
+  await p.reload({ waitUntil: "commit", timeout: 120000 });
   const end = Date.now() + MIN * 60000;
   while (!done && Date.now() < end && errs.length === 0) await p.waitForTimeout(3000);
   await b.close(); srv.close();
