@@ -274,10 +274,10 @@ function startLevel(i: number, fresh = false) {
       if (nb < 0) break;
       castle = nb; contactT[nb] = 0; hpOf[nb] = 1; hpPrev[nb] = 1; wasGone[nb] = 0; killer[nb] = -1; shake = Math.max(shake, 0.8); audio.thump(1.2);
     }
-    if (castle >= 0) { hard[castle] = LV.n * (0.6 + Math.sqrt(Math.min(active, 131072)) / 250); contactT[castle] = 0; for (let k = 0; k < 4; k++) contactBy[castle * 4 + k] = 0; }
+    if (castle >= 0) { hard[castle] = 5 * LV.n * (0.6 + Math.sqrt(Math.min(active, 131072)) / 250); contactT[castle] = 0; for (let k = 0; k < 4; k++) contactBy[castle * 4 + k] = 0; }
     // (no room for a new one: the biggest thing still standing)
     let bs = -1; if (castle < 0) for (let b = 0; b < city.buildings.length; b++) if (!city.gone[b] && !isPart(b) && city.buildings[b].collapseAt < 0 && hpOf[b] > 0.95 && city.buildings[b].solid > bs) { bs = city.buildings[b].solid; castle = b; }
-    if (castle >= 0) { hard[castle] = LV.n * (0.6 + Math.sqrt(Math.min(active, 131072)) / 250); contactT[castle] = 0; for (let k = 0; k < 4; k++) contactBy[castle * 4 + k] = 0; }
+    if (castle >= 0) { hard[castle] = 5 * LV.n * (0.6 + Math.sqrt(Math.min(active, 131072)) / 250); contactT[castle] = 0; for (let k = 0; k < 4; k++) contactBy[castle * 4 + k] = 0; }
   }
   roundT = -1.6; roundOver = false;
   introEl.innerHTML = `<div>${GOAL_ICON[LV.goal]}</div><p>${goalSentence(LV)}</p>`;
