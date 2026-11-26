@@ -29,6 +29,7 @@ if (!gl || !gl.getExtension("EXT_color_buffer_float")) {
 gl.getExtension("EXT_float_blend");
 
 const swarm = new Swarm(gl);
+if (import.meta.env.MODE === "qa" && params.has("draw")) swarm.drawCap = Number(params.get("draw")); // QA: draw fewer mites (fast headless runs)
 const terrain = new Terrain(gl);
 const world = new World(gl, terrain);
 const post = new Post(gl);
@@ -718,6 +719,7 @@ function frame(now: number) {
   if (!idle && shapeOn && sh.blend < 0.05) { shapeOn = false; shapeK = nextShape(shapeK); }
   sh.blend = shapeOn && idle ? Math.min(1, sh.blend + dt * 2.2) : Math.max(0, sh.blend - dt * 3);
   sh.scale = 2.4 + Math.sqrt(Math.min(active, TEAM_CAP[0])) * 0.07;
+  if (BOT && winEl.classList.contains("show")) (winEl.querySelector(".go") as HTMLElement | null)?.click();
   if (BOT && travel < 0 && !roundOver) {
     // the QA bot: go for the arrow; while too small for the blue swarm, eat the nearest thing instead
     const o = objective(); lastMove = time;

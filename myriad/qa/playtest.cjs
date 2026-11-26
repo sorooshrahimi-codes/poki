@@ -25,7 +25,7 @@ const srv = http.createServer((q, r) => {
   });
   // a fresh player: no save, no leaderboard posts (blocked)
   await p.route("**/api/lb", (r) => r.fulfill({ status: 200, contentType: "application/json", body: "[]" }));
-  await p.goto(`http://localhost:${port}/?bot=1&dtmax=0.1&hud=0&tier=4${LVL ? `&lvl=${LVL}` : ""}`);
+  await p.goto(`http://localhost:${port}/?bot=1&dtmax=0.1&hud=0&tier=4&draw=1500${LVL ? `&lvl=${LVL}` : ""}`);
   await p.evaluate(() => localStorage.clear());
   await p.reload();
   const end = Date.now() + MIN * 60000;
