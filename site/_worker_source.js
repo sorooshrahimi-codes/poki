@@ -1,6 +1,6 @@
 // Serves the three games from the public GitHub repo (pinned to one commit), with the right content types.
-const BASE2 = "https://cdn.jsdelivr.net/gh/sorooshrahimi-codes/poki@63b480b25f8e49e177fc952870f064e431eef507/site";
-const BASE = "https://raw.githubusercontent.com/sorooshrahimi-codes/poki/63b480b25f8e49e177fc952870f064e431eef507/site";
+const BASE2 = "https://cdn.jsdelivr.net/gh/sorooshrahimi-codes/poki@b67e0e16b12a1d4aee9957028c45c1314c443a8d/site";
+const BASE = "https://raw.githubusercontent.com/sorooshrahimi-codes/poki/b67e0e16b12a1d4aee9957028c45c1314c443a8d/site";
 const TYPES = { html: "text/html; charset=utf-8", js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", json: "application/json", webp: "image/webp", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", svg: "image/svg+xml", woff: "font/woff", woff2: "font/woff2", mp3: "audio/mpeg", ogg: "audio/ogg", wav: "audio/wav", mp4: "video/mp4", ico: "image/x-icon", txt: "text/plain; charset=utf-8" };
 // a tiny shared leaderboard for Glowmites: the best score of each player (top 100 kept in one KV key)
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type", "content-type": "application/json" };
@@ -35,6 +35,20 @@ export default {
     h.set("content-type", TYPES[ext] || "application/octet-stream");
     h.set("cache-control", ext === "html" ? "public, max-age=300" : "public, max-age=86400");
     h.set("access-control-allow-origin", "*");
-    return new Response(r.body, { status: 200, headers: h });
+    h.set("accept-ranges", "bytes");
+    // byte ranges: iPhones (and seeking in any browser) need them to play video
+    const range = req.headers.get("range");
+    if (range) {
+      const buf = await r.arrayBuffer(), size = buf.byteLength;
+      const m = /bytes=(\d*)-(\d*)/.exec(range);
+      let start = m && m[1] ? Number(m[1]) : NaN, end = m && m[2] ? Number(m[2]) : size - 1;
+      if (Number.isNaN(start)) { start = Math.max(0, size - end); end = size - 1; }
+      end = Math.min(end, size - 1);
+      if (!m || start > end || start >= size) { h.set("content-range", `bytes */${size}`); return new Response(null, { status: 416, headers: h }); }
+      h.set("content-range", `bytes ${start}-${end}/${size}`);
+      h.set("content-length", String(end - start + 1));
+      return new Response(req.method === "HEAD" ? null : buf.slice(start, end + 1), { status: 206, headers: h });
+    }
+    return new Response(req.method === "HEAD" ? null : r.body, { status: 200, headers: h });
   },
 };
