@@ -8,7 +8,10 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "sim": "node tools/sim.ts",
-    "build:qa": "vite build --mode qa --outDir dist-qa"
+    "build:qa": "vite build --mode qa --outDir dist-qa",
+    "build:crazygames": "tsc --noEmit && vite build --mode crazygames --outDir dist-crazygames",
+    "build:gamedistribution": "tsc --noEmit && vite build --mode gamedistribution --outDir dist-gamedistribution",
+    "build:playgama": "tsc --noEmit && vite build --mode playgama --outDir dist-playgama"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

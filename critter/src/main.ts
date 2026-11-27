@@ -12,7 +12,7 @@ import { fireSpecial, makeSpecial } from "./core/field.ts";
 import { BIOMES, CRITTERS, CRITTER_BY_ID, RECIPES, MUTATIONS, RARITY_COLOR, STAR_MULT, biomeName, critterName, starOf } from "./data/critters.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, getLang, setLang, t as tr, tf } from "./i18n.ts";
 import type { BiomeId } from "./core/types.ts";
-import { commercialBreak, gameplayStart, gameplayStop, initPoki, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
+import { canShare, commercialBreak, gameplayStart, gameplayStop, initPoki, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
 import { setDucked, setIntensity, setMuted, setVacuum, sfx, unlockAudio } from "./platform/audio.ts";
 import { View, img, loadArt } from "./render/view.ts";
 import { EGG_ART, EGG_MINUTES, NEST_SLOTS, eggDrop, hatch } from "./core/eggs.ts";
@@ -357,6 +357,7 @@ function endRush() {
   $("result").classList.remove("hidden");
   // a record or a win: this is the moment to send it to a friend
   $("resShare").classList.toggle("pulse", r.score >= best || won);
+  $("resShare").classList.toggle("hidden", !canShare() && !shareIsPlay); // GameDistribution and Playgama forbid outside links
   sfx.reveal(won || r.goal === null ? "epic" : "rare");
   mode = "field";
   field = newField(view.W, view.H, save.up, save.biome); field.script = 2;
@@ -447,6 +448,7 @@ async function moonFinale() {
   box.innerHTML = `<div class="rays"></div><img class="moon" src="./art/bigmoon.webp" alt=""><img class="kid" src="./art/kid_cheer.webp" alt=""><div class="trophy">${won ? "🏆" : "🥈"}</div>
     <div class="times"><div class="t${won ? " win" : ""}"><img src="./art/kid_vac.webp" alt="">⏱ ${clock(mine)}</div><div class="t${won ? "" : " win"}"><img src="./art/kid_rival.webp" alt="">⏱ ${clock(his)}</div></div><div class="row"><button class="btn big rush" id="finShare">📤 🌙</button><button class="btn big go" id="finGo">★2 ▶</button></div>`;
   box.classList.remove("hidden");
+  if (!canShare()) $("finShare").remove();
   sfx.reveal("legendary"); setTimeout(() => sfx.event(), 600);
   for (let i = 0; i < 30; i++) setTimeout(() => { const s = document.createElement("i"); s.className = "confetti"; s.style.left = `${Math.random() * 100}%`; s.style.background = ["#ffe066", "#ff7ad1", "#7be495", "#5bc8ff"][i % 4]; box.appendChild(s); setTimeout(() => s.remove(), 2600); }, i * 60);
   $("finShare").onclick = async () => {

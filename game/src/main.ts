@@ -22,7 +22,7 @@ import { RARITY_COLOR, RARITY_ORDER, ZONES, ZONE_ORDER } from "./data/world.ts";
 import { LANGS, LANG_FLAG, LANG_NAME, detectLang, fishName, getLang, setLang, t, tEvent, tRarity, tUpgrade, tWeather, tZone } from "./i18n.ts";
 import { setDucked, setMusicMood, setMuted, setRain, sfx, unlockAudio } from "./platform/audio.ts";
 import { WEATHER, weatherAt, type WeatherId } from "./core/weather.ts";
-import { commercialBreak, gameplayStart, gameplayStop, initPoki, isAdPlaying, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
+import { canShare, commercialBreak, gameplayStart, gameplayStop, initPoki, isAdPlaying, loadingFinished, rewardedBreak, shareURL, urlParam } from "./platform/poki.ts";
 import { loadSave, writeSave } from "./platform/storage.ts";
 import "@fontsource/baloo-2/latin-600.css";
 import "@fontsource/baloo-2/latin-800.css";
@@ -1290,7 +1290,7 @@ function endChallenge() {
   showResult(won && p.target !== null ? "🏆" : "🤝", lines, `🪙+${prize}`, won);
   shareFor = { seed: p.seed, score: p.score };
   $("resultAct").textContent = "📤";
-  $("resultAct").classList.remove("hidden");
+  $("resultAct").classList.toggle("hidden", !canShare()); // GameDistribution and Playgama forbid outside links
 }
 
 /** the challenge the result panel can send on: same sea, the score to beat */

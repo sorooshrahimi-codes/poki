@@ -1,3 +1,4 @@
+import { kvGet, kvSet } from "../platform/kv.ts";
 import type { Upgrades } from "./economy.ts";
 import type { BiomeId } from "./types.ts";
 import type { Egg } from "./eggs.ts";
@@ -52,10 +53,10 @@ export interface SaveData {
 export const newSave = (): SaveData => ({ v: 1, coins: 0, up: { power: 0, range: 0, tank: 0 }, index: {}, catches: 0, lastSeen: Date.now(), muted: false, tips: [], biome: "meadow", biomes: ["meadow"], nest: [] });
 
 // v2: the giant version starts everyone fresh (old saves had bought places and maxed vacuums)
-const KEY = "crittervac.save.v3";
+export const KEY = "crittervac.save.v3";
 export function loadSave(): SaveData {
   try {
-    const raw = window.localStorage.getItem(KEY);
+    const raw = kvGet(KEY);
     if (!raw) return newSave();
     const d = JSON.parse(raw) as Partial<SaveData>;
     const b = newSave();
@@ -65,5 +66,5 @@ export function loadSave(): SaveData {
   }
 }
 export function writeSave(s: SaveData) {
-  try { window.localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* storage unavailable */ }
+  kvSet(KEY, JSON.stringify(s));
 }
