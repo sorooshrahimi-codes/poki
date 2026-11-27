@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script src="https://bridge.playgama.com/v2/stable/playgama-bridge.js"></script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Critter Vac</title>
+    
+    <script type="module" crossorigin src="./assets/index-CaQId9Ou.js"></script>
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+    <div id="ui">
+      <div id="top">
+        <div class="pill"><span class="ico" id="coinIco">🪙</span><b id="coinsN">0</b><small id="rateN"></small></div>
+        <button class="pill btn" id="bookBtn">📖 <b id="indexN">0/12</b></button>
+        <button class="pill btn round" id="worldBtn">🗺️</button>
+        <div class="spacer"></div>
+        <button class="pill btn round" id="langBtn" aria-label="Language"><img id="langFlag" alt=""></button>
+        <button class="pill btn round" id="muteBtn">🔊</button>
+      </div>
+      <div id="fieldUi">
+        <div id="hint"></div>
+        <div id="fieldHead"><b id="fhPlace"></b><small id="fhGoal"></small><div id="race"></div></div>
+        <div id="jarBox" class="hidden"><span id="jarIco">🫙</span><div id="jarBar"><i id="jarFill"></i></div><b id="jarN">0/5</b></div>
+        <button class="corner left ad" id="lureBtn2">🎬✨</button><button class="corner right rush" id="rushBtn2">🏁</button>
+        <div id="upBar"></div>
+        <button id="specialBtn" class="hidden"><i></i><span>🌪️</span></button>
+        <div id="tools" class="hidden"></div>
+        <button class="btn big park hidden" id="parkBtn"></button>
+      </div>
+      <div id="parkUi" class="hidden">
+        <div id="parkTop"><b id="parkTitle"></b> <span id="incomeN"></span></div>
+        <div id="loopStrip"></div>
+        <div id="parkMap"></div>
+        <div class="row" id="parkRow"><button class="btn big ad" id="lureBtn"></button><button class="btn big rush" id="rushBtn"></button><button class="btn big go" id="goBtn"></button></div>
+      </div>
+      <div id="sheet" class="hidden">
+        <div class="sh">
+          <div class="shTop"><b id="shTitle"></b><button class="btn go" id="shHunt"></button><button class="btn x" id="shClose">✕</button></div>
+          <div id="shBody"><div id="parkGrid"></div><div id="nest"></div><div id="ups"></div></div>
+        </div>
+      </div>
+      <div id="rushHud" class="hidden"><b id="rushT">60</b><span id="rushS">0</span><small id="rushGoal"></small></div>
+      <div id="result" class="hidden">
+        <div class="rt" id="resTitle"></div>
+        <div class="rb" id="resBody"></div>
+        <div class="row"><button class="btn big rush" id="resShare"></button><button class="btn big go" id="resOk"></button></div>
+      </div>
+      <div id="story" class="hidden"><div class="cloud">☁️😠</div><div id="storyText"></div><button class="btn big go" id="storyGo"></button></div>
+      <div id="toast" class="hidden"></div>
+      <div id="journey" class="hidden"></div>
+      <div id="world" class="hidden"></div>
+      <div id="dream" class="hidden"></div>
+      <div id="launch" class="hidden"></div>
+      <div id="levels" class="hidden"></div>
+      <div id="lvlEnd" class="hidden"></div>
+      <div id="evolve" class="hidden"></div>
+      <div id="perks" class="hidden"></div>
+      <div id="vs" class="hidden"></div>
+      <div id="gift" class="hidden"></div>
+      <div id="finale" class="hidden"></div>
+      <div id="guide" class="hidden">👇</div>
+      <div id="tutHand" class="hidden"><i></i><span>👆</span></div>
+      <div id="langPanel" class="hidden"><div class="lt" id="langTitle"></div><div id="langList"></div></div>
+    </div>
+    <div id="loading"><div class="logo">🫙 Critter Vac</div><div class="bar"><i id="loadBar"></i></div></div>
+  </body>
+</html>

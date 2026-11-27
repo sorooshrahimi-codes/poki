@@ -1,0 +1,15 @@
+{
+  "advertisement": {
+    "minimumDelayBetweenInterstitial": 60,
+    "interstitial": {
+      "placements": [
+        {
+          "id": "round_end"
+        }
+      ]
+    },
+    "rewarded": {
+      "preloadOnStart": true
+    }
+  }
+}
