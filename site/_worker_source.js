@@ -1,6 +1,6 @@
 // Serves the three games from the public GitHub repo (pinned to one commit), with the right content types.
-const BASE2 = "https://cdn.jsdelivr.net/gh/sorooshrahimi-codes/poki@b67e0e16b12a1d4aee9957028c45c1314c443a8d/site";
-const BASE = "https://raw.githubusercontent.com/sorooshrahimi-codes/poki/b67e0e16b12a1d4aee9957028c45c1314c443a8d/site";
+const BASE2 = "https://cdn.jsdelivr.net/gh/sorooshrahimi-codes/poki@9e6c3c2ca9210f9f749676342700d002f21cf344/site";
+const BASE = "https://raw.githubusercontent.com/sorooshrahimi-codes/poki/9e6c3c2ca9210f9f749676342700d002f21cf344/site";
 const TYPES = { html: "text/html; charset=utf-8", js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8", json: "application/json", webp: "image/webp", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", svg: "image/svg+xml", woff: "font/woff", woff2: "font/woff2", mp3: "audio/mpeg", ogg: "audio/ogg", wav: "audio/wav", mp4: "video/mp4", ico: "image/x-icon", txt: "text/plain; charset=utf-8" };
 // a tiny shared leaderboard for Glowmites: the best score of each player (top 100 kept in one KV key)
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-methods": "GET, POST, OPTIONS", "access-control-allow-headers": "content-type", "content-type": "application/json" };
